@@ -25,19 +25,19 @@ export class Music {
   }
 
   stopByGuildId(guildId) {
-    const q = this.distube.getQueue(guildId)
-    if (q)
-      q.stop()
+    const queue = this.distube.getQueue(guildId)
+    if (queue)
+      queue.stop()
   }
 
   _wireEvents() {
-    const d = this.distube
-    d.on('addSong', (_queue, song) => console.log(`queued: ${song.name}`))
-    d.on('playSong', (queue, song) => {
+    const player = this.distube
+    player.on('addSong', (_queue, song) => console.log(`queued: ${song.name}`))
+    player.on('playSong', (queue, song) => {
       console.log(`playing: ${song.name}`)
-      queue.textChannel?.send(`ta sonando: ${song.name}`)
+      queue.textChannel?.send(`arranca este temón: "${song.name}"`)
     })
-    d.on('finish', () => console.log('queue finished'))
-    d.on('error', e => console.error(`distube error: ${e?.message ?? e}`))
+    player.on('finish', () => console.log('queue finished'))
+    player.on('error', error => console.error(`distube error:`, error))
   }
 }

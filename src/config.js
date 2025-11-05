@@ -1,3 +1,4 @@
+import * as process from 'node:process'
 import { GatewayIntentBits } from 'discord.js'
 
 export function createConfig() {

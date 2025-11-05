@@ -13,14 +13,14 @@ export class Discord {
     return this.client.login(this.config.token)
   }
 
-  onMessage(fn) {
+  onMessage(handler) {
     this.client.on(Events.MessageCreate, (message) => {
       if (message.author?.bot)
         return
       if (message.channelId !== this.config.textChannelId)
         return
       console.log('message: allowed channel event received')
-      fn(message)
+      handler(message)
     })
   }
 
