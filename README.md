@@ -1,4 +1,4 @@
-# 🎵 DJ
+# dot-tsu/dj
 
 Simple Discord bot that plays music in your voice channel.
 Just drop a song name or link in the assigned text channel and it'll start playing.
