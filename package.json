@@ -1,0 +1,31 @@
+{
+  "name": "discord-bot",
+  "type": "module",
+  "private": true,
+  "author": ".tsu",
+  "module": "index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node --env-file=.env index.js",
+    "dev": "node --watch --env-file=.env index.js",
+    "lint": "eslint ."
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@discordjs/opus": "^0.10.0",
+    "@discordjs/voice": "^0.19.0",
+    "@distube/spotify": "^2.0.2",
+    "@distube/youtube": "^1.0.4",
+    "@snazzah/davey": "^0.1.7",
+    "discord.js": "^14.24.2",
+    "distube": "^5.0.7"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^6.2.0",
+    "eslint": "^9.38.0"
+  }
+}
