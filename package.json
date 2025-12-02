@@ -24,7 +24,8 @@
     "@noble/ciphers": "^2.0.1",
     "@snazzah/davey": "^0.1.7",
     "discord.js": "^14.24.2",
-    "distube": "^5.0.7"
+    "distube": "^5.0.7",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^6.2.0",

@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { ChannelType, PermissionFlagsBits } from 'discord.js'
 import { Discord } from './services/Discord.js'
 import { Music } from './services/Music.js'
