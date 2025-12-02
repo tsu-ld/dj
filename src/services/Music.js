@@ -1,7 +1,7 @@
 import { SpotifyPlugin } from '@distube/spotify'
 import { YouTubePlugin } from '@distube/youtube'
 import { DisTube } from 'distube'
-import MESSAGES from '../messages.js'
+import MESSAGES from '../utils/messages.js'
 
 export class Music {
   constructor() {

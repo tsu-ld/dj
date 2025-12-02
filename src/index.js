@@ -1,8 +1,8 @@
 import { ChannelType, PermissionFlagsBits } from 'discord.js'
-import MESSAGES from '@/messages.js'
-import { createConfig } from './src/config.js'
-import { Discord } from './src/services/Discord.js'
-import { Music } from './src/services/Music.js'
+import { Discord } from './services/Discord.js'
+import { Music } from './services/Music.js'
+import { createConfig } from './utils/config.js'
+import MESSAGES from './utils/messages.js'
 
 const config = createConfig()
 const discord = new Discord(config)

@@ -3,13 +3,12 @@ import { GatewayIntentBits } from 'discord.js'
 
 export function createConfig() {
   const token = process.env.DISCORD_TOKEN
-  const textChannelId = process.env.TEXT_CHANNEL_ID
 
   validateEnv(token)
 
   const intents = getIntents()
 
-  return { token, textChannelId, intents }
+  return { token, intents }
 }
 
 function validateEnv(token) {

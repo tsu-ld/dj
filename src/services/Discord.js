@@ -1,5 +1,5 @@
 import { Client, Events } from 'discord.js'
-import MESSAGES from '../messages.js'
+import MESSAGES from '../utils/messages.js'
 
 export class Discord {
   constructor(config) {
