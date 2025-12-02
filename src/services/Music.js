@@ -45,7 +45,7 @@ export class Music {
 
   onPlaySong(queue, song) {
     console.warn(`playing: ${song.name}`)
-    queue.textChannel?.send(MESSAGES.music.nowPlaying(song.name))
+    queue.textChannel?.send(MESSAGES.MUSIC.nowPlaying(song.name))
   }
 
   onFinish() {

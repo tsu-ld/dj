@@ -1,14 +1,14 @@
 const MESSAGES = {
-  errors: {
-    joinVoiceChannel: 'che, metete a un canal de voz primero, dale?',
-    stageChannelPermissions: 'dale, poneme de speaker en este canal de stage o andate a uno de voz normal',
-    botPermissions: 'maestro, necesito permisos para entrar y hablar en tu canal de voz',
-    playbackError: 'uh, no pude arrancar la música. @tsu aprendé a programar gil',
+  ERRORS: {
+    JOIN_VOICE_CHANNEL: 'che, metete a un canal de voz primero, dale?',
+    STAGE_CHANNEL_PERMISSIONS: 'dale, poneme de speaker en este canal de stage o andate a uno de voz normal',
+    BOT_PERMISSIONS: 'maestro, necesito permisos para entrar y hablar en tu canal de voz',
+    PLAYBACK_ERROR: 'uh, no pude arrancar la música. @tsu aprendé a programar gil',
   },
-  configuration: {
+  CONFIGURATION: {
     textChannelConfigured: channel => `listo, ahora te escucho en ${channel}`,
   },
-  music: {
+  MUSIC: {
     nowPlaying: songName => `se viene este temón: "${songName}"`,
   },
 }

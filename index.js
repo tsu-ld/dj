@@ -35,12 +35,12 @@ async function handleMessage(message) {
 function getAndValidateVoiceChannel(message) {
   const voiceChannel = discord.getUserVoiceChannel(message)
   if (!voiceChannel) {
-    message.reply(MESSAGES.errors.joinVoiceChannel)
+    message.reply(MESSAGES.ERRORS.JOIN_VOICE_CHANNEL)
     return null
   }
 
   if (voiceChannel.type === ChannelType.GuildStageVoice) {
-    message.reply(MESSAGES.errors.stageChannelPermissions)
+    message.reply(MESSAGES.ERRORS.STAGE_CHANNEL_PERMISSIONS)
     return null
   }
 
@@ -54,7 +54,7 @@ function hasPermissions(voiceChannel, message) {
   const canSpeak = perms?.has(PermissionFlagsBits.Speak)
 
   if (!canConnect || !canSpeak) {
-    message.reply(MESSAGES.errors.botPermissions)
+    message.reply(MESSAGES.ERRORS.BOT_PERMISSIONS)
     return false
   }
   return true
@@ -66,7 +66,7 @@ async function playMusic(voiceChannel, message) {
   }
   catch (e) {
     console.error(`play error: ${e?.message ?? e}`)
-    message.reply(MESSAGES.errors.playbackError)
+    message.reply(MESSAGES.ERRORS.PLAYBACK_ERROR)
   }
 }
 

@@ -40,7 +40,7 @@ export class Discord {
     if (channel.isTextBased()) {
       this.config.textChannelId = channel.id
       console.warn(`Configured text channel to: ${channel.name} (${channel.id})`)
-      message.reply(MESSAGES.configuration.textChannelConfigured(channel))
+      message.reply(MESSAGES.CONFIGURATION.textChannelConfigured(channel))
     }
   }
 
