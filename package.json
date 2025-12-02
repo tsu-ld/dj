@@ -8,8 +8,8 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "start": "node --env-file=.env index.js",
-    "dev": "node --watch --env-file=.env index.js",
+    "start": "node --env-file=.env src/index.js",
+    "dev": "node --watch --env-file=.env src/index.js",
     "lint": "eslint ."
   },
   "peerDependencies": {
@@ -20,7 +20,7 @@
     "@discordjs/voice": "^0.19.0",
     "@distube/spotify": "^2.0.2",
     "@distube/youtube": "^1.0.4",
-    "@distube/ytdl-core": "https://codeload.github.com/ToddyTheNoobDud/ytdl-core-stuff/tar.gz/refs/heads/master",
+    "@distube/ytdl-core": "git+https://github.com/ToddyTheNoobDud/ytdl-core-stuff.git#master",
     "@noble/ciphers": "^2.0.1",
     "@snazzah/davey": "^0.1.7",
     "discord.js": "^14.24.2",
