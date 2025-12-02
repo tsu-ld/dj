@@ -31,13 +31,27 @@ export class Music {
   }
 
   _wireEvents() {
-    const player = this.distube
-    player.on('addSong', (_queue, song) => console.log(`queued: ${song.name}`))
-    player.on('playSong', (queue, song) => {
-      console.log(`playing: ${song.name}`)
-      queue.textChannel?.send(`arranca este temón: "${song.name}"`)
-    })
-    player.on('finish', () => console.log('queue finished'))
-    player.on('error', error => console.error(`distube error:`, error))
+    this.distube
+      .on('addSong', this.onAddSong.bind(this))
+      .on('playSong', this.onPlaySong.bind(this))
+      .on('finish', this.onFinish.bind(this))
+      .on('error', this.onError.bind(this))
+  }
+
+  onAddSong(_queue, song) {
+    console.warn(`queued: ${song.name}`)
+  }
+
+  onPlaySong(queue, song) {
+    console.warn(`playing: ${song.name}`)
+    queue.textChannel?.send(`arranca este temón: "${song.name}"`)
+  }
+
+  onFinish() {
+    console.warn('queue finished')
+  }
+
+  onError(error) {
+    console.error(`distube error:`, error)
   }
 }

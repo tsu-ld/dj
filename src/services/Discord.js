@@ -5,7 +5,7 @@ export class Discord {
     this.config = config
     this.client = new Client({ intents: config.intents })
     this.client.once(Events.ClientReady, (client) => {
-      console.log(`ready: ${client.user.tag}`)
+      console.warn(`ready: ${client.user.tag}`)
     })
   }
 
@@ -15,13 +15,36 @@ export class Discord {
 
   onMessage(handler) {
     this.client.on(Events.MessageCreate, (message) => {
-      if (message.author?.bot)
+      if (this.shouldIgnore(message))
         return
-      if (message.channelId !== this.config.textChannelId)
-        return
-      console.log('message: allowed channel event received')
-      handler(message)
+
+      if (this.isConfigurationCommand(message))
+        return this.configureTextChannel(message)
+
+      if (this.isMessageFromAllowedChannel(message))
+        handler(message)
     })
+  }
+
+  shouldIgnore(message) {
+    return message.author?.bot
+  }
+
+  isConfigurationCommand(message) {
+    return message.mentions.has(this.client.user) && message.mentions.channels.size > 0
+  }
+
+  configureTextChannel(message) {
+    const channel = message.mentions.channels.first()
+    if (channel.isTextBased()) {
+      this.config.textChannelId = channel.id
+      console.warn(`Configured text channel to: ${channel.name} (${channel.id})`)
+      message.reply(`Listo, ahora te escucho en ${channel}.`)
+    }
+  }
+
+  isMessageFromAllowedChannel(message) {
+    return message.channelId === this.config.textChannelId
   }
 
   getUserVoiceChannel(message) {
