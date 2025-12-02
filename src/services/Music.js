@@ -1,6 +1,7 @@
 import { SpotifyPlugin } from '@distube/spotify'
 import { YouTubePlugin } from '@distube/youtube'
 import { DisTube } from 'distube'
+import MESSAGES from '../messages.js'
 
 export class Music {
   constructor() {
@@ -44,7 +45,7 @@ export class Music {
 
   onPlaySong(queue, song) {
     console.warn(`playing: ${song.name}`)
-    queue.textChannel?.send(`arranca este temón: "${song.name}"`)
+    queue.textChannel?.send(MESSAGES.music.nowPlaying(song.name))
   }
 
   onFinish() {

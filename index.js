@@ -1,4 +1,5 @@
 import { ChannelType, PermissionFlagsBits } from 'discord.js'
+import MESSAGES from '@/messages.js'
 import { createConfig } from './src/config.js'
 import { Discord } from './src/services/Discord.js'
 import { Music } from './src/services/Music.js'
@@ -34,12 +35,12 @@ async function handleMessage(message) {
 function getAndValidateVoiceChannel(message) {
   const voiceChannel = discord.getUserVoiceChannel(message)
   if (!voiceChannel) {
-    message.reply('primero metete a un canal de voz, che.')
+    message.reply(MESSAGES.errors.joinVoiceChannel)
     return null
   }
 
   if (voiceChannel.type === ChannelType.GuildStageVoice) {
-    message.reply('ascendeme a speaker en este canal de stage o usá un canal de voz común')
+    message.reply(MESSAGES.errors.stageChannelPermissions)
     return null
   }
 
@@ -53,7 +54,7 @@ function hasPermissions(voiceChannel, message) {
   const canSpeak = perms?.has(PermissionFlagsBits.Speak)
 
   if (!canConnect || !canSpeak) {
-    message.reply('maestro, necesito permisos para conectarme y hablar en tu canal de voz')
+    message.reply(MESSAGES.errors.botPermissions)
     return false
   }
   return true
@@ -65,7 +66,7 @@ async function playMusic(voiceChannel, message) {
   }
   catch (e) {
     console.error(`play error: ${e?.message ?? e}`)
-    message.reply('no se pudo arrancar la reproducción. Probá con otra URL/búsqueda o cambiate de canal de voz')
+    message.reply(MESSAGES.errors.playbackError)
   }
 }
 

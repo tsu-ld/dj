@@ -1,4 +1,5 @@
 import { Client, Events } from 'discord.js'
+import MESSAGES from '../messages.js'
 
 export class Discord {
   constructor(config) {
@@ -39,7 +40,7 @@ export class Discord {
     if (channel.isTextBased()) {
       this.config.textChannelId = channel.id
       console.warn(`Configured text channel to: ${channel.name} (${channel.id})`)
-      message.reply(`Listo, ahora te escucho en ${channel}.`)
+      message.reply(MESSAGES.configuration.textChannelConfigured(channel))
     }
   }
 
