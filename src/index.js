@@ -1,9 +1,12 @@
+// eslint-disable perfectionist/sort-imports
+import 'dotenv/config'
 import { ChannelType, PermissionFlagsBits } from 'discord.js'
+import { clearGuild } from './features/first-join/guild-tracker.js'
+import { playIntroIfFirstJoin } from './features/first-join/play-intro.js'
 import { Discord } from './services/Discord.js'
 import { Music } from './services/Music.js'
 import { createConfig } from './utils/config.js'
 import MESSAGES from './utils/messages.js'
-import 'dotenv/config'
 
 const config = createConfig()
 const discord = new Discord(config)
@@ -63,6 +66,16 @@ function hasPermissions(voiceChannel, message) {
 
 async function playMusic(voiceChannel, message) {
   try {
+    const introFile = config.features?.mp3_first_join?.filename
+    if (introFile) {
+      try {
+        await playIntroIfFirstJoin(music.distube, voiceChannel, introFile)
+      }
+      catch (e) {
+        console.error(`intro error: ${e?.message ?? e}`)
+      }
+    }
+
     await music.play(voiceChannel, message.content.trim(), message)
   }
   catch (e) {
@@ -73,5 +86,6 @@ async function playMusic(voiceChannel, message) {
 
 function handleBotKicked({ guildId }) {
   music.stopByGuildId(guildId)
+  clearGuild(guildId)
   console.warn('bot was kicked/disconnected; stopped playback.')
 }
