@@ -37,7 +37,7 @@ async function handleMessage(message) {
   if (isSkipCommand(message)) {
     const skipped = await music.skip(message.guildId)
     if (skipped)
-      message.react('⏭️')
+      message.react('✅')
     return
   }
 
