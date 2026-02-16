@@ -6,6 +6,7 @@ import { playIntroIfFirstJoin } from './features/first-join/play-intro.js'
 import { isSkipCommand } from './features/skip/is-skip-command.js'
 import { Discord } from './services/Discord.js'
 import { Music } from './services/Music.js'
+import { cleanUrl } from './utils/clean-url.js'
 import { createConfig } from './utils/config.js'
 import MESSAGES from './utils/messages.js'
 
@@ -84,7 +85,7 @@ async function playMusic(voiceChannel, message) {
       }
     }
 
-    await music.play(voiceChannel, message.content.trim(), message)
+    await music.play(voiceChannel, cleanUrl(message.content.trim()), message)
   }
   catch (e) {
     if (e.errorCode === 'NO_RESULT') {
