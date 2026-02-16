@@ -31,6 +31,25 @@ export class Music {
       queue.stop()
   }
 
+  async skip(guildId) {
+    const queue = this.distube.getQueue(guildId)
+    if (!queue)
+      return false
+
+    try {
+      if (queue.songs.length > 1 || queue.autoplay)
+        await queue.skip()
+      else
+        queue.stop()
+      return true
+    }
+    catch (e) {
+      console.error(`skip error: ${e?.message ?? e}`)
+      queue.stop()
+      return true
+    }
+  }
+
   _wireEvents() {
     this.distube
       .on('addSong', this.onAddSong.bind(this))

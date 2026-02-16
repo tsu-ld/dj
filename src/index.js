@@ -3,6 +3,7 @@ import 'dotenv/config'
 import { ChannelType, PermissionFlagsBits } from 'discord.js'
 import { clearGuild } from './features/first-join/guild-tracker.js'
 import { playIntroIfFirstJoin } from './features/first-join/play-intro.js'
+import { isSkipCommand } from './features/skip/is-skip-command.js'
 import { Discord } from './services/Discord.js'
 import { Music } from './services/Music.js'
 import { createConfig } from './utils/config.js'
@@ -32,6 +33,13 @@ async function handleMessage(message) {
 
   if (!hasPermissions(voiceChannel, message))
     return
+
+  if (isSkipCommand(message)) {
+    const skipped = await music.skip(message.guildId)
+    if (skipped)
+      message.react('⏭️')
+    return
+  }
 
   await playMusic(voiceChannel, message)
 }
@@ -79,6 +87,10 @@ async function playMusic(voiceChannel, message) {
     await music.play(voiceChannel, message.content.trim(), message)
   }
   catch (e) {
+    if (e.errorCode === 'NO_RESULT') {
+      message.reply(MESSAGES.ERRORS.NO_RESULT)
+      return
+    }
     console.error(`play error: ${e?.message ?? e}`)
     message.reply(MESSAGES.ERRORS.PLAYBACK_ERROR)
   }
