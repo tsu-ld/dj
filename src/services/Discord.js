@@ -1,5 +1,6 @@
 import { Client, Events } from 'discord.js'
 import MESSAGES from '../utils/messages.js'
+import { saveToConfig } from '../utils/save-config.js'
 
 export class Discord {
   constructor(config) {
@@ -39,6 +40,7 @@ export class Discord {
     const channel = message.mentions.channels.first()
     if (channel.isTextBased()) {
       this.config.textChannelId = channel.id
+      saveToConfig('textChannelId', channel.id)
       console.warn(`Configured text channel to: ${channel.name} (${channel.id})`)
       message.reply(MESSAGES.CONFIGURATION.textChannelConfigured(channel))
     }
