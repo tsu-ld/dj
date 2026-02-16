@@ -10,6 +10,19 @@ Just drop a song name or link in the assigned text channel and it'll start playi
 - **Auto Config**: The bot remembers which text channel to listen to.
 - **Welcome Audio**: Plays `assets/welcome.mp3` when first joining a guild's voice channel.
 
+## Tech Stack
+
+- **[Node.js](https://nodejs.org/)**: 22
+- **Discord**: [discord.js](https://discord.js.org/) + [distube](https://distube.js.org/)
+- **Plugins**: YouTube + Spotify
+- **Multimedia**: [ffmpeg](https://ffmpeg.org/)
+
+## Requirements
+
+1. **FFmpeg**: Install [ffmpeg](https://ffmpeg.org/download.html) and make sure it's on your PATH.
+2. **Discord Bot**: Create a [Discord bot](https://discord.com/developers/applications) and get its token.
+3. **Channel ID**: Choose the text channel the bot listens to and get its ID.
+
 ## Usage
 
 1. **Configure Channel**: Mention the bot and a channel to set where it listens for music commands.
