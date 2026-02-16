@@ -16,4 +16,5 @@ export async function playIntroIfFirstJoin(distube, voiceChannel, filename) {
   await distube.voices.join(voiceChannel)
   const voice = distube.voices.get(guildId)
   await playFileInVoice(voice.connection, filePath)
+  voice.connection.subscribe(voice.audioPlayer)
 }
