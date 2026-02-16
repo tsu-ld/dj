@@ -1,9 +1,9 @@
-import 'dotenv/config'
 import { ChannelType, PermissionFlagsBits } from 'discord.js'
 import { Discord } from './services/Discord.js'
 import { Music } from './services/Music.js'
 import { createConfig } from './utils/config.js'
 import MESSAGES from './utils/messages.js'
+import 'dotenv/config'
 
 const config = createConfig()
 const discord = new Discord(config)
