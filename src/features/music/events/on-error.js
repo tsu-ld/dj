@@ -1,3 +1,3 @@
 export function onError(error) {
-  console.error('distube error:', error)
+  console.error('[Music] DisTube error:', error)
 }

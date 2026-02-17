@@ -13,7 +13,7 @@ export async function playMusic(player, voiceChannel, message) {
         await playIntroIfFirstJoin(player, voiceChannel, INTRO_FILE_PATH)
       }
       catch (e) {
-        console.error(`intro error: ${e?.message ?? e}`)
+        console.error(`[Voice] Intro error: ${e?.message ?? e}`)
       }
     }
 
@@ -24,7 +24,7 @@ export async function playMusic(player, voiceChannel, message) {
       message.reply(CONFIG.MESSAGES.ERRORS.NO_RESULT)
       return
     }
-    console.error(`play error: ${e?.message ?? e}`)
+    console.error(`[Music] Play error: ${e?.message ?? e}`)
     message.reply(CONFIG.MESSAGES.ERRORS.PLAYBACK_ERROR)
   }
 }

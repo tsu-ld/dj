@@ -1,3 +1,3 @@
 export function onFinish() {
-  console.warn('queue finished')
+  console.info('[Music] Queue finished')
 }

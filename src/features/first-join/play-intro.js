@@ -6,7 +6,7 @@ export async function playIntroIfFirstJoin(player, voiceChannel, filePath) {
   if (player.voices.has(guildId))
     return
 
-  console.warn(`first join — playing intro: ${filePath}`)
+  console.info('[Voice] First join — playing intro.')
 
   await player.voices.join(voiceChannel)
   const voice = player.voices.get(guildId)

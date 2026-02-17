@@ -11,7 +11,7 @@ export async function skipSong(player, guildId) {
     return true
   }
   catch (e) {
-    console.error(`skip error: ${e?.message ?? e}`)
+    console.error(`[Music] Skip error: ${e?.message ?? e}`)
     queue.stop()
     return true
   }

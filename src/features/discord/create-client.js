@@ -5,7 +5,7 @@ export function createClient() {
   const client = new Client({ intents: INTENTS })
 
   client.once(Events.ClientReady, (c) => {
-    console.warn(`ready: ${c.user.tag}`)
+    console.info(`[Discord] Ready as ${c.user.tag}`)
   })
 
   return client

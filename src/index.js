@@ -20,4 +20,4 @@ async function main() {
   await loginToDiscord(client, CONFIG.DISCORD_TOKEN)
 }
 
-main().catch(console.error)
+main().catch(error => console.error('[System] Fatal error during startup:', error))

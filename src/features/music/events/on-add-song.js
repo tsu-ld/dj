@@ -1,3 +1,3 @@
 export function onAddSong(_queue, song) {
-  console.warn(`queued: ${song.name}`)
+  console.info(`[Music] Song added to queue: ${song.name}`)
 }

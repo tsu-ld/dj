@@ -8,7 +8,7 @@ export async function readConfigFile() {
     return JSON.parse(raw)
   }
   catch (error) {
-    console.warn('Could not read config.json, using defaults.', error.message)
+    console.info('[Config] Warning: Could not read config.json, using defaults.', error.message)
     return {}
   }
 }
