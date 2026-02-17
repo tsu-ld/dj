@@ -13,7 +13,9 @@
       "textChannelConfigured": "Listening for music commands in {{channel}}"
     },
     "MUSIC": {
-      "nowPlaying": "Now playing: {{songName}}"
+      "nowPlaying": "Now playing: {{songName}}",
+      "songAdded": "Added {{songName}} to queue",
+      "playlistAdded": "Added playlist {{playlistName}} ({{songCount}} songs) to queue"
     }
   }
 }
