@@ -1,4 +1,4 @@
-# dot-tsu/dj
+# tsu-ld/dj
 
 Simple Discord bot that plays music in your voice channel.
 Just drop a song name or link in the assigned text channel and it'll start playing.
@@ -21,7 +21,6 @@ Just drop a song name or link in the assigned text channel and it'll start playi
 
 1. **FFmpeg**: Install [ffmpeg](https://ffmpeg.org/download.html) and make sure it's on your PATH.
 2. **Discord Bot**: Create a [Discord bot](https://discord.com/developers/applications) and get its token.
-3. **Channel ID**: Choose the text channel the bot listens to and get its ID.
 
 ## Usage
 
