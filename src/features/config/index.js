@@ -1,7 +1,6 @@
 import DEFAULTS from '../messages/default-messages.js'
 import { loadConfig } from './load-config.js'
 
-// eslint-disable-next-line antfu/no-top-level-await
 const USER_CONFIG = await loadConfig()
 
 export const CONFIG = {
@@ -18,15 +17,16 @@ export const CONFIG = {
     CONFIGURATION: {
       textChannelConfigured: (channel) => {
         const template = USER_CONFIG.CONFIGURATION?.textChannelConfigured ?? DEFAULTS.CONFIGURATION.textChannelConfigured
+
         return template.replace('{{channel}}', channel)
       },
     },
     MUSIC: {
       nowPlaying: (songName) => {
         const template = USER_CONFIG.MUSIC?.nowPlaying ?? DEFAULTS.MUSIC.nowPlaying
+
         return template.replace('{{songName}}', songName)
       },
     },
   },
 }
-

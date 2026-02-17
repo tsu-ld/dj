@@ -1,4 +1,4 @@
-import {CONFIG} from './features/config/index.js'
+import { CONFIG } from './features/config/index.js'
 
 import { createClient } from './features/discord/create-client.js'
 import { login as loginToDiscord } from './features/discord/login.js'
