@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch --env-file=.env src/index.js",
+    "dev": "node --watch src/index.js",
     "lint": "eslint ."
   },
   "peerDependencies": {
@@ -25,8 +25,7 @@
     "@noble/ciphers": "^2.0.1",
     "@snazzah/davey": "^0.1.7",
     "discord.js": "^14.24.2",
-    "distube": "^5.0.7",
-    "dotenv": "^16.4.5"
+    "distube": "^5.0.7"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^6.2.0",

@@ -1,104 +1,23 @@
-// eslint-disable perfectionist/sort-imports
-import 'dotenv/config'
-import { ChannelType, PermissionFlagsBits } from 'discord.js'
-import { clearGuild } from './features/first-join/guild-tracker.js'
-import { playIntroIfFirstJoin } from './features/first-join/play-intro.js'
-import { isSkipCommand } from './features/skip/is-skip-command.js'
-import { Discord } from './services/Discord.js'
-import { Music } from './services/Music.js'
-import { cleanUrl } from './utils/clean-url.js'
-import { createConfig } from './utils/config.js'
-import MESSAGES from './utils/messages.js'
+import {CONFIG} from './features/config/index.js'
 
-const config = createConfig()
-const discord = new Discord(config)
-const music = new Music()
+import { createClient } from './features/discord/create-client.js'
+import { login as loginToDiscord } from './features/discord/login.js'
 
-main().catch(console.error)
+import { createMessageHandler } from './features/handlers/create-message-handler.js'
+import { setupMessageListener } from './features/handlers/setup-message-listener.js'
+import { createPlayer } from './features/music/create-player.js'
+import { setupMusicEvents } from './features/music/events/setup-music-events.js'
 
 async function main() {
-  music.attach(discord.client)
-  setupEventHandlers()
-  await discord.login()
+  const client = createClient()
+  const player = createPlayer(client)
+
+  setupMusicEvents(player)
+
+  const handleMessage = createMessageHandler(player)
+  setupMessageListener(client, handleMessage)
+
+  await loginToDiscord(client, CONFIG.DISCORD_TOKEN)
 }
 
-function setupEventHandlers() {
-  discord.onMessage(handleMessage)
-  discord.onBotKicked(handleBotKicked)
-}
-
-async function handleMessage(message) {
-  const voiceChannel = await getAndValidateVoiceChannel(message)
-  if (!voiceChannel)
-    return
-
-  if (!hasPermissions(voiceChannel, message))
-    return
-
-  if (isSkipCommand(message)) {
-    const skipped = await music.skip(message.guildId)
-    if (skipped)
-      message.react('✅')
-    return
-  }
-
-  await playMusic(voiceChannel, message)
-}
-
-function getAndValidateVoiceChannel(message) {
-  const voiceChannel = discord.getUserVoiceChannel(message)
-  if (!voiceChannel) {
-    message.reply(MESSAGES.ERRORS.JOIN_VOICE_CHANNEL)
-    return null
-  }
-
-  if (voiceChannel.type === ChannelType.GuildStageVoice) {
-    message.reply(MESSAGES.ERRORS.STAGE_CHANNEL_PERMISSIONS)
-    return null
-  }
-
-  return voiceChannel
-}
-
-function hasPermissions(voiceChannel, message) {
-  const me = message.guild?.members?.me ?? message.client.user
-  const perms = voiceChannel.permissionsFor(me)
-  const canConnect = perms?.has(PermissionFlagsBits.Connect)
-  const canSpeak = perms?.has(PermissionFlagsBits.Speak)
-
-  if (!canConnect || !canSpeak) {
-    message.reply(MESSAGES.ERRORS.BOT_PERMISSIONS)
-    return false
-  }
-  return true
-}
-
-async function playMusic(voiceChannel, message) {
-  try {
-    const introFile = config.features?.mp3_first_join?.filename
-    if (introFile) {
-      try {
-        await playIntroIfFirstJoin(music.distube, voiceChannel, introFile)
-      }
-      catch (e) {
-        console.error(`intro error: ${e?.message ?? e}`)
-      }
-    }
-
-    await music.play(voiceChannel, cleanUrl(message.content.trim()), message)
-  }
-  catch (e) {
-    if (e.errorCode === 'NO_RESULT') {
-      message.reply(MESSAGES.ERRORS.NO_RESULT)
-      return
-    }
-    console.error(`play error: ${e?.message ?? e}`)
-    message.reply(MESSAGES.ERRORS.PLAYBACK_ERROR)
-  }
-}
-
-function handleBotKicked({ guildId }) {
-  music.stopByGuildId(guildId)
-  clearGuild(guildId)
-  console.warn('bot was kicked/disconnected; stopped playback.')
-}
+main().catch(console.error)
