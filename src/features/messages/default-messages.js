@@ -11,6 +11,8 @@ const DEFAULTS = {
   },
   MUSIC: {
     nowPlaying: 'Now playing: "{{songName}}"',
+    songAdded: 'Added "{{songName}}" to the queue.',
+    playlistAdded: 'Added playlist "{{playlistName}}" ({{songCount}} songs) to the queue.',
   },
 }
 

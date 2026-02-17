@@ -23,9 +23,19 @@ export const CONFIG = {
     },
     MUSIC: {
       nowPlaying: (songName) => {
-        const template = USER_CONFIG.MUSIC?.nowPlaying ?? DEFAULTS.MUSIC.nowPlaying
+        const template = USER_CONFIG.MESSAGES?.MUSIC?.nowPlaying ?? DEFAULTS.MUSIC.nowPlaying
 
         return template.replace('{{songName}}', songName)
+      },
+      songAdded: (songName) => {
+        const template = USER_CONFIG.MESSAGES?.MUSIC?.songAdded ?? DEFAULTS.MUSIC.songAdded
+
+        return template.replace('{{songName}}', songName)
+      },
+      playlistAdded: (playlistName, songCount) => {
+        const template = USER_CONFIG.MESSAGES?.MUSIC?.playlistAdded ?? DEFAULTS.MUSIC.playlistAdded
+
+        return template.replace('{{playlistName}}', playlistName).replace('{{songCount}}', songCount)
       },
     },
   },

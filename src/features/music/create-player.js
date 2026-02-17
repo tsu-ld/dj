@@ -8,5 +8,7 @@ export function createPlayer(client) {
       new SpotifyPlugin(),
       new YouTubePlugin(),
     ],
+    emitAddListWhenCreatingQueue: true,
+    emitAddSongWhenCreatingQueue: false,
   })
 }
