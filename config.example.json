@@ -1,0 +1,19 @@
+{
+  "DISCORD_TOKEN": "your_bot_token_here",
+  "TEXT_CHANNEL_ID": null,
+  "MESSAGES": {
+    "ERRORS": {
+      "JOIN_VOICE_CHANNEL": "You need to be in a voice channel first.",
+      "STAGE_CHANNEL_PERMISSIONS": "I need permissions to speak in this stage channel.",
+      "BOT_PERMISSIONS": "I need permissions to join and speak in your voice channel.",
+      "NO_RESULT": "No results found.",
+      "PLAYBACK_ERROR": "Error starting playback."
+    },
+    "CONFIGURATION": {
+      "textChannelConfigured": "Listening for music commands in {{channel}}"
+    },
+    "MUSIC": {
+      "nowPlaying": "Now playing: {{songName}}"
+    }
+  }
+}

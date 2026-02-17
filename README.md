@@ -47,10 +47,12 @@ Just drop a song name or link in the assigned text channel and it'll start playi
    npm install
    ```
 
-2. **Environment Variables**:
-   Copy `.env.example` to `.env` and fill:
-   ```env
-   DISCORD_TOKEN=your_bot_token
+2. **Configuration**:
+   Copy `config.example.json` to `config.json` and add your token:
+   ```json
+   {
+     "DISCORD_TOKEN": "your_bot_token"
+   }
    ```
 
 3. **Welcome Audio** (Optional):
