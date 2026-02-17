@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tsu-ld/dj)
+
 # tsu-ld/dj
 
 Simple Discord bot that plays music in your voice channel.
