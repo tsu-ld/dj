@@ -14,9 +14,6 @@ export function createPlayer(client) {
         },
       }),
     ],
-    leaveOnEmpty: true,
-    leaveOnFinish: true,
-    leaveOnStop: true,
     emitAddListWhenCreatingQueue: true,
     emitAddSongWhenCreatingQueue: false,
     ffmpeg: {
