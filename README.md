@@ -1,5 +1,3 @@
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tsu-ld/dj)
-
 # tsu-ld/dj
 
 Simple Discord bot that plays music in your voice channel.
@@ -54,13 +52,13 @@ Just drop a song name or link in the assigned text channel and it'll start playi
    ```json
    {
      "DISCORD_TOKEN": "your_bot_token",
-     ":...other_configurations}"
+     ":...other_configurations"
    }
    ```
    Check `src/messages/default-messages.js` for all available templates.
 
 3. **Welcome Audio** (Optional):
-   Place an MP3 file at `assets/welcome.mp3`. The bot will play this clip the first time it joins a voice channel in each session.
+   Place an MP3 file at `assets/`. The bot will play this clip the first time it joins a voice channel in each session.
 
 ## Run
 
@@ -71,3 +69,6 @@ npm run dev
 ```
 
 I got tired of complicated music bots, so this one just... plays the damn song.
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tsu-ld/dj)
+
