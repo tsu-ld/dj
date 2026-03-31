@@ -1,4 +1,4 @@
-import { CONFIG } from '#features/config/index.js'
+import { CONFIG } from '#features/config/app-config.js'
 import { playIntroIfFirstJoin } from '../first-join/play-intro.js'
 import { cleanUrl } from '../music/clean-url.js'
 import { playSong } from '../music/play-song.js'

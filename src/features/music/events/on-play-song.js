@@ -1,10 +1,8 @@
-import { CONFIG } from '../../config/index.js'
+import { CONFIG } from '../../config/app-config.js'
 
-export function createOnPlaySong() {
+export function onPlaySong(queue, song) {
   const { nowPlaying } = CONFIG.MESSAGES.MUSIC
 
-  return function onPlaySong(queue, song) {
-    console.info(`[Music] Now playing: ${song.name}`)
-    queue.textChannel?.send(nowPlaying(song.name))
-  }
+  console.info(`[Music] Now playing: ${song.name}`)
+  queue.textChannel?.send(nowPlaying(song.name))
 }

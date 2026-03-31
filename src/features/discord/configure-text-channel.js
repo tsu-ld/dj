@@ -1,4 +1,4 @@
-import { CONFIG } from '../config/index.js'
+import { CONFIG } from '../config/app-config.js'
 import { saveConfigValue } from '../config/save-config-value.js'
 
 export async function configureTextChannel(message) {

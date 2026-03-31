@@ -1,5 +1,5 @@
 import { client } from '#client'
-import { CONFIG } from '#features/config/index.js'
+import { CONFIG } from '#features/config/app-config.js'
 import { Events } from 'discord.js'
 import { configureTextChannel } from '../discord/configure-text-channel.js'
 import { isConfigurationCommand } from '../discord/is-configuration-command.js'
@@ -11,7 +11,7 @@ export function setupMessageListener() {
     if (shouldIgnoreMessage(message))
       return
 
-    if (isConfigurationCommand(message, client.user))
+    if (isConfigurationCommand(message))
       return configureTextChannel(message)
 
     if (message.channelId === CONFIG.TEXT_CHANNEL_ID)
