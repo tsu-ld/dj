@@ -12,11 +12,11 @@ export async function playIntroIfFirstJoin(voiceChannel) {
 
   if (player.voices.has(guildId))
     return
-    console.info('[Voice] First join — playing intro.')
+  console.info('[Voice] First join — playing intro.')
 
-    await player.voices.join(voiceChannel)
-    const voice = player.voices.get(guildId)
-    await playFileInVoice(voice.connection, INTRO_FILE_PATH)
+  await player.voices.join(voiceChannel)
+  const voice = player.voices.get(guildId)
+  await playFileInVoice(voice.connection, INTRO_FILE_PATH)
 
-    voice.connection.subscribe(voice.audioPlayer)
+  voice.connection.subscribe(voice.audioPlayer)
 }

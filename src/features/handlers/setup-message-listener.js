@@ -1,6 +1,6 @@
-import { Events } from 'discord.js'
 import { client } from '#client'
 import { CONFIG } from '#features/config/index.js'
+import { Events } from 'discord.js'
 import { configureTextChannel } from '../discord/configure-text-channel.js'
 import { isConfigurationCommand } from '../discord/is-configuration-command.js'
 import { shouldIgnoreMessage } from '../discord/should-ignore-message.js'

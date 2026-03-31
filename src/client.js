@@ -1,5 +1,5 @@
-import { Client, Events } from 'discord.js'
 import { INTENTS } from '#features/config/intents.js'
+import { Client, Events } from 'discord.js'
 
 export const client = new Client({ intents: INTENTS })
 

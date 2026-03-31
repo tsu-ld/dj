@@ -1,5 +1,5 @@
 import { CONFIG } from '../../config/index.js'
- 
+
 export function onAddSong(queue, song) {
   const { songAdded } = CONFIG.MESSAGES.MUSIC
 

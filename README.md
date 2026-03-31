@@ -71,4 +71,3 @@ npm run dev
 I got tired of complicated music bots, so this one just... plays the damn song.
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tsu-ld/dj)
-

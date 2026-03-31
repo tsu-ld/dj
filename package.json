@@ -3,14 +3,14 @@
   "type": "module",
   "private": true,
   "author": ".tsu",
-  "module": "index.js",
-  "engines": {
-    "node": ">=22.0.0"
-  },
   "imports": {
     "#client": "./src/client.js",
     "#player": "./src/player.js",
     "#features/*": "./src/features/*"
+  },
+  "module": "index.js",
+  "engines": {
+    "node": ">=22.0.0"
   },
   "scripts": {
     "start": "node --max-old-space-size=256 src/index.js",
@@ -21,7 +21,6 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "opusscript": "0.0.8",
     "@discordjs/voice": "^0.19.0",
     "@distube/file": "^1.0.1",
     "@distube/spotify": "^2.0.2",
@@ -30,7 +29,8 @@
     "@noble/ciphers": "^2.0.1",
     "@snazzah/davey": "^0.1.7",
     "discord.js": "^14.24.2",
-    "distube": "^5.0.7"
+    "distube": "^5.0.7",
+    "opusscript": "0.0.8"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^6.2.0",

@@ -1,5 +1,4 @@
 import { CONFIG } from '#features/config/index.js'
-import { player } from '#player'
 import { hasVoicePermissions } from '../discord/has-voice-permissions.js'
 import { skipSong } from '../music/skip-song.js'
 import { isSkipCommand } from '../skip/is-skip-command.js'
@@ -13,6 +12,7 @@ export async function handleMessage(message) {
 
   if (!hasVoicePermissions(voiceChannel, message)) {
     message.reply(CONFIG.MESSAGES.ERRORS.BOT_PERMISSIONS)
+
     return
   }
 
@@ -20,6 +20,7 @@ export async function handleMessage(message) {
     const skipped = await skipSong(message.guildId)
     if (skipped)
       message.react('✅')
+
     return
   }
 

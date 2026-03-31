@@ -1,4 +1,3 @@
-import { player } from '#player'
 import { CONFIG } from '#features/config/index.js'
 import { playIntroIfFirstJoin } from '../first-join/play-intro.js'
 import { cleanUrl } from '../music/clean-url.js'
