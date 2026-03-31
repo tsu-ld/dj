@@ -1,4 +1,6 @@
-export async function skipSong(player, guildId) {
+import { player } from '#player'
+
+export async function skipSong(guildId) {
   const queue = player.getQueue(guildId)
   if (!queue)
     return false

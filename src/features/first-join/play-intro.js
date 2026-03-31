@@ -1,9 +1,10 @@
+import { player } from '#player'
 import { findIntroFile } from './find-intro-file.js'
 import { playFileInVoice } from './play-file.js'
 
 const INTRO_FILE_PATH = findIntroFile()
 
-export async function playIntroIfFirstJoin(player, voiceChannel) {
+export async function playIntroIfFirstJoin(voiceChannel) {
   if (!INTRO_FILE_PATH)
     return
 
@@ -11,8 +12,6 @@ export async function playIntroIfFirstJoin(player, voiceChannel) {
 
   if (player.voices.has(guildId))
     return
-
-  try {
     console.info('[Voice] First join — playing intro.')
 
     await player.voices.join(voiceChannel)
@@ -20,8 +19,4 @@ export async function playIntroIfFirstJoin(player, voiceChannel) {
     await playFileInVoice(voice.connection, INTRO_FILE_PATH)
 
     voice.connection.subscribe(voice.audioPlayer)
-  }
-  catch (e) {
-    console.error(`[Voice] Intro error: ${e?.message ?? e}`)
-  }
 }

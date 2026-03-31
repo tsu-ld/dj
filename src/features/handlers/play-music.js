@@ -1,12 +1,13 @@
-import { CONFIG } from '../config/index.js'
+import { player } from '#player'
+import { CONFIG } from '#features/config/index.js'
 import { playIntroIfFirstJoin } from '../first-join/play-intro.js'
 import { cleanUrl } from '../music/clean-url.js'
 import { playSong } from '../music/play-song.js'
 
-export async function playMusic(player, voiceChannel, message) {
+export async function playMusic(voiceChannel, message) {
   try {
-    await playIntroIfFirstJoin(player, voiceChannel)
-    await playSong(player, voiceChannel, cleanUrl(message.content.trim()), message)
+    await playIntroIfFirstJoin(voiceChannel)
+    await playSong(voiceChannel, cleanUrl(message.content.trim()), message)
   }
   catch (e) {
     if (e.errorCode === 'NO_RESULT') {

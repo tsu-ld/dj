@@ -7,6 +7,11 @@
   "engines": {
     "node": ">=22.0.0"
   },
+  "imports": {
+    "#client": "./src/client.js",
+    "#player": "./src/player.js",
+    "#features/*": "./src/features/*"
+  },
   "scripts": {
     "start": "node --max-old-space-size=256 src/index.js",
     "dev": "node --watch --max-old-space-size=256 src/index.js",
