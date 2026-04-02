@@ -19,9 +19,8 @@ export const DISTUBE_OPTIONS = {
       output: {
         'ac': 2,
         'ar': 48000,
-        'b:a': '64k',
+        'b:a': '48k',
         'map': '0:a',
-        'vn': true,
       },
     },
   },
