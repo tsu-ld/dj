@@ -1,10 +1,10 @@
 import { CONFIG } from '#features/config/app-config.js'
 import { ChannelType } from 'discord.js'
-import { getUserVoiceChannel } from '../discord/get-user-voice-channel.js'
-import { hasVoicePermissions } from '../discord/has-voice-permissions.js'
-import { skipSong } from '../music/skip-song.js'
-import { isSkipCommand } from '../skip/is-skip-command.js'
-import { playMusic } from './play-music.js'
+import { getUserVoiceChannel } from '#features/discord/get-user-voice-channel.js'
+import { hasVoicePermissions } from '#features/discord/has-voice-permissions.js'
+import { skipSong } from '#features/music/skip-song.js'
+import { isSkipCommand } from '#features/skip/is-skip-command.js'
+import { playMusic } from '#features/handlers/play-music.js'
 
 export async function handleMessage(message) {
   const voiceChannel = getUserVoiceChannel(message)

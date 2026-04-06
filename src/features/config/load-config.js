@@ -1,5 +1,5 @@
-import { INTENTS } from './intents.js'
-import { readConfigFile } from './read-config-file.js'
+import { INTENTS } from '#features/config/intents.js'
+import { readConfigFile } from '#features/config/read-config-file.js'
 
 export async function loadConfig() {
   const fileConfig = await readConfigFile()

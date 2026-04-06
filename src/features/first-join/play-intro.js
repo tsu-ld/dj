@@ -1,6 +1,6 @@
 import { player } from '#player'
-import { findIntroFile } from './find-intro-file.js'
-import { playFileInVoice } from './play-file.js'
+import { findIntroFile } from '#features/first-join/find-intro-file.js'
+import { playFileInVoice } from '#features/first-join/play-file.js'
 
 const INTRO_FILE_PATH = findIntroFile()
 

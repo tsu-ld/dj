@@ -1,5 +1,5 @@
-import { CONFIG } from '../config/app-config.js'
-import { saveConfigValue } from '../config/save-config-value.js'
+import { CONFIG } from '#features/config/app-config.js'
+import { saveConfigValue } from '#features/config/save-config-value.js'
 
 export async function configureTextChannel(message) {
   const channel = message.mentions.channels.first()

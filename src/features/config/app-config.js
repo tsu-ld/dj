@@ -1,5 +1,5 @@
-import DEFAULTS from '../messages/default-messages.js'
-import { loadConfig } from './load-config.js'
+import DEFAULTS from '#features/messages/default-messages.js'
+import { loadConfig } from '#features/config/load-config.js'
 
 const userConfig = await loadConfig()
 

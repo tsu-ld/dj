@@ -15,9 +15,9 @@ export function playFileInVoice(connection, filePath) {
       resolve()
     })
 
-    player.on('error', (err) => {
+    player.on('error', (error) => {
       player.stop()
-      reject(err)
+      reject(error)
     })
 
     connection.subscribe(player)

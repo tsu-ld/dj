@@ -3,6 +3,6 @@ import { Client, Events } from 'discord.js'
 
 export const client = new Client({ intents: INTENTS })
 
-client.once(Events.ClientReady, (c) => {
-  console.info(`[Discord] Ready as ${c.user.tag}`)
+client.once(Events.ClientReady, (readyClient) => {
+  console.info(`[Discord] Ready as ${readyClient.user.tag}`)
 })
