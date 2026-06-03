@@ -14,7 +14,7 @@ export const DISTUBE_OPTIONS = {
         reconnect_delay_max: 5,
       },
       output: {
-        'ac': 1,
+        'ac': 2,
         'ar': 48000,
         'b:a': '48k',
         'map': '0:a',
