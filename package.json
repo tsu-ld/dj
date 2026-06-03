@@ -21,7 +21,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@discordjs/opus": "^0.9.0",
+    "@discordjs/opus": "npm:mediaplex@latest",
     "@discordjs/voice": "^0.19.0",
     "@distube/file": "^1.0.1",
     "@distube/youtube": "^1.0.4",
