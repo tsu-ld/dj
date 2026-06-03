@@ -1,13 +1,12 @@
+import { SoundCloudPlugin } from '@distube/soundcloud'
 import { SpotifyPlugin } from '@distube/spotify'
 import { YouTubePlugin } from '@distube/youtube'
 
 export const DISTUBE_OPTIONS = {
-  plugins: [
-    new SpotifyPlugin(),
-    new YouTubePlugin(),
-  ],
+  plugins: [new SoundCloudPlugin(), new SpotifyPlugin(), new YouTubePlugin()],
   emitAddListWhenCreatingQueue: true,
   emitAddSongWhenCreatingQueue: false,
+  savePreviousSongs: true,
   ffmpeg: {
     args: {
       global: { hide_banner: true },

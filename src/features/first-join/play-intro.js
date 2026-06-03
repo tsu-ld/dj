@@ -1,11 +1,12 @@
-import { player } from '#player'
-import { findIntroFile } from '#features/first-join/find-intro-file.js'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { playFileInVoice } from '#features/first-join/play-file.js'
+import { player } from '#player'
 
-const INTRO_FILE_PATH = findIntroFile()
+const INTRO_FILE_PATH = resolve('assets', 'welcome.mp3')
 
 export async function playIntroIfFirstJoin(voiceChannel) {
-  if (!INTRO_FILE_PATH)
+  if (!existsSync(INTRO_FILE_PATH))
     return
 
   const guildId = voiceChannel.guild.id
