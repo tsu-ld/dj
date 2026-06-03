@@ -4,8 +4,6 @@ import { cleanUrl } from '#features/music/clean-url.js'
 import { playSong } from '#features/music/play-song.js'
 
 export async function playMusic(voiceChannel, message) {
-  message.channel.sendTyping()
-
   await playIntroIfFirstJoin(voiceChannel)
 
   queueSong(voiceChannel, message).catch((error) => {
