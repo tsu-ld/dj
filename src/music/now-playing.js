@@ -61,12 +61,12 @@ async function writeNowPlaying(queue, song) {
     return
 
   const embed = nowPlayingEmbed(queue, song)
-  const row = nowPlayingRow(queue)
+  const rows = nowPlayingRows(queue)
   const existing = nowPlayingMessages.get(queue.id)
 
   if (existing?.editable && existing.channelId === channel.id) {
     try {
-      await existing.edit({ embeds: [embed], components: [row] })
+      await existing.edit({ embeds: [embed], components: rows })
 
       return
     }
@@ -78,7 +78,7 @@ async function writeNowPlaying(queue, song) {
     }
   }
 
-  const sent = await channel.send({ embeds: [embed], components: [row] })
+  const sent = await channel.send({ embeds: [embed], components: rows })
   nowPlayingMessages.set(queue.id, sent)
 }
 
@@ -119,15 +119,19 @@ function nowPlayingEmbed(queue, song) {
     .setFooter({ text: `${Math.max(queue.songs.length - 1, 0)} in queue` })
 }
 
-function nowPlayingRow(queue) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('np:toggle').setLabel('Pause / resume').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('np:skip').setLabel('Skip').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('np:radio').setLabel('Radio').setStyle(queue.autoplay ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('np:shuffle').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('np:clear').setLabel('Clear').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId('np:queue').setLabel('Queue').setStyle(ButtonStyle.Secondary),
-  )
+function nowPlayingRows(queue) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('np:toggle').setLabel('Pause / resume').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('np:skip').setLabel('Skip').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('np:radio').setLabel('Radio').setStyle(queue.autoplay ? ButtonStyle.Success : ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('np:shuffle').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('np:clear').setLabel('Clear').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('np:queue').setLabel('Queue').setStyle(ButtonStyle.Secondary),
+    ),
+  ]
 }
 
 export function queueView(queue, requestedPage) {
