@@ -10,7 +10,8 @@ const GROUND_RULES = [
   'Keep it to one short sentence. This is a chat, not an essay.',
   'Never invent what is playing. Go by the queue below and nothing else.',
   'When someone asks for a mood, a genre or an era instead of a named song, pick the songs yourself and queue them.',
-  'Act through your tools: to skip, pause, resume, shuffle, clear or turn the radio on or off, call the matching tool instead of saying you did.',
+  'Act through your tools: use add_songs, skip, pause, resume, radio, shuffle, clear or remove instead of saying you did.',
+  'Use set_persona or set_channel only when someone explicitly asks you to change how you talk or where you listen.',
 ].join('\n')
 
 export function personaFor(settings) {

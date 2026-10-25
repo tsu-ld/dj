@@ -41,9 +41,12 @@ async function resolveToolCall(call, context) {
   }
 }
 
-export async function askDj({ message, settings, request, voiceChannel }) {
+export async function askDj({ message, settings, request, voiceChannel, store }) {
   const context = {
     guildId: message.guildId,
+    message,
+    settings,
+    store,
     voiceChannel,
     textChannel: message.channel,
     member: message.member,

@@ -1,9 +1,12 @@
 import { Events, MessageFlags } from 'discord.js'
+import { ActionError } from '../actions/action.js'
+import { getAction } from '../actions/index.js'
 import { MESSAGES } from '../messages/en.js'
-import { queueView, showQueue } from '../music/now-playing.js'
+import { queueView } from '../music/now-playing.js'
 import { player } from '../music/player.js'
-import { runMusicAction } from '../music/queue-controls.js'
 import { client } from './client.js'
+
+const NOW_PLAYING_ACTIONS = new Set(['toggle', 'skip', 'radio', 'shuffle', 'clear', 'queue'])
 
 export function setupInteractionRouter() {
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -33,7 +36,6 @@ async function handleNowPlayingButton(interaction) {
     return
 
   const queue = player.getQueue(guildId)
-  const action = interaction.customId.slice('np:'.length)
 
   if (!queue) {
     await interaction.reply({ content: MESSAGES.nothingPlaying, flags: MessageFlags.Ephemeral })
@@ -41,16 +43,29 @@ async function handleNowPlayingButton(interaction) {
     return
   }
 
-  if (action === 'queue') {
-    await interaction.deferUpdate()
-    await showQueue(queue.textChannel, queue)
-
-    return
-  }
+  const name = interaction.customId.slice('np:'.length)
+  const action = NOW_PLAYING_ACTIONS.has(name) ? getAction(name) : null
 
   // ack before acting: distube actions can exceed the 3s window while downloading audio
   await interaction.deferUpdate()
-  await runMusicAction(queue, action)
+
+  if (!action)
+    return
+
+  try {
+    await action.run({}, {
+      guildId,
+      queue,
+      textChannel: queue.textChannel,
+      member: interaction.member,
+    })
+  }
+  catch (error) {
+    if (!(error instanceof ActionError))
+      throw error
+
+    await interaction.followUp({ content: error.message, flags: MessageFlags.Ephemeral })
+  }
 }
 
 async function handleQueuePageButton(interaction) {

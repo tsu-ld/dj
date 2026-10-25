@@ -156,13 +156,19 @@ console.log('  (manual: a human leaving the channel also drops the bot)')
 
 console.log('== 9. DJ request queues and speaks ==')
 const fakeMessage = { guildId: GUILD, channelId: TEXT, channel: textChannel, member: me }
+const fakeSettings = { persona: null }
+const fakeStore = {
+  get: () => fakeSettings,
+  updateGuild: async () => {},
+}
 
 try {
   const djReply = await askDj({
     message: fakeMessage,
-    settings: { persona: null },
+    settings: fakeSettings,
     request: 'poneme algo de rock nacional',
     voiceChannel,
+    store: fakeStore,
   })
   djReply?.length > 5 ? pass(`dj answered: "${djReply}"`) : fail('dj answers in character', `reply=${JSON.stringify(djReply)}`)
   const djQueue = player.getQueue(GUILD)

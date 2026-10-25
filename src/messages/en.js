@@ -1,5 +1,5 @@
 export const MESSAGES = {
-  joinVoiceChannel: 'Please join a voice channel first to use this command.',
+  joinVoiceChannel: 'Please join a voice channel first to play something.',
   stageChannelPermissions: 'I need speaker permissions to play in a stage channel, or we can use a regular voice channel.',
   botPermissions: 'I need permissions to join and speak in your voice channel.',
   noResult: 'Sorry, I couldn\'t find any song matching your query.',
@@ -8,14 +8,12 @@ export const MESSAGES = {
   textChannelInvalid: 'That channel can\'t be used for music. Mention a text channel instead.',
   textChannelConfigured: channel => `All set! I am now listening in ${channel}.`,
   nothingPlaying: 'Nothing is playing right now.',
-  removeUsage: 'Tell me which song to remove with a number, like: remove 2.',
   removeOutOfRange: 'There is no song at that position.',
   songAdded: song => `Added "${song}" to the queue.`,
   playlistAdded: (playlist, count) => `Added playlist "${playlist}" (${count} songs) to the queue.`,
   personaPermission: 'You need the Manage Server permission to change how I talk.',
-  personaUsage: 'Tell me what I should sound like, like: persona you are a reggaeton dj who never stops joking.',
+  personaUsage: 'Tell me what I should sound like, like: you are a cumbiero dj who never stops joking.',
   personaTooLong: maxLength => `Keep it shorter than ${maxLength} characters, please.`,
-  personaConfigured: 'Done, from now on I will talk like that.',
   djBusy: 'One moment, I am still getting your last request ready.',
   djActed: 'Done.',
 }

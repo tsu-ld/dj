@@ -1,149 +1,168 @@
-import { ChannelType, Events, PermissionFlagsBits } from 'discord.js'
+import { Events } from 'discord.js'
+import { ActionError } from '../actions/action.js'
+import { getAction, routeOptions } from '../actions/index.js'
 import { askDj } from '../dj/ask.js'
+import { chooseAction } from '../dj/decide.js'
 import { refuse, say } from '../dj/speak.js'
 import { MESSAGES } from '../messages/en.js'
-import { playIntroIfFirstJoin } from '../music/intro.js'
-import { scheduleNowPlayingRepost, showQueue } from '../music/now-playing.js'
+import { scheduleNowPlayingRepost } from '../music/now-playing.js'
 import { player } from '../music/player.js'
-import { isPositionInQueue, removeSongAt, runMusicAction } from '../music/queue-controls.js'
 import { client } from './client.js'
-import { configureTextChannel } from './configure-text-channel.js'
-import { parseCommand } from './parse-command.js'
+import { isChannelConfiguration, readMention } from './mentions.js'
+import { chooseRoute } from './route.js'
 
-const MAX_PERSONA_LENGTH = 500
 const DJ_REQUEST_COOLDOWN_MS = 15_000
+
+const DJ_OPTION = {
+  name: 'dj',
+  description: 'Everything else: talk to the user, answer questions, or choose and queue music from a song, artist, mood, genre or era.',
+}
+const DECISION_OPTIONS = [
+  ...routeOptions.map(({ name, description }) => ({ name, description })),
+  DJ_OPTION,
+]
 
 const lastDjRequestAtByChannel = new Map()
 const djRequestsInFlightByChannel = new Set()
 
 export function setupMessageRouter(store) {
-  client.on(Events.MessageCreate, async (message) => {
+  client.on(Events.MessageCreate, createMessageHandler(store))
+}
+
+export function createMessageHandler(store) {
+  return async (message) => {
     try {
-      if (message.author.bot)
+      if (message.author.bot || !message.guildId || !message.channel.isTextBased())
         return
 
-      if (!message.guildId)
-        return
+      const { botMentioned, channelMentions, text } = readMention(message)
+      const context = messageContext(message, store)
 
-      if (!message.channel.isTextBased())
-        return
-
-      const command = parseCommand(
-        message.content,
-        message.client.user.id,
-        message.mentions.members?.has(message.client.user.id) ?? false,
-        [...message.mentions.channels.keys()],
-      )
-
-      if (command.type === 'configure') {
-        await configureTextChannel(message, store)
-
-        return
+      if (!botMentioned) {
+        if (text && message.channelId === context.settings.textChannelId)
+          await runWithFeedback(getAction('query'), { query: text }, context)
       }
-
-      if (command.type === 'persona') {
-        await configurePersona(message, store, command.text)
-
-        return
+      else if (isChannelConfiguration(text, channelMentions)) {
+        await runWithFeedback(getAction('set_channel'), { channelId: channelMentions[0].id }, context)
       }
-
-      if (message.channelId !== store.get(message.guildId).textChannelId)
-        return
-
-      if (command.type === 'query')
-        await playQuery(store, message, command.query)
-      else if (command.type === 'dj')
-        await askDjInChannel(store, message, command.request)
-      else
-        await runCommand(store, message, command)
+      else if (message.channelId === context.settings.textChannelId) {
+        await handleMention(text, context)
+      }
     }
     catch (error) {
       console.error('[Discord] Message handling error:', error)
     }
 
+    // Bot messages return above: rescheduling from our own now-playing repost
+    // would keep deleting and resending it forever.
     const queue = player.getQueue(message.guildId)
 
     if (queue && queue.textChannel?.id === message.channelId)
       scheduleNowPlayingRepost(queue)
-  })
+  }
 }
 
-async function configurePersona(message, store, text) {
-  if (!message.member?.permissions.has(PermissionFlagsBits.ManageGuild)) {
-    await refuse(message, store.get(message.guildId), MESSAGES.personaPermission)
-
-    return
+function messageContext(message, store) {
+  return {
+    guildId: message.guildId,
+    message,
+    member: message.member,
+    voiceChannel: message.member?.voice?.channel ?? null,
+    textChannel: message.channel,
+    settings: store.get(message.guildId),
+    store,
+    queue: player.getQueue(message.guildId),
   }
-
-  const persona = text.trim()
-
-  if (!persona) {
-    await refuse(message, store.get(message.guildId), MESSAGES.personaUsage)
-
-    return
-  }
-
-  if (persona.length > MAX_PERSONA_LENGTH) {
-    await refuse(message, store.get(message.guildId), MESSAGES.personaTooLong(MAX_PERSONA_LENGTH))
-
-    return
-  }
-
-  await store.updateGuild(message.guildId, { persona })
-  await say(message, store.get(message.guildId), MESSAGES.personaConfigured)
 }
 
-// The same checks gate every path into the voice channel: a direct query or
-// the dj's own tool calls must not join where the bot cannot speak.
-function voiceChannelProblem(voiceChannel, guild) {
-  if (!voiceChannel)
-    return MESSAGES.joinVoiceChannel
+async function handleMention(text, context) {
+  const choice = await decide(text, context)
 
-  if (voiceChannel.type === ChannelType.GuildStageVoice)
-    return MESSAGES.stageChannelPermissions
+  // Jev can take a few hundred milliseconds; re-read the live queue so a song
+  // that ended in the meantime does not leave a stale queue behind.
+  context.queue = player.getQueue(context.guildId)
 
-  const permissions = voiceChannel.permissionsFor(guild.members.me)
+  const route = chooseRoute(text, choice, context)
 
-  if (!permissions?.has([PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]))
-    return MESSAGES.botPermissions
-
-  return null
-}
-
-async function playQuery(store, message, query) {
-  const voiceChannel = message.member?.voice?.channel ?? null
-  const settings = store.get(message.guildId)
-  const problem = voiceChannelProblem(voiceChannel, message.guild)
-
-  if (problem) {
-    await refuse(message, settings, problem)
+  // No confident command, or arguments only the dj can infer ("remove the
+  // third one"): let the dj act with its tools.
+  if (!route) {
+    await askDjInChannel(context, text)
 
     return
   }
 
-  await playIntroIfFirstJoin(voiceChannel)
+  if (route.refusal) {
+    await refuse(context.message, context.settings, route.refusal)
 
+    return
+  }
+
+  await runWithFeedback(route.action, route.args, context)
+}
+
+async function decide(text, context) {
   try {
-    await player.play(voiceChannel, query, {
-      textChannel: message.channel,
-      member: message.member,
+    return await chooseAction({
+      text,
+      state: decisionState(context),
+      options: DECISION_OPTIONS,
+      sessionId: context.message.channelId,
     })
   }
   catch (error) {
-    if (!player.getQueue(voiceChannel.guild.id))
-      await voiceChannel.guild.members.me?.voice.disconnect()
+    // Jev is a fast path, not a requirement: a bad decision call falls back to
+    // the dj's own tool choice.
+    console.error('[DJ] Decision failed:', error)
 
-    if (error.errorCode === 'NO_RESULT') {
-      await refuse(message, settings, MESSAGES.noResult)
-
-      return
-    }
-    console.error('[Music] Play error:', error)
-    await say(message, settings, MESSAGES.playbackError)
+    return null
   }
 }
 
-async function askDjInChannel(store, message, request) {
+function decisionState({ member, queue }) {
+  return {
+    author_in_voice: Boolean(member?.voice?.channel),
+    queue: queue && {
+      playing: queue.songs[0]?.name ?? null,
+      paused: queue.paused,
+      radio: queue.autoplay,
+      size: queue.songs.length,
+      upcoming: queue.songs.slice(1, 6).map(song => song.name),
+    },
+  }
+}
+
+async function runWithFeedback(action, args, context) {
+  if (!action)
+    return
+
+  try {
+    const result = await action.run(args, context)
+
+    if (!context.message)
+      return
+
+    if (action.confirm)
+      await say(context.message, context.settings, action.confirm(result, context))
+    else if (action.ack)
+      await context.message.react('✅')
+  }
+  catch (error) {
+    if (!(error instanceof ActionError))
+      throw error
+
+    if (!context.message)
+      return
+
+    if (error.say)
+      await say(context.message, context.settings, error.message)
+    else
+      await refuse(context.message, context.settings, error.message)
+  }
+}
+
+async function askDjInChannel(context, request) {
+  const { message, settings, store, voiceChannel } = context
   const isBusy = djRequestsInFlightByChannel.has(message.channelId)
     || Date.now() - (lastDjRequestAtByChannel.get(message.channelId) ?? 0) < DJ_REQUEST_COOLDOWN_MS
 
@@ -158,9 +177,10 @@ async function askDjInChannel(store, message, request) {
   try {
     const reply = await askDj({
       message,
-      settings: store.get(message.guildId),
+      settings,
       request,
-      voiceChannel: message.member?.voice?.channel ?? null,
+      voiceChannel,
+      store,
     })
 
     // A null reply means the model never said anything, which the person would
@@ -175,46 +195,4 @@ async function askDjInChannel(store, message, request) {
     djRequestsInFlightByChannel.delete(message.channelId)
     lastDjRequestAtByChannel.set(message.channelId, Date.now())
   }
-}
-
-async function runCommand(store, message, command) {
-  const queue = player.getQueue(message.guildId)
-
-  if (!queue) {
-    await refuse(message, store.get(message.guildId), MESSAGES.nothingPlaying)
-
-    return
-  }
-
-  if (command.type === 'remove') {
-    await runRemoveCommand(store, message, queue, command.index)
-
-    return
-  }
-
-  if (command.type === 'queue') {
-    await showQueue(message.channel, queue)
-
-    return
-  }
-
-  await runMusicAction(queue, command.type)
-  await message.react('✅')
-}
-
-async function runRemoveCommand(store, message, queue, index) {
-  if (index === null) {
-    await refuse(message, store.get(message.guildId), MESSAGES.removeUsage)
-
-    return
-  }
-
-  if (!isPositionInQueue(queue, index)) {
-    await refuse(message, store.get(message.guildId), MESSAGES.removeOutOfRange)
-
-    return
-  }
-
-  await removeSongAt(queue, index)
-  await message.react('✅')
 }

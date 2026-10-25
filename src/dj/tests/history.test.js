@@ -4,7 +4,7 @@ import { trimToWholeExchanges } from '../history.js'
 function exchange(number) {
   return [
     { role: 'user', content: `pedido ${number}` },
-    { role: 'assistant', content: '', tool_calls: [{ id: `call-${number}`, type: 'function', function: { name: 'queue_songs', arguments: '{}' } }] },
+    { role: 'assistant', content: '', tool_calls: [{ id: `call-${number}`, type: 'function', function: { name: 'add_songs', arguments: '{}' } }] },
     { role: 'tool', tool_call_id: `call-${number}`, content: '{"queued":1}' },
     { role: 'assistant', content: `listo ${number}` },
   ]
