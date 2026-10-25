@@ -18,10 +18,11 @@
 ## Configuration
 
 - Bot token goes in the `DISCORD_TOKEN` environment variable
-- The DJ's LLM runs on any OpenAI-compatible Responses API endpoint (`/responses`), set via `OPENAI_BASE_URL` (full endpoint URL) and `OPENAI_API_KEY`, with `OPENAI_MODEL` optional (defaults to `deepseek-v4-flash`). Without them, the DJ can't hold a conversation or act on requests (a ❌ reaction marks the failure), announcements go out as plain text instead of in character, and only the deterministic commands keep working
+- The DJ's LLM runs on any OpenAI-compatible Responses API endpoint (`/responses`), set via `OPENAI_BASE_URL` (full endpoint URL) and `OPENAI_API_KEY`, with `OPENAI_MODEL` optional (defaults to `deepseek-v4-flash`). Without them, the DJ can't hold a conversation or act on requests (a ❌ reaction marks the failure), announcements go out as plain text instead of in character, and only the buttons, Jev-routed commands and plain messages in the listening channel keep working
+- The fast action router is optional: set `JEV_BASE_URL` (official TypeSafe: `https://api.typesafe.ai/v1/systemone` with `JEV_MODEL=jev-latest` and `JEV_API_KEY`; OpenCode Console: `https://opencode.ai/inference/systemone/v1/systemone` with `JEV_MODEL=jev-1.13-free` and the OpenCode key). Without it, or when the model is unavailable, the DJ's LLM chooses from the same action registry. OpenCode Go's model list does not include Jev today; the Console System One endpoint needs free quota or credits
 - Per-guild settings are auto-persisted to `data/guilds.json` (gitignored)
 - Configure the listening channel by mentioning the bot and a channel: `@DJ #music`
-- Configure the DJ's personality (Manage Server permission needed): `@DJ persona you are a cumbiero dj`
+- Configure the DJ's personality in plain language in the listening channel (Manage Server permission needed): `@DJ sé un dj cumbiero`
 - `assets/welcome.mp3` (optional) - Played when bot first joins a voice channel per guild
 
 ## Runtime notes
@@ -35,4 +36,5 @@
 - Uses discord.js 14 + distube 5 for music playback
 - Plain JavaScript: relative imports carry the real on-disk `.js` extension (Node 24 ESM)
 - Tests run with `bun test`
-- The DJ layer lives in `src/dj/`: messages mentioning the bot are handled by the LLM through OpenCode Go's `/responses` endpoint, with tools to control the queue. Plain messages in the configured channel still search YouTube directly
+- Every user-triggerable action lives in `src/actions/`, one file each, with its model schema, router metadata and handler. `src/actions/index.js` is the only registry: Jev, the LLM tools and the now-playing buttons all dispatch through it, so adding an action is one file plus one import
+- The DJ layer lives in `src/dj/`: messages mentioning the bot are routed by Jev when `JEV_BASE_URL` is set, and by the LLM's tool choice through OpenCode Go's `/responses` endpoint otherwise; both paths use the same action registry. Plain messages in the configured channel still search YouTube directly

@@ -2,14 +2,14 @@
 
 # tsu-ld/dj
 
-A Discord bot that plays music in your voice channel. Drop a song name or a link in the assigned text channel and it starts playing, or tag it and talk to it like a DJ: it picks the music and answers in its own voice. Controls live on the now-playing message as buttons, and the same commands work as plain text.
+A Discord bot that plays music in your voice channel. Drop a song name or a link in the assigned text channel and it starts playing, or tag it and talk to it like a DJ: it picks the music and answers in its own voice. Controls live on the now-playing message as buttons, and you can also ask for them in your own words.
 
 ## Features
 
 - **Talk to it like a DJ**: tag the bot with a plain request ("poneme algo tranqui de rock nacional") and it chooses the songs, queues them, and answers in character.
-- **Personality per server**: its voice is set with `@DJ persona ...` and lives with the server settings.
+- **Personality per server**: ask it to talk a certain way (`@DJ sé un dj cumbiero`) and the setting lives with the server.
 - **Play anything**: YouTube links and search terms, and Spotify links (track, album, playlist, artist) — the track info comes from Spotify and the audio plays from YouTube.
-- **Full control surface**: pause, resume, skip, shuffle, clear, and a paginated queue view, all as buttons on the now-playing message or as `@DJ` text commands.
+- **Full control surface**: pause, resume, skip, shuffle, clear, and a paginated queue view, all as buttons on the now-playing message or by asking `@DJ` in plain language.
 - **Playlists**: paste a playlist link and it queues the whole thing.
 - **Leaves when done**: disconnects when the queue ends or the voice channel empties.
 - **Remembers its channel**: the listening channel is set per server and survives restarts.
@@ -23,6 +23,7 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 - **Multimedia**: [ffmpeg](https://ffmpeg.org/)
 - **Downloader**: [yt-dlp](https://github.com/yt-dlp/yt-dlp) (resolves and downloads YouTube audio)
 - **LLM**: any OpenAI-compatible Responses API endpoint (`/responses`) (the DJ's voice and song picks)
+- **Decision router (optional)**: [Jev](https://typesafe.ai) through TypeSafe or OpenCode's System One endpoint (fast, typed choice of action)
 
 ## Requirements
 
@@ -53,9 +54,27 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
    export OPENAI_MODEL=your_model  # optional, defaults to deepseek-v4-flash
    ```
 
-   Without these, the bot still plays music, but tagged requests and announcements stay silent (refusals get a ❌ reaction) and only the text commands keep working.
+   Without these, the bot still plays music, but tagged requests and announcements stay silent (refusals get a ❌ reaction); the buttons, Jev-routed controls and plain messages in the listening channel keep working.
 
-4. **(Optional) welcome audio**: put an MP3 at `assets/welcome.mp3`.
+4. **(Optional) fast action routing with Jev**: point `JEV_BASE_URL` at a System One endpoint. With the official TypeSafe API:
+
+   ```bash
+   export JEV_BASE_URL=https://api.typesafe.ai/v1/systemone
+   export JEV_MODEL=jev-latest
+   export JEV_API_KEY=your_typesafe_key
+   ```
+
+   Or with OpenCode's Console endpoint and the same OpenCode key (when its free quota or credits are available):
+
+   ```bash
+   export JEV_BASE_URL=https://opencode.ai/inference/systemone/v1/systemone
+   export JEV_MODEL=jev-1.13-free  # optional
+   # JEV_API_KEY defaults to OPENAI_API_KEY
+   ```
+
+   Without it, or when the model is unavailable, the DJ falls back to picking the action with the configured LLM. OpenCode Go's model list does not include Jev yet, so the Console endpoint uses its free quota or credits.
+
+5. **(Optional) welcome audio**: put an MP3 at `assets/welcome.mp3`.
 
 ## Run
 
@@ -81,31 +100,31 @@ bun run dev
    never gonna give you up
    ```
 
-3. **Control playback**: the buttons on the now-playing message cover everything. The same actions work as text if you prefer:
+3. **Control playback**: the buttons on the now-playing message cover everything. You can also ask in your own words, with no command syntax to memorize:
 
    ```
-   @DJ skip
-   @DJ pause
-   @DJ resume
-   @DJ queue
-   @DJ shuffle
-   @DJ clear
-   @DJ remove 3
+   @DJ pausá
+   @DJ seguí
+   @DJ saltéala
+   @DJ mostrame la cola
+   @DJ sacá la 3
    ```
 
-4. **Talk to the DJ**: tag it with anything that is not one of the commands above:
+4. **Talk to the DJ**: tag it with a song, a mood, a genre or anything else:
 
    ```
    @DJ poneme algo tranqui para el asado
    ```
 
-   It picks the songs to match the request, queues them, and answers in its own voice. Without the LLM configured, tagged messages fall back to searching the text on YouTube.
+   It picks the songs to match the request, queues them, and answers in its own voice. Without the LLM configured, tagged song requests get a ❌; the buttons and plain messages still work.
 
-5. **Set its personality** (the author needs the Manage Server permission):
+5. **Set its personality** (the author needs the Manage Server permission; ask in the listening channel):
 
    ```
-   @DJ persona you are a cumbiero dj who never stops joking
+   @DJ sé un dj cumbiero que no para de hacer chistes
    ```
+
+   It adopts the personality you describe from then on.
 
 ## Testing
 
