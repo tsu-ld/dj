@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import process from 'node:process'
 import { Events } from 'distube'
 import { client } from './src/discord/client.js'
 import { askDj } from './src/dj/ask.js'
+import { playIntroIfFirstJoin } from './src/music/intro.js'
 import { player } from './src/music/player.js'
 
 const ENV_FILE = process.env.E2E_ENV_FILE ?? '/home/tsu/.config/dj/discord.env'
@@ -81,7 +82,14 @@ console.log('== 1. YouTube search ==')
 if (me.voice.channelId)
   await me.voice.disconnect()
 await wait(2000)
-await playAndProbe('youtube search plays audio', 'hipercandombe maquina de hacer pajaros')
+
+if (existsSync(new URL('./assets/welcome.mp3', import.meta.url))) {
+  await playIntroIfFirstJoin(voiceChannel)
+  await playAndProbe('intro does not swallow the first song', 'hipercandombe maquina de hacer pajaros')
+}
+else {
+  console.log('  SKIP: intro does not swallow the first song (assets/welcome.mp3 missing)')
+}
 await cleanup()
 
 console.log('== 2. YouTube URL ==')
