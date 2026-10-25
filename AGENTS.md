@@ -18,7 +18,7 @@
 ## Configuration
 
 - Bot token goes in the `DISCORD_TOKEN` environment variable
-- The DJ's LLM runs on any OpenAI-compatible `/chat/completions` endpoint, set via `OPENAI_BASE_URL` (full endpoint URL) and `OPENAI_API_KEY`, with `OPENAI_MODEL` optional (defaults to `deepseek-v4-flash`). Without them, the DJ can't hold a conversation or act on requests (a ❌ reaction marks the failure), announcements go out as plain text instead of in character, and only the deterministic commands keep working
+- The DJ's LLM runs on any OpenAI-compatible Responses API endpoint (`/responses`), set via `OPENAI_BASE_URL` (full endpoint URL) and `OPENAI_API_KEY`, with `OPENAI_MODEL` optional (defaults to `deepseek-v4-flash`). Without them, the DJ can't hold a conversation or act on requests (a ❌ reaction marks the failure), announcements go out as plain text instead of in character, and only the deterministic commands keep working
 - Per-guild settings are auto-persisted to `data/guilds.json` (gitignored)
 - Configure the listening channel by mentioning the bot and a channel: `@DJ #music`
 - Configure the DJ's personality (Manage Server permission needed): `@DJ persona you are a cumbiero dj`
@@ -35,4 +35,4 @@
 - Uses discord.js 14 + distube 5 for music playback
 - Plain JavaScript: relative imports carry the real on-disk `.js` extension (Node 24 ESM)
 - Tests run with `bun test`
-- The DJ layer lives in `src/dj/`: messages mentioning the bot are handled by the LLM through OpenCode Go's `/chat/completions` endpoint, with tools to control the queue. Plain messages in the configured channel still search YouTube directly
+- The DJ layer lives in `src/dj/`: messages mentioning the bot are handled by the LLM through OpenCode Go's `/responses` endpoint, with tools to control the queue. Plain messages in the configured channel still search YouTube directly

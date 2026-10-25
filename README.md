@@ -22,7 +22,7 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 - **Discord**: [discord.js](https://discord.js.org/) + [distube](https://distube.js.org/)
 - **Multimedia**: [ffmpeg](https://ffmpeg.org/)
 - **Downloader**: [yt-dlp](https://github.com/yt-dlp/yt-dlp) (resolves and downloads YouTube audio)
-- **LLM**: any OpenAI-compatible `/chat/completions` endpoint (the DJ's voice and song picks)
+- **LLM**: any OpenAI-compatible Responses API endpoint (`/responses`) (the DJ's voice and song picks)
 
 ## Requirements
 
@@ -45,10 +45,10 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
    export DISCORD_TOKEN=your_bot_token
    ```
 
-3. **(Optional) give it a voice**: point the bot at any OpenAI-compatible `/chat/completions` endpoint so it can talk and pick songs:
+3. **(Optional) give it a voice**: point the bot at any OpenAI-compatible Responses API endpoint (`/responses`) so it can talk and pick songs:
 
    ```bash
-   export OPENAI_BASE_URL=https://your-endpoint/v1/chat/completions
+   export OPENAI_BASE_URL=https://your-endpoint/v1/responses
    export OPENAI_API_KEY=your_api_key
    export OPENAI_MODEL=your_model  # optional, defaults to deepseek-v4-flash
    ```

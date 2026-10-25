@@ -5,7 +5,7 @@ import { recallConversation, rememberConversation } from './history.js'
 import { buildDjPrompt } from './persona.js'
 import { DJ_TOOLS, runTool } from './tools.js'
 
-const DJ_TIMEOUT_MS = 25_000
+const DJ_TIMEOUT_MS = 40_000
 // Three rounds to act through the tools, then one forced spoken answer: a
 // model that keeps calling tools until the cap would otherwise act in silence.
 const MAX_TOOL_ROUNDS = 3
@@ -64,6 +64,7 @@ export async function askDj({ message, settings, request, voiceChannel }) {
         messages: conversationWithRules(),
         tools: DJ_TOOLS,
         timeoutMs: DJ_TIMEOUT_MS,
+        sessionId: message.channelId,
       })
 
       exchange.push(reply)
@@ -90,6 +91,7 @@ export async function askDj({ message, settings, request, voiceChannel }) {
     const reply = await requestCompletion({
       messages: conversationWithRules(),
       timeoutMs: DJ_TIMEOUT_MS,
+      sessionId: message.channelId,
     })
 
     rememberConversation(message.channelId, [...exchange, { role: 'assistant', content: reply.content ?? '' }])
