@@ -8,10 +8,10 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 
 - **Talk to it like a DJ**: tag the bot with a plain request ("poneme algo tranqui de rock nacional") and it chooses the songs, queues them, and answers in character.
 - **Personality per server**: ask it to talk a certain way (`@DJ sé un dj cumbiero`) and the setting lives with the server.
-- **Play anything**: YouTube links and search terms, and Spotify links (track, album, playlist, artist) — the track info comes from Spotify and the audio plays from YouTube.
-- **Full control surface**: pause, resume, skip, shuffle, clear, and a paginated queue view, all as buttons on the now-playing message or by asking `@DJ` in plain language.
-- **Playlists**: paste a playlist link and it queues the whole thing.
-- **Leaves when done**: disconnects when the queue ends or the voice channel empties.
+- **Play anything**: YouTube links and search terms, and `open.spotify.com` links (track, album, playlist, artist) — the track info comes from Spotify and the audio plays from YouTube. Other pasted links are rejected before they reach yt-dlp.
+- **Full control surface**: pause, resume, skip, shuffle, radio (keeps related songs playing after the queue ends), clear (the button asks for confirmation), and a paginated queue view, all as buttons on the now-playing message or by asking `@DJ` in plain language.
+- **Playlists**: paste a playlist link and it queues up to 50 songs.
+- **Leaves when done**: disconnects when the queue ends (unless radio is on) or the voice channel empties.
 - **Remembers its channel**: the listening channel is set per server and survives restarts.
 - **Welcome audio**: plays `assets/welcome.mp3` the first time it joins a voice channel each session (optional).
 
@@ -30,7 +30,7 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 - **Node.js 24**
 - **FFmpeg**: install it and make sure it's on your PATH (distube streams audio through it)
 - **yt-dlp**: install it and make sure it's on your PATH (the bot downloads YouTube audio through it)
-- **A Discord bot**: create one in the [Discord developer portal](https://discord.com/developers/applications) and invite it to your server with these intents: Send Messages, Embed Links, Attach Files, Read Message History, Connect, Speak, and the server members and voice states privileged intents.
+- **A Discord bot**: create one in the [Discord developer portal](https://discord.com/developers/applications) and invite it to your server with these permissions: Send Messages, Embed Links, Attach Files, Add Reactions, Read Message History, Connect, Speak. Also enable the **Message Content** privileged intent so it can read plain messages in the listening channel.
 
 ## Setup
 
@@ -54,9 +54,16 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
    export OPENAI_MODEL=your_model  # optional, defaults to deepseek-v4-flash
    ```
 
-   Without these, the bot still plays music, but tagged requests and announcements stay silent (refusals get a ❌ reaction); the buttons, Jev-routed controls and plain messages in the listening channel keep working.
+   Without these, the bot still plays music: announcements go out as plain text instead of in character, and refusals reply with the plain reason. Tagged song requests still need the LLM; the buttons, Jev-routed controls and plain messages in the listening channel keep working.
 
-4. **(Optional) fast action routing with Jev**: point `JEV_BASE_URL` at a System One endpoint. With the official TypeSafe API:
+4. **(Optional) Spotify credentials**: Spotify links work without them by scraping a web token, which is fragile and can break without warning. Set the credentials from a [Spotify app](https://developer.spotify.com/dashboard) to use the official API:
+
+   ```bash
+   export SPOTIFY_CLIENT_ID=your_client_id
+   export SPOTIFY_CLIENT_SECRET=your_client_secret
+   ```
+
+5. **(Optional) fast action routing with Jev**: point `JEV_BASE_URL` at a System One endpoint. With the official TypeSafe API:
 
    ```bash
    export JEV_BASE_URL=https://api.typesafe.ai/v1/systemone
@@ -74,7 +81,7 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 
    Without it, or when the model is unavailable, the DJ falls back to picking the action with the configured LLM. OpenCode Go's model list does not include Jev yet, so the Console endpoint uses its free quota or credits.
 
-5. **(Optional) welcome audio**: put an MP3 at `assets/welcome.mp3`.
+6. **(Optional) welcome audio**: put an MP3 at `assets/welcome.mp3`.
 
 ## Run
 
@@ -116,7 +123,7 @@ bun run dev
    @DJ poneme algo tranqui para el asado
    ```
 
-   It picks the songs to match the request, queues them, and answers in its own voice. Without the LLM configured, tagged song requests get a ❌; the buttons and plain messages still work.
+   It picks the songs to match the request, queues them, and answers in its own voice. Without the LLM configured, tagged song requests aren't available: the bot replies with the plain reason, and the buttons and plain messages still work.
 
 5. **Set its personality** (the author needs the Manage Server permission; ask in the listening channel):
 
@@ -128,5 +135,5 @@ bun run dev
 
 ## Testing
 
-- `bun test` runs the unit tests.
+- `bun run test` runs the unit tests; `bun test` works too.
 - `bun run test:e2e` runs the live end-to-end suite against a real Discord guild. It reads the token and LLM vars from `~/.config/dj/discord.env` (override the path with `E2E_ENV_FILE`) and needs `E2E_GUILD`, `E2E_VOICE` and `E2E_TEXT` set. Stop the bot service first: one Discord session per token.
