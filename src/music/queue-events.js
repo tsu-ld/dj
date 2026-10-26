@@ -15,6 +15,36 @@ function announceInCharacter(store, textChannel, guildId, text) {
 // channel and spend a request per song on messages the dj is already phrasing.
 const suppressionDepthByGuild = new Map()
 
+// A broken playlist fails one song at a time; announcing every failure would
+// flood the channel and spend one llm request per song.
+const ERROR_ANNOUNCE_INTERVAL_MS = 30_000
+const lastErrorAnnouncementByGuild = new Map()
+
+function shouldAnnounceError(guildId) {
+  const now = Date.now()
+  const lastAnnouncement = lastErrorAnnouncementByGuild.get(guildId) ?? 0
+
+  if (now - lastAnnouncement < ERROR_ANNOUNCE_INTERVAL_MS)
+    return false
+
+  lastErrorAnnouncementByGuild.set(guildId, now)
+
+  return true
+}
+
+// Distube shifts the failed song before emitting ERROR and then stops the queue
+// without FINISH, which leaves the voice connection open. Compare against the
+// live queue so a replacement queue does not get its card deleted.
+export function shouldCleanupAfterError(queue, liveQueue) {
+  return queue.songs.length === 0 && liveQueue === queue
+}
+
+function cleanupAfterError(queue) {
+  console.info('[Music] Playback error left the queue empty, leaving voice')
+  void clearPlaybackMessages(queue.id)
+  player.voices.get(queue.id)?.leave()
+}
+
 export async function withAnnouncementsSuppressed(guildId, run) {
   suppressionDepthByGuild.set(guildId, (suppressionDepthByGuild.get(guildId) ?? 0) + 1)
 
@@ -71,6 +101,10 @@ export function setupMusicEvents(store) {
       if (!queue)
         return
 
-      announceInCharacter(store, queue.textChannel, queue.id, MESSAGES.playbackError)
+      if (shouldCleanupAfterError(queue, player.getQueue(queue.id)))
+        cleanupAfterError(queue)
+
+      if (shouldAnnounceError(queue.id))
+        announceInCharacter(store, queue.textChannel, queue.id, MESSAGES.playbackError)
     })
 }

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
@@ -9,17 +9,27 @@ async function withTempStore(run) {
   const filePath = join(dir, 'guilds.json')
 
   try {
-    await run(filePath)
+    await run(filePath, dir)
   }
   finally {
     await rm(dir, { recursive: true, force: true })
   }
 }
 
+async function corruptBackups(dir) {
+  const entries = await readdir(dir)
+
+  return entries.filter(entry => entry.startsWith('guilds.json.corrupt-'))
+}
+
 test('store round-trips settings and keeps guilds independent', async () => {
   await withTempStore(async (filePath) => {
     const store = await loadSettingsStore(filePath)
     expect(store.get('a').textChannelId).toBeNull()
+
+    const missing = store.get('missing')
+    missing.textChannelId = 'mutated'
+    expect(store.get('missing').textChannelId).toBeNull()
 
     await store.updateGuild('a', { textChannelId: '111' })
     await store.updateGuild('b', { textChannelId: '222' })
@@ -58,10 +68,35 @@ test('concurrent writes all persist', async () => {
   })
 })
 
-test('corrupt settings file fails the store load', async () => {
-  await withTempStore(async (filePath) => {
-    await writeFile(filePath, '{ not json')
+test('corrupt JSON recovers to an empty store and keeps a backup', async () => {
+  await withTempStore(async (filePath, dir) => {
+    const corrupt = '{ not json'
+    await writeFile(filePath, corrupt)
 
-    expect(loadSettingsStore(filePath)).rejects.toThrow()
+    const store = await loadSettingsStore(filePath)
+
+    expect(store.get('a').textChannelId).toBeNull()
+
+    const backups = await corruptBackups(dir)
+    expect(backups).toHaveLength(1)
+    expect(await readFile(join(dir, backups[0]), 'utf-8')).toBe(corrupt)
   })
+})
+
+test('wrong-shape settings recover to an empty store and keep a backup', async () => {
+  const wrongShapes = ['null', '[]', '"nope"', '{"a":"nope"}', '{"a":[]}']
+
+  for (const raw of wrongShapes) {
+    await withTempStore(async (filePath, dir) => {
+      await writeFile(filePath, raw)
+
+      const store = await loadSettingsStore(filePath)
+
+      expect(store.get('a').textChannelId).toBeNull()
+
+      const backups = await corruptBackups(dir)
+      expect(backups).toHaveLength(1)
+      expect(await readFile(join(dir, backups[0]), 'utf-8')).toBe(raw)
+    })
+  }
 })

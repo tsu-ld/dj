@@ -10,6 +10,25 @@ import './music/player.js'
 
 const SETTINGS_PATH = resolve(import.meta.dirname, '../data/guilds.json')
 
+let shuttingDown = false
+
+async function shutdown(signal) {
+  if (shuttingDown)
+    return
+
+  shuttingDown = true
+  console.info(`[System] Received ${signal}, shutting down`)
+
+  try {
+    await client.destroy()
+  }
+  catch (error) {
+    console.error('[System] Error while shutting down:', error)
+  }
+
+  process.exit(0)
+}
+
 async function main() {
   const token = process.env.DISCORD_TOKEN
 
@@ -26,4 +45,10 @@ async function main() {
   await client.login(token)
 }
 
-main().catch(error => console.error('[System] Fatal error during startup:', error))
+process.on('SIGINT', () => shutdown('SIGINT'))
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+
+main().catch((error) => {
+  console.error('[System] Fatal error during startup:', error)
+  process.exitCode = 1
+})

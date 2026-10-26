@@ -1,11 +1,19 @@
 import process from 'node:process'
 
 const DEFAULT_MODEL = 'deepseek-v4-flash'
+const DEFAULT_MAX_OUTPUT_TOKENS = 800
+const MAX_ERROR_BODY = 300
+const RETRY_JITTER_MIN_MS = 250
+const RETRY_JITTER_MS = 500
+
+export function isConfigured() {
+  return Boolean(process.env.OPENAI_BASE_URL && process.env.OPENAI_API_KEY)
+}
 
 // The endpoint speaks the OpenAI Responses API (/responses): the chat-style
 // messages and tools used across the DJ layer are translated here, so the
 // provider is only named in this one file.
-export async function requestCompletion({ messages, tools, timeoutMs, sessionId }) {
+export async function requestCompletion({ messages, tools, timeoutMs, sessionId, maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS }) {
   const endpoint = process.env.OPENAI_BASE_URL
   const apiKey = process.env.OPENAI_API_KEY
 
@@ -16,12 +24,15 @@ export async function requestCompletion({ messages, tools, timeoutMs, sessionId 
   const instructions = messages.filter(message => message.role === 'system').map(message => message.content).join('\n\n')
   const body = {
     model,
+    store: false,
+    max_output_tokens: maxOutputTokens,
     input: messages.filter(message => message.role !== 'system').flatMap(toResponseItems),
     ...(instructions && { instructions }),
     ...(tools && { tools: tools.map(toResponseTool), tool_choice: 'auto' }),
   }
 
-  const response = await fetch(endpoint, {
+  const deadline = Date.now() + timeoutMs
+  const response = await sendWithRetry(() => fetch(endpoint, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -29,11 +40,14 @@ export async function requestCompletion({ messages, tools, timeoutMs, sessionId 
       'x-opencode-session': sessionId,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  })
+    signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
+  }), deadline)
 
-  if (!response.ok)
-    throw new Error(`LLM endpoint responded ${response.status}: ${await response.text()}`)
+  if (!response.ok) {
+    const detail = await response.text()
+
+    throw new Error(`LLM endpoint responded ${response.status}: ${detail.slice(0, MAX_ERROR_BODY)}`)
+  }
 
   const payload = await response.json()
 
@@ -41,6 +55,36 @@ export async function requestCompletion({ messages, tools, timeoutMs, sessionId 
     throw new Error(`LLM endpoint returned no output: ${JSON.stringify(payload).slice(0, 200)}`)
 
   return toChatMessage(payload.output)
+}
+
+function isRetryable(response) {
+  return response.status === 429 || response.status >= 500
+}
+
+// A connection failure or a retryable status happens before any output, so a
+// second attempt cannot duplicate an action. A timeout is not retried.
+async function sendWithRetry(request, deadline) {
+  try {
+    const response = await request()
+
+    if (!isRetryable(response))
+      return response
+  }
+  catch (error) {
+    // Retrying a timed-out request would double the caller's deadline; only
+    // immediate connection failures get a second attempt.
+    if (error?.name === 'AbortError' || error?.name === 'TimeoutError')
+      throw error
+  }
+
+  const remaining = deadline - Date.now()
+
+  if (remaining <= 0)
+    throw new Error('LLM request ran out of time')
+
+  await new Promise(resolve => setTimeout(resolve, Math.min(RETRY_JITTER_MIN_MS + Math.random() * RETRY_JITTER_MS, remaining)))
+
+  return request()
 }
 
 function toResponseTool(tool) {

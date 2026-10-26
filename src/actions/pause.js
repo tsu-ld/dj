@@ -1,3 +1,4 @@
+import { updateNowPlaying } from '../music/now-playing.js'
 import { defineAction } from './action.js'
 
 export const pause = defineAction({
@@ -7,6 +8,8 @@ export const pause = defineAction({
   run: async (args, { queue }) => {
     if (!queue.paused)
       await queue.pause()
+
+    await updateNowPlaying(queue, queue.songs[0])
 
     return { paused: queue.paused }
   },

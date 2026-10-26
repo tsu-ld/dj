@@ -107,22 +107,23 @@ async function repostNowPlaying(guildId) {
   await writeNowPlaying(queue, queue.songs[0])
 }
 
-function nowPlayingEmbed(queue, song) {
+export function nowPlayingEmbed(queue, song) {
   return new EmbedBuilder()
     .setTitle(songDisplayName(song))
     .setURL(song.url ?? null)
     .setThumbnail(song.thumbnail ?? null)
     .addFields(
-      { name: 'Duration', value: song.formattedDuration, inline: true },
+      { name: 'Duration', value: song.formattedDuration || (song.isLive ? 'Live' : 'Unknown'), inline: true },
       { name: 'Requested by', value: song.member?.displayName ?? 'Unknown', inline: true },
+      { name: 'Status', value: queue.paused ? 'Paused' : 'Playing', inline: true },
     )
     .setFooter({ text: `${Math.max(queue.songs.length - 1, 0)} in queue` })
 }
 
-function nowPlayingRows(queue) {
+export function nowPlayingRows(queue) {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('np:toggle').setLabel('Pause / resume').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('np:toggle').setLabel(queue.paused ? 'Resume' : 'Pause').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('np:skip').setLabel('Skip').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('np:radio').setLabel('Radio').setStyle(queue.autoplay ? ButtonStyle.Success : ButtonStyle.Secondary),
     ),

@@ -4,7 +4,7 @@ import { defineAction } from './action.js'
 export const queue = defineAction({
   name: 'queue',
   description: 'Show the full queue of songs.',
-  tool: false,
+  tool: true,
   requiresQueue: true,
   ack: false,
   run: async (args, context) => {

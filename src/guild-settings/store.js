@@ -3,9 +3,31 @@ import { dirname } from 'node:path'
 
 const DEFAULT_SETTINGS = { textChannelId: null, persona: null }
 
-async function readSettings(filePath) {
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype
+}
+
+function hasValidShape(settings) {
+  return isPlainObject(settings) && Object.values(settings).every(isPlainObject)
+}
+
+async function quarantine(filePath, reason) {
+  const backupPath = `${filePath}.corrupt-${Date.now()}`
+
   try {
-    return JSON.parse(await readFile(filePath, 'utf-8'))
+    await rename(filePath, backupPath)
+    console.warn(`[Settings] ${reason} in ${filePath}; moved it to ${backupPath} and started with an empty store`)
+  }
+  catch (error) {
+    console.warn(`[Settings] ${reason} in ${filePath}, and could not move it aside (${error.message}); starting with an empty store`)
+  }
+}
+
+async function readSettings(filePath) {
+  let raw
+
+  try {
+    raw = await readFile(filePath, 'utf-8')
   }
   catch (error) {
     if (error.code === 'ENOENT')
@@ -13,6 +35,25 @@ async function readSettings(filePath) {
 
     throw error
   }
+
+  let settings
+
+  try {
+    settings = JSON.parse(raw)
+  }
+  catch {
+    await quarantine(filePath, 'Invalid JSON')
+
+    return {}
+  }
+
+  if (!hasValidShape(settings)) {
+    await quarantine(filePath, 'Unexpected settings shape')
+
+    return {}
+  }
+
+  return settings
 }
 
 export async function loadSettingsStore(filePath) {
@@ -32,12 +73,16 @@ export async function loadSettingsStore(filePath) {
 
   return {
     get(guildId) {
-      return settings[guildId] ? { ...settings[guildId] } : { ...DEFAULT_SETTINGS }
+      const guild = settings[guildId]
+
+      return isPlainObject(guild) ? { ...guild } : { ...DEFAULT_SETTINGS }
     },
     async updateGuild(guildId, changes) {
+      const current = isPlainObject(settings[guildId]) ? settings[guildId] : {}
+
       settings = {
         ...settings,
-        [guildId]: { ...settings[guildId], ...changes },
+        [guildId]: { ...current, ...changes },
       }
       await writeSettings()
     },

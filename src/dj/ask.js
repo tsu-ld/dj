@@ -6,9 +6,12 @@ import { buildDjPrompt } from './persona.js'
 import { DJ_TOOLS, runTool } from './tools.js'
 
 const DJ_TIMEOUT_MS = 40_000
+const ASK_DEADLINE_MS = 60_000
 // Three rounds to act through the tools, then one forced spoken answer: a
 // model that keeps calling tools until the cap would otherwise act in silence.
 const MAX_TOOL_ROUNDS = 3
+const MAX_TOOL_CALLS_PER_ROUND = 4
+const MAX_TOOL_CALLS = 8
 
 function parseToolArguments(raw) {
   try {
@@ -17,6 +20,10 @@ function parseToolArguments(raw) {
   catch {
     return null
   }
+}
+
+function toolResult(call, payload) {
+  return { role: 'tool', tool_call_id: call.id, content: JSON.stringify(payload) }
 }
 
 async function resolveToolCall(call, context) {
@@ -32,12 +39,12 @@ async function resolveToolCall(call, context) {
   try {
     const result = await outcome()
 
-    return { message: { role: 'tool', tool_call_id: call.id, content: JSON.stringify(result) }, acted: !result.error }
+    return { message: toolResult(call, result), acted: !result.error }
   }
   catch (error) {
     console.error(`[DJ] Tool "${call.function.name}" failed:`, error)
 
-    return { message: { role: 'tool', tool_call_id: call.id, content: JSON.stringify({ error: 'the player could not do that' }) }, acted: false }
+    return { message: toolResult(call, { error: 'the player could not do that' }), acted: false }
   }
 }
 
@@ -51,39 +58,81 @@ export async function askDj({ message, settings, request, voiceChannel, store })
     textChannel: message.channel,
     member: message.member,
   }
-  const exchange = [...recallConversation(message.channelId), { role: 'user', content: request }]
+  const userId = message.author?.id ?? null
+  const deadline = Date.now() + ASK_DEADLINE_MS
+  const exchange = [...recallConversation(message.channelId, userId), { role: 'user', content: request }]
   const conversationWithRules = () => [
     { role: 'system', content: buildDjPrompt(message.guildId, settings) },
     ...exchange,
   ]
+  const remainingBudget = () => {
+    const remaining = deadline - Date.now()
+
+    return remaining > 0 ? Math.min(DJ_TIMEOUT_MS, remaining) : null
+  }
 
   let acted = false
+  let toolCalls = 0
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const timeoutMs = remainingBudget()
+
+      if (!timeoutMs)
+        break
+
       void message.channel.sendTyping().catch(() => {})
 
       const reply = await requestCompletion({
         messages: conversationWithRules(),
         tools: DJ_TOOLS,
-        timeoutMs: DJ_TIMEOUT_MS,
+        timeoutMs,
         sessionId: message.channelId,
       })
 
       exchange.push(reply)
 
       if (!reply.tool_calls?.length) {
-        rememberConversation(message.channelId, exchange)
+        rememberConversation(message.channelId, userId, exchange)
 
         return clampMessage(reply.content) ?? (acted ? MESSAGES.djActed : null)
       }
 
+      let callsThisRound = 0
+
       for (const call of reply.tool_calls) {
+        callsThisRound++
+
+        if (!remainingBudget()) {
+          exchange.push(toolResult(call, { error: 'the request ran out of time' }))
+
+          continue
+        }
+
+        if (callsThisRound > MAX_TOOL_CALLS_PER_ROUND || toolCalls >= MAX_TOOL_CALLS) {
+          exchange.push(toolResult(call, { error: 'too many tool calls; try fewer at once' }))
+
+          continue
+        }
+
+        toolCalls++
+
         const { message: toolMessage, acted: toolActed } = await resolveToolCall(call, context)
 
         acted ||= toolActed
         exchange.push(toolMessage)
       }
+    }
+
+    const timeoutMs = remainingBudget()
+
+    if (!timeoutMs) {
+      if (!acted)
+        throw new Error('The DJ ran out of time before answering.')
+
+      rememberConversation(message.channelId, userId, exchange)
+
+      return MESSAGES.djActed
     }
 
     // Tools off for the closing call, so the answer cannot carry more dangling
@@ -93,11 +142,11 @@ export async function askDj({ message, settings, request, voiceChannel, store })
 
     const reply = await requestCompletion({
       messages: conversationWithRules(),
-      timeoutMs: DJ_TIMEOUT_MS,
+      timeoutMs,
       sessionId: message.channelId,
     })
 
-    rememberConversation(message.channelId, [...exchange, { role: 'assistant', content: reply.content ?? '' }])
+    rememberConversation(message.channelId, userId, [...exchange, { role: 'assistant', content: reply.content ?? '' }])
 
     return clampMessage(reply.content) ?? (acted ? MESSAGES.djActed : null)
   }
@@ -106,7 +155,7 @@ export async function askDj({ message, settings, request, voiceChannel, store })
       throw error
 
     console.error('[DJ] Request failed after acting:', error)
-    rememberConversation(message.channelId, exchange)
+    rememberConversation(message.channelId, userId, exchange)
 
     return MESSAGES.djActed
   }

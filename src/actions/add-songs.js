@@ -1,6 +1,9 @@
+import { MESSAGES } from '../messages/en.js'
 import { playIntroIfFirstJoin } from '../music/intro.js'
 import { player, ytDlpPlugin } from '../music/player.js'
+import { capQueue, MAX_QUEUE_SIZE, queueRoom } from '../music/queue-controls.js'
 import { withAnnouncementsSuppressed } from '../music/queue-events.js'
+import { voiceChannelProblem } from '../music/voice.js'
 import { ActionError, defineAction } from './action.js'
 
 const MAX_SONGS_PER_REQUEST = 10
@@ -12,15 +15,22 @@ const MAX_SONGS_PER_REQUEST = 10
 // far only hit googlevideo media URLs, not search queries.
 async function queueSongs(songs, context) {
   const requested = Array.isArray(songs) ? songs : []
-  const wanted = requested.slice(0, MAX_SONGS_PER_REQUEST)
 
-  if (!wanted.length)
+  if (!requested.length)
     throw new ActionError('no songs were given')
 
   const { voiceChannel, textChannel, member } = context
+  const problem = voiceChannelProblem(voiceChannel, context.message.guild)
 
-  if (!voiceChannel)
-    throw new ActionError('they are not in a voice channel, so there is nowhere to play')
+  if (problem)
+    throw new ActionError(problem)
+
+  const room = queueRoom(player.getQueue(context.guildId))
+
+  if (room === 0)
+    throw new ActionError(MESSAGES.queueFull(MAX_QUEUE_SIZE), { say: true })
+
+  const wanted = requested.slice(0, Math.min(MAX_SONGS_PER_REQUEST, room))
 
   await playIntroIfFirstJoin(voiceChannel)
 
@@ -39,9 +49,16 @@ async function queueSongs(songs, context) {
 
   await withAnnouncementsSuppressed(voiceChannel.guild.id, () => player.play(voiceChannel, playlist, { textChannel, member }))
 
+  const queue = player.getQueue(context.guildId)
+  const removed = queue ? capQueue(queue) : 0
+
+  if (removed > 0)
+    console.info(`[Music] Dropped ${removed} songs over the ${MAX_QUEUE_SIZE}-song queue limit`)
+
   return {
     queued: resolved.length,
-    missing: requested.length - resolved.length,
+    missing: wanted.length - resolved.length,
+    skipped_for_room: requested.length - wanted.length,
     first_added: resolved[0].name,
   }
 }

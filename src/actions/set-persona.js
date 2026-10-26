@@ -3,6 +3,16 @@ import { MESSAGES } from '../messages/en.js'
 import { ActionError, defineAction } from './action.js'
 
 const MAX_PERSONA_LENGTH = 500
+const PERSONA_INTENT = /^(?:(?:s[ée]|act[uú]a|habl[aá]|speak|talk)(?=$|[\s,.:;!?])|persona\s*:)/i
+const LEADING_MENTION = /^\s*<@!?\d+>\s*[,:;]?\s*/
+
+// The tool stays model-callable, but the person's own message must ask for the
+// change: a song title or a model mistake cannot rewrite the persona.
+function asksForPersona(message) {
+  const content = String(message?.content ?? '').replace(LEADING_MENTION, '').trim()
+
+  return PERSONA_INTENT.test(content)
+}
 
 export const setPersona = defineAction({
   name: 'set_persona',
@@ -19,6 +29,9 @@ export const setPersona = defineAction({
   run: async ({ persona }, context) => {
     if (!context.member?.permissions.has(PermissionFlagsBits.ManageGuild))
       throw new ActionError(MESSAGES.personaPermission)
+
+    if (!asksForPersona(context.message))
+      throw new ActionError(MESSAGES.personaExplicit, { say: true })
 
     const nextPersona = String(persona ?? '').trim()
 

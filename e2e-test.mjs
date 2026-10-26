@@ -155,7 +155,7 @@ const stillIn = (await guild.members.fetch(client.user.id)).voice.channelId
 console.log('  (manual: a human leaving the channel also drops the bot)')
 
 console.log('== 9. DJ request queues and speaks ==')
-const fakeMessage = { guildId: GUILD, channelId: TEXT, channel: textChannel, member: me }
+const fakeMessage = { guildId: GUILD, guild: voiceChannel.guild, channelId: TEXT, channel: textChannel, member: me }
 const fakeSettings = { persona: null }
 const fakeStore = {
   get: () => fakeSettings,

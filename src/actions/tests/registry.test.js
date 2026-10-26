@@ -22,7 +22,7 @@ test('the model only sees the tools meant for it', () => {
   expect(names).toContain('set_channel')
   expect(names).not.toContain('query')
   expect(names).not.toContain('toggle')
-  expect(names).not.toContain('queue')
+  expect(names).toContain('queue')
 })
 
 test('the router sees the commands, not the internal tools', () => {
@@ -82,37 +82,48 @@ test('set_persona stores a trimmed persona for a manager', async () => {
   const member = { permissions: { has: () => true } }
   const store = { updateGuild: async (guildId, changes) => updates.push([guildId, changes]) }
 
-  const result = await getAction('set_persona').run({ persona: '  un dj  ' }, { member, store, guildId: 'g1' })
+  const message = { content: '<@999> sé un dj' }
+  const result = await getAction('set_persona').run({ persona: '  un dj  ' }, { member, store, guildId: 'g1', message })
 
   expect(result).toEqual({ persona: 'un dj' })
   expect(updates).toEqual([['g1', { persona: 'un dj' }]])
 })
 
-test('set_channel accepts a mention or a bare id and stores the channel', async () => {
+test('set_channel uses the mentioned channel and ignores the model argument', async () => {
   const updates = []
   const member = { permissions: { has: () => true } }
   const store = { updateGuild: async (guildId, changes) => updates.push([guildId, changes]) }
-  const channel = { id: '456', name: 'music', guild: {}, isTextBased: () => true, toString: () => '<#456>' }
-  const message = { guild: { channels: { fetch: async id => (id === '456' ? channel : null) } } }
+  const channel = { id: '456', name: 'music', guild: {}, isTextBased: () => true, permissionsFor: () => ({ has: () => true }), toString: () => '<#456>' }
+  const message = {
+    content: '<@999> escuchá en <#456>',
+    mentions: { channels: new Map([['456', channel]]) },
+    guild: { members: { me: {} }, channels: { fetch: async id => (id === '456' ? channel : null) } },
+  }
 
   const result = await getAction('set_channel').run(
     { channelId: '<#456>' },
     { member, store, guildId: 'g1', message },
   )
 
-  expect(result).toEqual({ channel })
+  expect(result).toEqual({ channelId: '456', channelName: 'music' })
   expect(updates).toEqual([['g1', { textChannelId: '456' }]])
 })
 
-test('set_channel rejects a malformed channel argument', async () => {
+test('set_channel rejects a mentioned channel that cannot be used', async () => {
   const member = { permissions: { has: () => true } }
+  const mentioned = { id: '456', name: 'music' }
   const context = {
     member,
     guildId: 'g1',
     store: { updateGuild: async () => {} },
+    message: {
+      content: '<@999> escuchá en <#456>',
+      mentions: { channels: new Map([['456', mentioned]]) },
+      guild: { members: { me: {} }, channels: { fetch: async () => null } },
+    },
   }
 
-  await expect(getAction('set_channel').run({ channelId: 'music-456' }, context))
+  await expect(getAction('set_channel').run({ channelId: '456' }, context))
     .rejects
     .toThrow(MESSAGES.textChannelInvalid)
 })

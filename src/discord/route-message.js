@@ -2,6 +2,7 @@ import { Events } from 'discord.js'
 import { ActionError } from '../actions/action.js'
 import { getAction, routeOptions } from '../actions/index.js'
 import { askDj } from '../dj/ask.js'
+import { isConfigured } from '../dj/client.js'
 import { chooseAction } from '../dj/decide.js'
 import { refuse, say } from '../dj/speak.js'
 import { MESSAGES } from '../messages/en.js'
@@ -12,6 +13,7 @@ import { isChannelConfiguration, readMention } from './mentions.js'
 import { chooseRoute } from './route.js'
 
 const DJ_REQUEST_COOLDOWN_MS = 15_000
+const PLAIN_QUERY_COOLDOWN_MS = 2_000
 
 const DJ_OPTION = {
   name: 'dj',
@@ -24,6 +26,7 @@ const DECISION_OPTIONS = [
 
 const lastDjRequestAtByChannel = new Map()
 const djRequestsInFlightByChannel = new Set()
+const lastPlainQueryAtByUser = new Map()
 
 export function setupMessageRouter(store) {
   client.on(Events.MessageCreate, createMessageHandler(store))
@@ -37,15 +40,26 @@ export function createMessageHandler(store) {
 
       const { botMentioned, channelMentions, text } = readMention(message)
       const context = messageContext(message, store)
+      const isListeningChannel = message.channelId === context.settings.textChannelId
 
       if (!botMentioned) {
-        if (text && message.channelId === context.settings.textChannelId)
-          await runWithFeedback(getAction('query'), { query: text }, context)
+        if (text && isListeningChannel) {
+          if (takePlainQuerySlot(message))
+            await runWithFeedback(getAction('query'), { query: text }, context)
+          else
+            await message.reply(MESSAGES.rateLimited)
+        }
       }
       else if (isChannelConfiguration(text, channelMentions)) {
         await runWithFeedback(getAction('set_channel'), { channelId: channelMentions[0].id }, context)
       }
-      else if (message.channelId === context.settings.textChannelId) {
+      else if (!isListeningChannel) {
+        await message.reply(context.settings.textChannelId ? MESSAGES.wrongChannel(context.settings.textChannelId) : MESSAGES.emptyMention)
+      }
+      else if (!text) {
+        await message.reply(MESSAGES.emptyMention)
+      }
+      else {
         await handleMention(text, context)
       }
     }
@@ -60,6 +74,28 @@ export function createMessageHandler(store) {
     if (queue && queue.textChannel?.id === message.channelId)
       scheduleNowPlayingRepost(queue)
   }
+}
+
+// Plain messages are cheap to type and expensive to search: one per user per
+// couple of seconds stops a burst from spawning parallel YouTube lookups.
+function takePlainQuerySlot(message) {
+  const key = `${message.guildId}:${message.author.id}`
+  const now = Date.now()
+  const lastAt = lastPlainQueryAtByUser.get(key) ?? 0
+
+  if (now - lastAt < PLAIN_QUERY_COOLDOWN_MS)
+    return false
+
+  lastPlainQueryAtByUser.set(key, now)
+
+  if (lastPlainQueryAtByUser.size > 1000) {
+    for (const [entry, at] of lastPlainQueryAtByUser) {
+      if (now - at > PLAIN_QUERY_COOLDOWN_MS)
+        lastPlainQueryAtByUser.delete(entry)
+    }
+  }
+
+  return true
 }
 
 function messageContext(message, store) {
@@ -163,6 +199,15 @@ async function runWithFeedback(action, args, context) {
 
 async function askDjInChannel(context, request) {
   const { message, settings, store, voiceChannel } = context
+
+  // Jev-routed commands and buttons keep their own paths; only the dj's
+  // conversational turn needs the LLM.
+  if (!isConfigured()) {
+    await message.reply(MESSAGES.djUnavailable)
+
+    return
+  }
+
   const isBusy = djRequestsInFlightByChannel.has(message.channelId)
     || Date.now() - (lastDjRequestAtByChannel.get(message.channelId) ?? 0) < DJ_REQUEST_COOLDOWN_MS
 
@@ -189,7 +234,7 @@ async function askDjInChannel(context, request) {
   }
   catch (error) {
     console.error('[DJ] Request failed:', error)
-    await message.react('❌')
+    await message.reply(MESSAGES.djError).catch(() => {})
   }
   finally {
     djRequestsInFlightByChannel.delete(message.channelId)

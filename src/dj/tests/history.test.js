@@ -1,5 +1,5 @@
-import { expect, test } from 'bun:test'
-import { trimToWholeExchanges } from '../history.js'
+import { expect, spyOn, test } from 'bun:test'
+import { conversationKey, recallConversation, rememberConversation, trimToWholeExchanges } from '../history.js'
 
 function exchange(number) {
   return [
@@ -67,4 +67,40 @@ test('leftovers with no request at all are dropped', () => {
   ]
 
   expect(trimToWholeExchanges(messages)).toEqual([])
+})
+
+test('two users in one channel do not share context', () => {
+  rememberConversation('channel-shared', 'user-a', exchange(1))
+
+  expect(recallConversation('channel-shared', 'user-b')).toEqual([])
+  expect(recallConversation('channel-shared', 'user-a')).toEqual(exchange(1))
+})
+
+test('the same user keeps context across requests', () => {
+  rememberConversation('channel-same', 'user-a', exchange(1))
+  rememberConversation('channel-same', 'user-a', [...exchange(1), ...exchange(2)])
+
+  expect(recallConversation('channel-same', 'user-a').at(-1)).toEqual({ role: 'assistant', content: 'listo 2' })
+})
+
+test('without an author the conversation falls back to the channel', () => {
+  rememberConversation('channel-fallback', null, exchange(1))
+
+  expect(recallConversation('channel-fallback', null)).toEqual(exchange(1))
+  expect(recallConversation('channel-fallback')).toEqual(exchange(1))
+  expect(conversationKey('channel-fallback', null)).toBe('channel-fallback')
+})
+
+test('an idle conversation expires', () => {
+  const clock = spyOn(Date, 'now').mockReturnValue(1_000_000)
+
+  try {
+    rememberConversation('channel-ttl', 'user-a', exchange(1))
+    clock.mockReturnValue(1_000_000 + 600_001)
+
+    expect(recallConversation('channel-ttl', 'user-a')).toEqual([])
+  }
+  finally {
+    clock.mockRestore()
+  }
 })

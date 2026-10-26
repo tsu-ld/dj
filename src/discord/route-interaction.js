@@ -1,4 +1,4 @@
-import { Events, MessageFlags } from 'discord.js'
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, MessageFlags } from 'discord.js'
 import { ActionError } from '../actions/action.js'
 import { getAction } from '../actions/index.js'
 import { MESSAGES } from '../messages/en.js'
@@ -16,6 +16,12 @@ export function setupInteractionRouter() {
 
       if (interaction.customId.startsWith('np:')) {
         await handleNowPlayingButton(interaction)
+
+        return
+      }
+
+      if (interaction.customId.startsWith('nc:')) {
+        await handleClearConfirmation(interaction)
 
         return
       }
@@ -44,6 +50,14 @@ async function handleNowPlayingButton(interaction) {
   }
 
   const name = interaction.customId.slice('np:'.length)
+
+  // clear is destructive and irreversible: ask before stopping the music
+  if (name === 'clear') {
+    await interaction.reply(clearConfirmation())
+
+    return
+  }
+
   const action = NOW_PLAYING_ACTIONS.has(name) ? getAction(name) : null
 
   // ack before acting: distube actions can exceed the 3s window while downloading audio
@@ -66,6 +80,56 @@ async function handleNowPlayingButton(interaction) {
 
     await interaction.followUp({ content: error.message, flags: MessageFlags.Ephemeral })
   }
+}
+
+function clearConfirmation() {
+  return {
+    content: MESSAGES.clearConfirm,
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('nc:clear:yes').setLabel('Clear').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('nc:clear:no').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+    flags: MessageFlags.Ephemeral,
+  }
+}
+
+async function handleClearConfirmation(interaction) {
+  const guildId = interaction.guildId
+
+  if (!guildId)
+    return
+
+  const confirmed = interaction.customId === 'nc:clear:yes'
+  const cancelled = interaction.customId === 'nc:clear:no'
+
+  await interaction.deferUpdate()
+
+  if (!confirmed && !cancelled)
+    return
+
+  if (!confirmed) {
+    await interaction.editReply({ content: MESSAGES.clearCancelled, components: [] })
+
+    return
+  }
+
+  const queue = player.getQueue(guildId)
+
+  if (!queue) {
+    await interaction.editReply({ content: MESSAGES.nothingPlaying, components: [] })
+
+    return
+  }
+
+  await getAction('clear').run({}, {
+    guildId,
+    queue,
+    textChannel: queue.textChannel,
+    member: interaction.member,
+  })
+  await interaction.editReply({ content: '✅', components: [] })
 }
 
 async function handleQueuePageButton(interaction) {

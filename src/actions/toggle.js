@@ -1,3 +1,4 @@
+import { updateNowPlaying } from '../music/now-playing.js'
 import { defineAction } from './action.js'
 
 // Button-only: a blind toggle is fine for the now-playing row, but the model
@@ -11,6 +12,7 @@ export const toggle = defineAction({
   requiresQueue: true,
   run: async (args, { queue }) => {
     await (queue.paused ? queue.resume() : queue.pause())
+    await updateNowPlaying(queue, queue.songs[0])
 
     return { paused: queue.paused }
   },
