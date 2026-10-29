@@ -61,7 +61,7 @@ export const remove: CommandSpec = {
 
 export const clear: CommandSpec = {
   name: 'clear',
-  description: 'Stop the music, clear the queue and leave the voice channel. Users say: cortala, limpiá la cola, clear, chau.',
+  description: 'Stop the music, clear the queue and leave the voice channel. Users say: cortala, limpiá la cola, cortá todo, pará todo, clear, stop the music, stop everything, leave, chau.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   async run(_args, context) {

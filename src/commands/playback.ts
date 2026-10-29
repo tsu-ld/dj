@@ -46,7 +46,7 @@ export const toggle: CommandSpec = {
 
 export const skip: CommandSpec = {
   name: 'skip',
-  description: 'Skip the song that is playing now and play the next one. Users say: saltéala, pasá a la siguiente, poné otra, pasá otra, next, skip.',
+  description: 'Skip the song that is playing now and play the next one. Users say: saltéala, pasá a la siguiente, poné otra, pasá otra, skipeá, skipeate, skipeá esto, che skipeate esto, skipealo, skipeala, next, skip.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   async run(_args, context) {
