@@ -42,7 +42,7 @@ export interface AppConfig {
     readonly quotaCacheMs: number
   } | { readonly enabled: false }
   readonly cooldowns: {
-    readonly plainQueryMs: number
+    readonly plainRequestMs: number
     readonly djRequestMs: number
   }
 }
@@ -177,7 +177,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     decision,
     speech,
     cooldowns: {
-      plainQueryMs: 2_000,
+      plainRequestMs: 2_000,
       djRequestMs: 15_000,
     },
   }

@@ -21,7 +21,7 @@ interface SetupOptions {
   agent?: DjAgent | null
   replies?: RepliesRecorder
   slot?: SlotRecorder
-  cooldowns?: { plainQueryMs: number, djRequestMs: number }
+  cooldowns?: { plainRequestMs: number, djRequestMs: number }
 }
 
 function setup(options: SetupOptions = {}): {
@@ -44,7 +44,7 @@ function setup(options: SetupOptions = {}): {
     decision: options.decision ?? null,
     agent: options.agent ?? null,
     logger: log,
-    cooldowns: options.cooldowns ?? { plainQueryMs: 2_000, djRequestMs: 15_000 },
+    cooldowns: options.cooldowns ?? { plainRequestMs: 2_000, djRequestMs: 15_000 },
   })
 
   return { handler, music, replies, slot, settings }
@@ -194,7 +194,7 @@ describe('messageHandler mentions', () => {
 
 describe('messageHandler plain queries', () => {
   test('two plain queries from the same user are rate limited', async () => {
-    const { handler, replies } = setup({ cooldowns: { plainQueryMs: 10_000, djRequestMs: 15_000 } })
+    const { handler, replies } = setup({ cooldowns: { plainRequestMs: 10_000, djRequestMs: 15_000 } })
     const first = fakeIncomingMessage({ guildId: '222222222222222222', authorId: 'rate-user', content: 'hola' })
     const second = fakeIncomingMessage({ guildId: '222222222222222222', authorId: 'rate-user', content: 'hola' })
 
@@ -244,6 +244,147 @@ describe('messageHandler plain queries', () => {
     expect(requests[0]).toMatchObject({ kind: 'text', value: 'cumbia', announce: true })
     expect(slot.reposts).toHaveLength(1)
     expect(slot.reposts[0]?.guildId).toBe(GUILD)
+  })
+})
+
+describe('messageHandler plain intent', () => {
+  test('plain text runs a command without a mention', async () => {
+    const music = fakeMusic({ view: () => view({ size: 2 }) })
+    const { handler } = setup({ decision: fakeDecision('pause'), music })
+    const message = fakeIncomingMessage({ content: 'pausá' })
+
+    await handler(message.message)
+
+    expect(music.calls).toContain('pause')
+  })
+
+  test('plain text the router reads as a song plays the search', async () => {
+    const requests: PlayRequest[] = []
+    const { handler } = setup({
+      decision: fakeDecision('query'),
+      music: fakeMusic({
+        view: () => view({ size: 1 }),
+        async play(request) {
+          requests.push(request)
+
+          return { added: 1, first: 'a', dropped: 0 }
+        },
+      }),
+    })
+    const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: fakeVoice() }) })
+
+    await handler(message.message)
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ kind: 'text', value: 'cumbia', announce: true })
+  })
+
+  test('plain text the router gives to the dj reaches the agent', async () => {
+    const requests: string[] = []
+    const agent: DjAgent = {
+      async ask(input) {
+        requests.push(input.request)
+
+        return 'Dale'
+      },
+    }
+    const { handler } = setup({ decision: fakeDecision('dj'), agent })
+    const message = fakeIncomingMessage({ content: 'poneme algo tranqui' })
+
+    await handler(message.message)
+
+    expect(requests).toEqual(['poneme algo tranqui'])
+    expect(message.replies).toEqual(['Dale'])
+  })
+
+  test('a dj choice without a configured model falls back to the search', async () => {
+    const requests: PlayRequest[] = []
+    const { handler } = setup({
+      decision: fakeDecision('dj'),
+      music: fakeMusic({
+        view: () => view({ size: 1 }),
+        async play(request) {
+          requests.push(request)
+
+          return { added: 1, first: 'a', dropped: 0 }
+        },
+      }),
+    })
+    const message = fakeIncomingMessage({ content: 'rock nacional', member: fakeMember({ voiceChannel: fakeVoice() }) })
+
+    await handler(message.message)
+
+    expect(requests).toHaveLength(1)
+  })
+
+  test('a failed decision falls back to the search', async () => {
+    const requests: PlayRequest[] = []
+    const decision: DecisionPort = {
+      async choose() {
+        throw new Error('jev down')
+      },
+    }
+    const { handler } = setup({
+      decision,
+      music: fakeMusic({
+        view: () => view({ size: 1 }),
+        async play(request) {
+          requests.push(request)
+
+          return { added: 1, first: 'a', dropped: 0 }
+        },
+      }),
+    })
+    const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: fakeVoice() }) })
+
+    await handler(message.message)
+
+    expect(requests).toHaveLength(1)
+  })
+
+  test('the plain decision sees the routes, the search and the dj', async () => {
+    const decision = fakeDecision('query')
+    const { handler } = setup({ decision })
+    const message = fakeIncomingMessage({ content: 'cumbia' })
+
+    await handler(message.message)
+
+    const input = decision.inputs[0]
+    const names = input?.options.map(option => option.name) ?? []
+
+    expect(names).toContain('query')
+    expect(names).toContain('dj')
+    expect(names).toContain('pause')
+  })
+
+  test('a confident route with missing arguments goes to the dj', async () => {
+    const requests: string[] = []
+    const agent: DjAgent = {
+      async ask(input) {
+        requests.push(input.request)
+
+        return 'Listo'
+      },
+    }
+    const { handler } = setup({
+      decision: fakeDecision('remove'),
+      agent,
+      music: fakeMusic({ view: () => view({ size: 3 }) }),
+    })
+    const message = fakeIncomingMessage({ content: 'sacá la tercera' })
+
+    await handler(message.message)
+
+    expect(requests).toEqual(['sacá la tercera'])
+  })
+
+  test('a route refusal answers instead of searching', async () => {
+    const { handler, replies } = setup({ decision: fakeDecision('pause') })
+    const message = fakeIncomingMessage({ content: 'pausá' })
+
+    await handler(message.message)
+
+    expect(replies.said).toEqual([MESSAGES.nothingPlaying])
   })
 })
 

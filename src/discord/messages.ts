@@ -25,7 +25,12 @@ export interface MessageHandlerDeps {
   readonly decision: DecisionPort | null
   readonly agent: DjAgent | null
   readonly logger: Logger
-  readonly cooldowns: { readonly plainQueryMs: number, readonly djRequestMs: number }
+  readonly cooldowns: { readonly plainRequestMs: number, readonly djRequestMs: number }
+}
+
+const QUERY_OPTION: DecisionOption = {
+  name: 'query',
+  description: 'Play the message as a song search, an artist, or a YouTube/Spotify link.',
 }
 
 const DJ_OPTION: DecisionOption = {
@@ -34,7 +39,7 @@ const DJ_OPTION: DecisionOption = {
 }
 
 export function messageHandler(deps: MessageHandlerDeps): (message: Message) => Promise<void> {
-  const plainQueries = cooldown(deps.cooldowns.plainQueryMs)
+  const plainRequests = cooldown(deps.cooldowns.plainRequestMs)
   const djRequests = cooldown(deps.cooldowns.djRequestMs)
   const djInFlight = new Set<string>()
 
@@ -63,7 +68,14 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
     }
   }
 
-  async function decide(text: string, context: CommandContext): Promise<string | null> {
+  // A mention falls back to the DJ; a plain message falls back to a search.
+  // Both use the same deterministic routes, so a confused classifier never
+  // blocks a command or a song.
+  async function decide(
+    text: string,
+    context: CommandContext,
+    options: readonly DecisionOption[],
+  ): Promise<string | null> {
     if (!deps.decision)
       return null
 
@@ -71,13 +83,13 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
       return await deps.decision.choose({
         text,
         state: decisionState(context),
-        options: [...deps.bus.routes, DJ_OPTION],
+        options,
         sessionId: context.textChannel.id,
       })
     }
     catch (error) {
       // The fast router is not a requirement: a bad decision call falls back to
-      // the DJ's own tool choice.
+      // the DJ's own tool choice or to the plain search.
       deps.logger.error('discord.decision_failed', error)
 
       return null
@@ -123,8 +135,12 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
     }
   }
 
+  async function playQuery(text: string, context: CommandContext): Promise<void> {
+    await deps.bus.run('query', { query: text }, context)
+  }
+
   async function handleMention(message: Message<true>, member: GuildMember, settings: GuildSettings, text: string): Promise<void> {
-    const choice = await decide(text, contextFor(message, member, settings))
+    const choice = await decide(text, contextFor(message, member, settings), [...deps.bus.routes, DJ_OPTION])
 
     // The decision can take a few hundred milliseconds; re-read the live queue
     // so a song that ended in the meantime does not leave a stale queue behind.
@@ -133,6 +149,61 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
 
     if (!route) {
       await askDj(message, text, context)
+
+      return
+    }
+
+    if ('refusal' in route) {
+      await context.ui.error(route.refusal)
+
+      return
+    }
+
+    await deps.bus.run(route.spec.name, route.args, context)
+  }
+
+  // A plain message in the listening channel is a request, not necessarily a
+  // search: Jev decides between a control, a song and the DJ. No confident
+  // choice keeps the old behavior and searches.
+  async function handlePlain(message: Message<true>, member: GuildMember, settings: GuildSettings, text: string): Promise<void> {
+    const choice = await decide(text, contextFor(message, member, settings), [
+      ...deps.bus.routes,
+      QUERY_OPTION,
+      DJ_OPTION,
+    ])
+
+    const context = contextFor(message, member, settings)
+
+    if (choice === null || choice === 'query') {
+      await playQuery(text, context)
+
+      return
+    }
+
+    if (choice === 'dj') {
+      if (!deps.agent) {
+        await playQuery(text, context)
+
+        return
+      }
+
+      await askDj(message, text, context)
+
+      return
+    }
+
+    const route = chooseRoute(deps.bus, text, choice, context)
+
+    if (!route) {
+      // A confident route with arguments the text did not carry ("sacá la
+      // tercera") is a conversation, not a search.
+      if (deps.agent) {
+        await askDj(message, text, context)
+
+        return
+      }
+
+      await playQuery(text, context)
 
       return
     }
@@ -170,8 +241,8 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
         if (mention.text && listening) {
           const key = `${message.guildId}:${message.author.id}`
 
-          if (plainQueries.take(key))
-            await deps.bus.run('query', { query: mention.text }, contextFor(message, member, settings))
+          if (plainRequests.take(key))
+            await handlePlain(message, member, settings, mention.text)
           else
             await message.reply(MESSAGES.rateLimited)
         }

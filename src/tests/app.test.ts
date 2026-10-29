@@ -29,7 +29,7 @@ async function config(): Promise<AppConfig> {
     language: { enabled: false },
     decision: { enabled: false },
     speech: { enabled: false },
-    cooldowns: { plainQueryMs: 2_000, djRequestMs: 15_000 },
+    cooldowns: { plainRequestMs: 2_000, djRequestMs: 15_000 },
   }
 }
 
