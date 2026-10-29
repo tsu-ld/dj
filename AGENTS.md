@@ -3,7 +3,7 @@
 ## Run Commands
 
 - `bun install` — install dependencies (Bun is the package manager and script runner)
-- `bun run start` — production run (`node src/index.ts`, no build step)
+- `bun run start` — production run (`bun src/index.ts`, no build step)
 - `bun run dev` — development with `--watch`
 - `bun run check` — lint + typecheck + tests (CI runs this)
 - `bun run lint` — ESLint
@@ -13,9 +13,10 @@
 
 ## Requirements
 
-- **Node.js 24** (required per `package.json`; it strips TypeScript types natively, so there is no build step)
+- **Bun 1.4+** (required per `package.json`; it runs TypeScript natively, so there is no build step)
 - **FFmpeg** on `PATH` (the voice engine streams audio through it)
 - **yt-dlp** on `PATH` (the music provider resolves and downloads YouTube audio through it)
+- The unit suite constructs the Discord client and the music engine; the live voice path is exercised by the e2e suite on a staging guild before a production restart.
 
 ## Configuration
 

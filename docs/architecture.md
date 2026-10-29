@@ -1,6 +1,6 @@
 # Architecture
 
-The bot is a modular monolith: one Node process, one Discord client, one voice
+The bot is a modular monolith: one Bun process, one Discord client, one voice
 connection per guild. The design is organized around six capabilities and one
 composition root, not around the libraries that implement them.
 

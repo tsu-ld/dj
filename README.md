@@ -18,9 +18,8 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 
 ## Tech Stack
 
-- **[Node.js](https://nodejs.org/) 24**: runs the TypeScript sources directly (type stripping, no build step)
+- **[Bun](https://bun.sh/) 1.4+**: runs the TypeScript sources natively (no build step), installs dependencies, lints and runs the tests
 - **[TypeScript](https://www.typescriptlang.org/)**: explicit ports and state types, checked in CI with `tsc --noEmit`
-- **[Bun](https://bun.sh/)**: installs, lints and runs the test suite
 - **Discord**: [discord.js](https://discord.js.org/) + [distube](https://distube.js.org/)
 - **Multimedia**: [ffmpeg](https://ffmpeg.org/) on `PATH`
 - **Downloader**: [yt-dlp](https://github.com/yt-dlp/yt-dlp) on `PATH`
@@ -31,7 +30,7 @@ The internals are described in [docs/architecture.md](docs/architecture.md): cap
 
 ## Requirements
 
-- **Node.js 24**
+- **Bun 1.4+**
 - **FFmpeg** on `PATH`
 - **yt-dlp** on `PATH`
 - **A Discord bot**: create one in the [Discord developer portal](https://discord.com/developers/applications) and invite it with Send Messages, Embed Links, Attach Files, Add Reactions, Read Message History, Connect and Speak. Enable the **Message Content** privileged intent.
