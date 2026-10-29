@@ -104,7 +104,7 @@ describe('speechClient', () => {
   test('a subscription without a character count is an error, not an empty quota', async () => {
     stubFetch(async () => json({ character_count: null, character_limit: 10000 }))
 
-    expect(speechClient(config).fetchUsage()).rejects.toThrow('usable character count')
+    await expect(speechClient(config).fetchUsage()).rejects.toThrow('usable character count')
   })
 })
 
