@@ -13,7 +13,7 @@ export function isConfigured() {
 // The endpoint speaks the OpenAI Responses API (/responses): the chat-style
 // messages and tools used across the DJ layer are translated here, so the
 // provider is only named in this one file.
-export async function requestCompletion({ messages, tools, timeoutMs, sessionId, maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS }) {
+export async function requestCompletion({ messages, tools, timeoutMs, sessionId, maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS, reasoningEffort }) {
   const endpoint = process.env.OPENAI_BASE_URL
   const apiKey = process.env.OPENAI_API_KEY
 
@@ -29,6 +29,7 @@ export async function requestCompletion({ messages, tools, timeoutMs, sessionId,
     input: messages.filter(message => message.role !== 'system').flatMap(toResponseItems),
     ...(instructions && { instructions }),
     ...(tools && { tools: tools.map(toResponseTool), tool_choice: 'auto' }),
+    ...(reasoningEffort && { reasoning: { effort: reasoningEffort } }),
   }
 
   const deadline = Date.now() + timeoutMs

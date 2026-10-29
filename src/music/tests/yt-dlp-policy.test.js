@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
-import { MESSAGES } from '../../messages/en.js'
-import { assertSupportedMusicUrl, assertYtDlpUrl, isSupportedMusicUrl, isUrlLike, liveError } from '../yt-dlp-policy.js'
+import { MESSAGES } from '../../messages.js'
+import { assertSupportedMusicUrl, assertYtDlpUrl, isSupportedMusicUrl, isUrlLike, isYtDlpUrl, liveError } from '../yt-dlp-policy.js'
 
 const SUPPORTED_URLS = [
   'https://youtube.com/watch?v=dQw4w9WgXcQ',
@@ -67,6 +67,12 @@ test('yt-dlp only accepts youtube urls', () => {
   expect(() => assertYtDlpUrl('https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT')).toThrow(MESSAGES.unsupportedUrl)
   expect(() => assertYtDlpUrl('file:///etc/passwd')).toThrow(MESSAGES.unsupportedUrl)
   expect(thrownCode(() => assertYtDlpUrl('https://example.com'))).toBe('UNSUPPORTED_URL')
+})
+
+test('spotify songs are not yt-dlp urls, so they are never prefetched as youtube', () => {
+  expect(isYtDlpUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe(true)
+  expect(isYtDlpUrl('https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT')).toBe(false)
+  expect(isYtDlpUrl('cumbia 2020')).toBe(false)
 })
 
 test('a live stream carries its own failure code', () => {

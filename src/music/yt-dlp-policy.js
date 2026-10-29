@@ -1,4 +1,4 @@
-import { MESSAGES } from '../messages/en.js'
+import { MESSAGES } from '../messages.js'
 
 // distube decides between resolve() and search with its own isURL, which accepts
 // http, https and file and refuses strings with spaces; mirror that so a search
@@ -59,6 +59,10 @@ export function isSupportedMusicUrl(input) {
   return isHostAllowed(input, MUSIC_HOSTS)
 }
 
+export function isYtDlpUrl(input) {
+  return isHostAllowed(input, YOUTUBE_HOSTS)
+}
+
 function unsupportedUrlError() {
   const error = new Error(MESSAGES.unsupportedUrl)
   error.code = 'UNSUPPORTED_URL'
@@ -73,7 +77,7 @@ export function assertSupportedMusicUrl(input) {
 }
 
 export function assertYtDlpUrl(input) {
-  if (isUrlLike(input) && !isHostAllowed(input, YOUTUBE_HOSTS))
+  if (isUrlLike(input) && !isYtDlpUrl(input))
     throw unsupportedUrlError()
 }
 

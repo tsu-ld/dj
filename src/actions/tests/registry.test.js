@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { MESSAGES } from '../../messages/en.js'
+import { MESSAGES } from '../../messages.js'
 import { actions, getAction, modelTools, routeOptions } from '../index.js'
 
 test('every action has a unique name, description and schema', () => {

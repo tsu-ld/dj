@@ -1,5 +1,5 @@
 import { ChannelType, PermissionFlagsBits } from 'discord.js'
-import { MESSAGES } from '../messages/en.js'
+import { MESSAGES } from '../messages.js'
 
 // The same checks gate every path into the voice channel: a direct query or the
 // dj's own tool calls must not join where the bot cannot speak.

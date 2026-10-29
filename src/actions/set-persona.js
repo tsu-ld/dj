@@ -1,5 +1,5 @@
 import { PermissionFlagsBits } from 'discord.js'
-import { MESSAGES } from '../messages/en.js'
+import { MESSAGES } from '../messages.js'
 import { ActionError, defineAction } from './action.js'
 
 const MAX_PERSONA_LENGTH = 500

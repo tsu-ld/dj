@@ -41,6 +41,20 @@ test('a request without tools sends neither key', async () => {
 
   expect(bodies[0].tools).toBeUndefined()
   expect(bodies[0].tool_choice).toBeUndefined()
+  expect(bodies[0].reasoning).toBeUndefined()
+})
+
+test('a request can turn reasoning off for a fast answer', async () => {
+  const bodies = stubCompletionApi('va')
+
+  await requestCompletion({
+    messages: [{ role: 'user', content: 'presentá el tema' }],
+    timeoutMs: 1000,
+    sessionId: 'chan-1',
+    reasoningEffort: 'none',
+  })
+
+  expect(bodies[0].reasoning).toEqual({ effort: 'none' })
 })
 
 test('system messages become instructions', async () => {

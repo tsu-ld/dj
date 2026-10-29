@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Events, MessageFlags } from 'discord.js'
 import { ActionError } from '../actions/action.js'
 import { getAction } from '../actions/index.js'
-import { MESSAGES } from '../messages/en.js'
+import { MESSAGES } from '../messages.js'
 import { queueView } from '../music/now-playing.js'
 import { player } from '../music/player.js'
 import { client } from './client.js'

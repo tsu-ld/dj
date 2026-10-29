@@ -1,4 +1,4 @@
-import { MESSAGES } from '../messages/en.js'
+import { MESSAGES } from '../messages.js'
 import { isPositionInQueue, removeSongAt } from '../music/queue-controls.js'
 import { ActionError, defineAction } from './action.js'
 

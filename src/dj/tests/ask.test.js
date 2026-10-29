@@ -1,6 +1,6 @@
 import process from 'node:process'
 import { afterEach, expect, spyOn, test } from 'bun:test'
-import { MESSAGES } from '../../messages/en.js'
+import { MESSAGES } from '../../messages.js'
 import { askDj } from '../ask.js'
 
 const realFetch = globalThis.fetch

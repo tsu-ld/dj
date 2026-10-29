@@ -1,8 +1,8 @@
 import { player } from '../music/player.js'
+import { oneLine } from '../text.js'
 
 const DEFAULT_PERSONA = 'You are the DJ of a Discord server. You are warm, brief and a little cheeky.'
 const UPCOMING_PREVIEW = 5
-const MAX_SONG_NAME_LENGTH = 120
 
 // The language is derived from whoever is talking rather than configured, so a
 // persona written in any language still answers everyone in their own.
@@ -20,10 +20,6 @@ export function personaFor(settings) {
   return settings.persona || DEFAULT_PERSONA
 }
 
-function songName(name) {
-  return String(name ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_SONG_NAME_LENGTH)
-}
-
 function describeQueue(guildId) {
   const queue = player.getQueue(guildId)
 
@@ -33,11 +29,11 @@ function describeQueue(guildId) {
   const [current, ...upcoming] = queue.songs
   const preview = upcoming
     .slice(0, UPCOMING_PREVIEW)
-    .map((song, index) => `${index + 2}. ${songName(song.name)}`)
+    .map((song, index) => `${index + 2}. ${oneLine(song.name)}`)
     .join('\n')
 
   return [
-    `Playing now, at position 1: ${songName(current.name)}`,
+    `Playing now, at position 1: ${oneLine(current.name)}`,
     preview && `Up next:\n${preview}`,
     upcoming.length > UPCOMING_PREVIEW && `...and ${upcoming.length - UPCOMING_PREVIEW} more.`,
     queue.paused && 'The music is paused right now.',

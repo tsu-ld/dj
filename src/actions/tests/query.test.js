@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { ChannelType } from 'discord.js'
-import { MESSAGES } from '../../messages/en.js'
+import { MESSAGES } from '../../messages.js'
 import { getAction } from '../index.js'
 
 function context() {

@@ -1,4 +1,4 @@
-import { clampMessage } from '../discord/message-limit.js'
+import { clampMessage } from '../text.js'
 import { isConfigured, requestCompletion } from './client.js'
 import { personaFor } from './persona.js'
 

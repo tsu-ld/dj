@@ -7,6 +7,7 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 ## Features
 
 - **Talk to it like a DJ**: tag the bot with a plain request ("poneme algo tranqui de rock nacional") and it chooses the songs, queues them, and answers in character.
+- **Radio voice**: with an ElevenLabs voice configured, the DJ speaks in the gap before a song starts and never over it. One song in three runs without a line, and autoplay songs talk even less. Lines are short and capped so the monthly quota lasts; every fifth line is a longer radio rant.
 - **Personality per server**: ask it to talk a certain way (`@DJ sé un dj cumbiero`) and the setting lives with the server.
 - **Play anything**: YouTube links and search terms, and `open.spotify.com` links (track, album, playlist, artist) — the track info comes from Spotify and the audio plays from YouTube. Other pasted links are rejected before they reach yt-dlp.
 - **Full control surface**: pause, resume, skip, shuffle, radio (keeps related songs playing after the queue ends), clear (the button asks for confirmation), and a paginated queue view, all as buttons on the now-playing message or by asking `@DJ` in plain language.
@@ -21,7 +22,7 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 - **[Bun](https://bun.sh/)**: installs, lints, and runs the test suite
 - **Discord**: [discord.js](https://discord.js.org/) + [distube](https://distube.js.org/)
 - **Multimedia**: [ffmpeg](https://ffmpeg.org/)
-- **Downloader**: [yt-dlp](https://github.com/yt-dlp/yt-dlp) (resolves and downloads YouTube audio)
+- **Downloader**: [yt-dlp](https://github.com/yt-dlp/yt-dlp) (resolves YouTube audio and downloads the next track ahead of time)
 - **LLM**: any OpenAI-compatible Responses API endpoint (`/responses`) (the DJ's voice and song picks)
 - **Decision router (optional)**: [Jev](https://typesafe.ai) through TypeSafe or OpenCode's System One endpoint (fast, typed choice of action)
 
@@ -81,7 +82,17 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 
    Without it, or when the model is unavailable, the DJ falls back to picking the action with the configured LLM. OpenCode Go's model list does not include Jev yet, so the Console endpoint uses its free quota or credits.
 
-6. **(Optional) welcome audio**: put an MP3 at `assets/welcome.mp3`.
+6. **(Optional) radio voice**: give the DJ a voice in the voice channel with [ElevenLabs](https://elevenlabs.io/). Add a male Spanish (Argentina) voice from the [voice library](https://elevenlabs.io/voice-library) to your account and copy its ID:
+
+   ```bash
+   export ELEVENLABS_API_KEY=your_api_key
+   export ELEVENLABS_VOICE_ID=your_voice_id
+   export ELEVENLABS_MODEL_ID=eleven_v4  # optional
+   ```
+
+   The bot writes the line while the previous song plays and airs it in the gap, so the music never plays underneath it. The first song after a reconnect, and every autoplay song, is written on the spot, which adds a few seconds before it starts. One in three requested songs runs without a line, and an autoplay song talks only one in three. The cadence survives reconnects, so asking for one song at a time still skips every third one. It checks the character quota every five minutes and skips lines when the period is exhausted, so the free tier never breaks playback. Lines are capped at 95 characters (one long line of up to 200 characters every fifth line). The LLM writes them with audio tags (`[laughs]`, `[sighs]`, `[excited]`) so the delivery is performed instead of read; `eleven_v3` is more theatrical if you prefer it over the default `eleven_v4`. Without these variables the bot simply plays music, as before.
+
+7. **(Optional) welcome audio**: put an MP3 at `assets/welcome.mp3`.
 
 ## Run
 

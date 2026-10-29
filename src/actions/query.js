@@ -1,4 +1,4 @@
-import { MESSAGES } from '../messages/en.js'
+import { MESSAGES } from '../messages.js'
 import { playIntroIfFirstJoin } from '../music/intro.js'
 import { player } from '../music/player.js'
 import { capQueue, MAX_QUEUE_SIZE, queueRoom } from '../music/queue-controls.js'

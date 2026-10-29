@@ -1,6 +1,6 @@
 import process from 'node:process'
 import { expect, test } from 'bun:test'
-import { MESSAGES } from '../../messages/en.js'
+import { MESSAGES } from '../../messages.js'
 import { createMessageHandler } from '../route-message.js'
 
 const store = { get: () => ({ textChannelId: '2', persona: null }) }

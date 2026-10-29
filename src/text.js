@@ -1,4 +1,11 @@
 const DISCORD_MESSAGE_LIMIT = 2000
+const MAX_LINE_LENGTH = 120
+
+// Song titles and display names arrive from YouTube, Spotify and Discord: they
+// are prompt data, so they lose markup, line breaks and their length.
+export function oneLine(value, maxLength = MAX_LINE_LENGTH) {
+  return String(value ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maxLength)
+}
 
 // Discord rejects messages over 2000 UTF-16 units, and slicing can split a
 // surrogate pair at the boundary; drop a trailing lone high surrogate rather

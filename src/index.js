@@ -3,9 +3,9 @@ import process from 'node:process'
 import { client } from './discord/client.js'
 import { setupInteractionRouter } from './discord/route-interaction.js'
 import { setupMessageRouter } from './discord/route-message.js'
-import { loadSettingsStore } from './guild-settings/store.js'
 import { setupLeaveWhenEmpty } from './music/leave-when-empty.js'
 import { setupMusicEvents } from './music/queue-events.js'
+import { loadSettingsStore } from './settings/store.js'
 import './music/player.js'
 
 const SETTINGS_PATH = resolve(import.meta.dirname, '../data/guilds.json')

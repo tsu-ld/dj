@@ -1,5 +1,5 @@
 import { getAction } from '../actions/index.js'
-import { MESSAGES } from '../messages/en.js'
+import { MESSAGES } from '../messages.js'
 
 // One place decides whether a confident Jev choice is directly actionable:
 // route-only actions, queue preconditions first, then the action's own fast

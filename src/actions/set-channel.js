@@ -1,5 +1,5 @@
 import { PermissionFlagsBits } from 'discord.js'
-import { MESSAGES } from '../messages/en.js'
+import { MESSAGES } from '../messages.js'
 import { ActionError, defineAction } from './action.js'
 
 // The tool stays model-callable, but the channel comes from the person's own

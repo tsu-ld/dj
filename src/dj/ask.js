@@ -1,5 +1,5 @@
-import { clampMessage } from '../discord/message-limit.js'
-import { MESSAGES } from '../messages/en.js'
+import { MESSAGES } from '../messages.js'
+import { clampMessage } from '../text.js'
 import { requestCompletion } from './client.js'
 import { recallConversation, rememberConversation } from './history.js'
 import { buildDjPrompt } from './persona.js'

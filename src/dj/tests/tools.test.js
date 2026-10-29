@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { MESSAGES } from '../../messages/en.js'
+import { MESSAGES } from '../../messages.js'
 import { runTool } from '../tools.js'
 
 const guildId = '123456789012345678'

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { clampMessage } from '../message-limit.js'
+import { clampMessage } from '../text.js'
 
 test('a surrogate pair straddling the limit is not split', () => {
   const text = `${'x'.repeat(1999)}🎉`

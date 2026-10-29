@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { MESSAGES } from '../../messages/en.js'
+import { MESSAGES } from '../../messages.js'
 import { chooseRoute } from '../route.js'
 
 const queue = { songs: [{ name: 'a' }, { name: 'b' }] }
