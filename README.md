@@ -6,6 +6,7 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 
 ## Features
 
+- **No tag needed**: in the listening channel, the fast router reads the intent of every message. "pausá" pauses, "mostrame la cola" shows the queue, "cumbia" plays a search, and a mood like "poneme algo tranqui" goes to the DJ.
 - **Talk to it like a DJ**: tag the bot with a plain request ("poneme algo tranqui de rock nacional") and it chooses the songs, queues them and answers in character.
 - **Radio voice**: with a voice configured, the DJ speaks in the gap before a song starts and never over it. One song in three runs without a line, autoplay songs talk less, and every fifth line is a longer radio rant.
 - **Personality per server**: ask it to talk a certain way (`@DJ sé un dj cumbiero`) and the setting lives with the server.

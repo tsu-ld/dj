@@ -78,10 +78,14 @@ sequenceDiagram
   B-->>U: confirm/ack
 ```
 
-If the classifier has no confident choice, the DJ conversation runs with the
-same bus as its tools. The conversation has a 60s deadline, three tool rounds,
-eight tool calls and a final tool-free answer; history is capped and trimmed to
-whole exchanges.
+A plain message in the listening channel takes the same path without a mention:
+the classifier also sees a `query` option (play the text as a search or link)
+and falls back to the search when no choice is confident; a `dj` choice goes to
+the conversation. If the classifier is disabled or fails, the message is
+searched. A mention with no confident choice goes to the DJ instead.
+
+The conversation has a 60s deadline, three tool rounds, eight tool calls and a
+final tool-free answer; history is capped and trimmed to whole exchanges.
 
 ## Music and the now-playing card
 
