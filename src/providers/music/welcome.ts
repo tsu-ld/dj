@@ -1,4 +1,5 @@
 import type { VoiceBasedChannel } from 'discord.js'
+import type { Readable } from 'node:stream'
 import type { Logger } from '../../core/logger.ts'
 import type { AudioPlayerLike, MusicAudio, VoiceAccess, VoiceSession } from './audio-types.ts'
 import { createReadStream, existsSync } from 'node:fs'
@@ -18,8 +19,10 @@ export function audioOverMusic(deps: {
   logger: Logger
   welcomeFile?: string
   createPlayer?: () => AudioPlayerLike
+  createResource?: (stream: Readable) => unknown
 }): MusicAudio {
   const { access, logger } = deps
+  const createResource = deps.createResource ?? ((stream: Readable): unknown => createAudioResource(stream))
   const welcomeFile = deps.welcomeFile ?? WELCOME_FILE
   const hasWelcome = existsSync(welcomeFile)
   const createPlayer = deps.createPlayer ?? ((): AudioPlayerLike => createAudioPlayer())
@@ -77,7 +80,7 @@ export function audioOverMusic(deps: {
           logger.warn('music.clip_unreadable', { guildId, error: errorMessage(error) })
           attempt.abort()
         })
-        player.play(createAudioResource(stream))
+        player.play(createResource(stream))
 
         const outcome = await waiting
 
@@ -172,7 +175,7 @@ export function audioOverMusic(deps: {
         logger.warn('music.welcome_unreadable', { guildId: channel.guild.id, error: errorMessage(error) })
         attempt.abort()
       })
-      player.play(createAudioResource(stream))
+      player.play(createResource(stream))
 
       const outcome = await waiting
 

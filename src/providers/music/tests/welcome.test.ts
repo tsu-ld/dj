@@ -151,6 +151,7 @@ test('the line takes the connection and hands it back to the music', async () =>
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
     logger: log,
+    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -186,6 +187,7 @@ test('an empty queue never gets a line', async () => {
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, { songs: [], paused: false }),
     logger: log,
+    createResource: () => ({}),
   })
 
   try {
@@ -203,6 +205,7 @@ test('a missing clip is skipped without taking the process down', async () => {
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
     logger: log,
+    createResource: () => ({}),
     createPlayer: () => fakePlayer(),
   })
 
@@ -221,6 +224,7 @@ test('a paused queue is left alone', async () => {
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, { songs: [{ name: 'Tema' }], paused: true }),
     logger: log,
+    createResource: () => ({}),
   })
 
   try {
@@ -240,6 +244,7 @@ test('a connection that dies mid-line is not given back to the music', async () 
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
     logger: log,
+    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -271,6 +276,7 @@ test('a pause pressed during the line is applied when the music is back', async 
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, queue),
     logger: log,
+    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -306,6 +312,7 @@ test('resuming during the line keeps the pause from coming back', async () => {
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, queue),
     logger: log,
+    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -339,6 +346,7 @@ test('a second line does not cut the one already on air', async () => {
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
     logger: log,
+    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -365,6 +373,7 @@ test('a failed clip settles on the player error instead of waiting for idle', as
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
     logger: log,
+    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -385,6 +394,7 @@ test('dispose settles a clip that never reaches idle', async () => {
   const audio = audioOverMusic({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
     logger: log,
+    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -413,6 +423,7 @@ test('the welcome intro plays once per guild and hands the connection back', asy
       return { connection: session.connection, audioPlayer: session.audioPlayer }
     }),
     logger: log,
+    createResource: () => ({}),
     welcomeFile: file,
     createPlayer: () => intro,
   })
@@ -440,6 +451,7 @@ test('without a welcome file the bot joins nothing', async () => {
       return fakeConnection()
     }),
     logger: log,
+    createResource: () => ({}),
     welcomeFile: join(dir, 'missing.mp3'),
   })
 
@@ -461,6 +473,7 @@ test('a destroyed connection during the intro is not given to the music', async 
   const audio = audioOverMusic({
     access: accessOf(null, undefined, async () => ({ connection: session.connection, audioPlayer: session.audioPlayer })),
     logger: log,
+    createResource: () => ({}),
     welcomeFile: file,
     createPlayer: () => intro,
   })
@@ -494,6 +507,7 @@ test('a failed join does not use up the greeting', async () => {
       return { connection: session.connection, audioPlayer: session.audioPlayer }
     }),
     logger: log,
+    createResource: () => ({}),
     welcomeFile: file,
     createPlayer: () => fakePlayer({ onPlay: player => queueMicrotask(() => player.emit('idle')) }),
   })
