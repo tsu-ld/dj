@@ -3,7 +3,7 @@ import { EMPTY_PARAMETERS } from './parameters.ts'
 
 export const pause: CommandSpec = {
   name: 'pause',
-  description: 'Pause the music that is playing.',
+  description: 'Pause the music that is playing. Users say: pausá, pará, pausa, hold on.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   async run(_args, context) {
@@ -16,7 +16,7 @@ export const pause: CommandSpec = {
 
 export const resume: CommandSpec = {
   name: 'resume',
-  description: 'Resume the music that is paused.',
+  description: 'Resume the music that is paused. Users say: seguí, continuá, reanudá, dale, play.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   async run(_args, context) {
@@ -46,7 +46,7 @@ export const toggle: CommandSpec = {
 
 export const skip: CommandSpec = {
   name: 'skip',
-  description: 'Skip the song that is playing now.',
+  description: 'Skip the song that is playing now and play the next one. Users say: saltéala, pasá a la siguiente, poné otra, pasá otra, next, skip.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   async run(_args, context) {
@@ -60,7 +60,7 @@ export const skip: CommandSpec = {
 
 export const shuffle: CommandSpec = {
   name: 'shuffle',
-  description: 'Shuffle the songs that are waiting in the queue.',
+  description: 'Shuffle the songs that are waiting in the queue. Users say: mezclá, shuffle, random.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   async run(_args, context) {
@@ -72,7 +72,7 @@ export const shuffle: CommandSpec = {
 
 export const radio: CommandSpec = {
   name: 'radio',
-  description: 'Turn the radio on or off: when it is on, related songs keep playing after the queue runs dry.',
+  description: 'Turn the radio on or off: when it is on, related songs keep playing after the queue runs dry. Users say: prendé la radio, apagá la radio, modo radio.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   async run(_args, context) {

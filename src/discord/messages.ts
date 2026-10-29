@@ -30,7 +30,7 @@ export interface MessageHandlerDeps {
 
 const QUERY_OPTION: DecisionOption = {
   name: 'query',
-  description: 'Play the message as a song search, an artist, or a YouTube/Spotify link.',
+  description: 'Play the message as a song search, an artist, or a YouTube/Spotify link. Use it when the user names something to play.',
 }
 
 const DJ_OPTION: DecisionOption = {
