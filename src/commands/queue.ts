@@ -8,7 +8,7 @@ const POSITION = /(?:^|\s)(\d{1,3})(?=\s|$)/
 
 export const queue: CommandSpec = {
   name: 'queue',
-  description: 'Show the full queue of songs.',
+  description: 'Show the full queue of songs. Users say: mostrame la cola, qué suena, qué está sonando, cuántos temas quedan, lista, queue.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   ack: false,
@@ -26,7 +26,7 @@ export const queue: CommandSpec = {
 
 export const remove: CommandSpec = {
   name: 'remove',
-  description: 'Remove one song from the queue by its position, where 1 is the song playing right now.',
+  description: 'Remove one song from the queue by its position, where 1 is the song playing right now. Users say: sacá la 3, eliminá la canción 2, remove 4.',
   parameters: {
     type: 'object',
     properties: {
@@ -61,7 +61,7 @@ export const remove: CommandSpec = {
 
 export const clear: CommandSpec = {
   name: 'clear',
-  description: 'Stop the music, clear the queue and leave the voice channel.',
+  description: 'Stop the music, clear the queue and leave the voice channel. Users say: cortala, limpiá la cola, clear, chau.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   async run(_args, context) {
