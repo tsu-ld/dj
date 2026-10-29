@@ -2,42 +2,77 @@
 
 ## Run Commands
 
-- `bun install` - Install dependencies (Bun is the package manager and script runner)
-- `bun run start` - Production run
-- `bun run dev` - Development with `--watch` flag for auto-reload
-- `bun run lint` - Linting via antfu/eslint-config
-- `bun run test` - Run the unit tests (`bun test` works too; CI runs lint and tests)
-- `bun run test:e2e` - Run the live e2e suite (`e2e-test.mjs`) against the real Discord guild; it reads the token and LLM vars from `~/.config/dj/discord.env` (override with `E2E_ENV_FILE`, `E2E_GUILD`, `E2E_VOICE`, `E2E_TEXT`), and needs the bot service stopped so two clients don't share the token
+- `bun install` — install dependencies (Bun is the package manager and script runner)
+- `bun run start` — production run (`bun src/index.ts`, no build step)
+- `bun run dev` — development with `--watch`
+- `bun run check` — lint + typecheck + tests (CI runs this)
+- `bun run lint` — ESLint
+- `bun run typecheck` — `tsc --noEmit`
+- `bun run test` — unit tests (`bun test` works too)
+- `bun run test:e2e` — live suite against the real Discord guild; it reads the token and model variables from `~/.config/dj/discord.env` (override with `E2E_ENV_FILE`, `E2E_GUILD`, `E2E_VOICE`, `E2E_TEXT`) and needs the bot service stopped so two clients do not share the token
 
 ## Requirements
 
-- **Node.js 24** (required, per `package.json` engines; the runtime is Node, not Bun - distube is incompatible with Bun)
-- **FFmpeg** - Must be installed separately and on PATH (not an npm dependency)
-- **yt-dlp** - Must be installed separately and on PATH (not an npm dependency)
+- **Bun 1.4+** (required per `package.json`; it runs TypeScript natively, so there is no build step)
+- **FFmpeg** on `PATH` (the voice engine streams audio through it)
+- **yt-dlp** on `PATH` (the music provider resolves and downloads YouTube audio through it)
+- The unit suite constructs the Discord client and the music engine; the live voice path is exercised by the e2e suite on a staging guild before a production restart.
 
 ## Configuration
 
-- Bot token goes in the `DISCORD_TOKEN` environment variable
-- The DJ's LLM runs on any OpenAI-compatible Responses API endpoint (`/responses`), set via `OPENAI_BASE_URL` (full endpoint URL) and `OPENAI_API_KEY`, with `OPENAI_MODEL` optional (defaults to `deepseek-v4-flash`). Without them, the DJ can't hold a conversation or act on requests (refusals reply with the plain reason), announcements go out as plain text instead of in character, and only the buttons, Jev-routed commands and plain messages in the listening channel keep working. Tagged song requests still need the LLM
-- The fast action router is optional: set `JEV_BASE_URL` (official TypeSafe: `https://api.typesafe.ai/v1/systemone` with `JEV_MODEL=jev-latest` and `JEV_API_KEY`; OpenCode Console: `https://opencode.ai/inference/systemone/v1/systemone` with `JEV_MODEL=jev-1.13-free` and the OpenCode key). Without it, or when the model is unavailable, the DJ's LLM chooses from the same action registry. OpenCode Go's model list does not include Jev today; the Console System One endpoint needs free quota or credits
-- Spotify links use the `@distube/spotify` scrape fallback by default; set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` (both) to use the official API instead
-- Per-guild settings are auto-persisted to `data/guilds.json` (gitignored); a corrupt or wrong-shape file is moved to `guilds.json.corrupt-<timestamp>` and the bot starts with an empty store
-- Configure the listening channel by mentioning the bot and a channel: `@DJ #music`
-- Configure the DJ's personality in plain language in the listening channel (Manage Server permission needed): `@DJ sé un dj cumbiero`
-- `assets/welcome.mp3` (optional) - Played when bot first joins a voice channel per guild
-
-## Runtime notes
-
-- Media limits: 50 songs per playlist link, 200 songs per queue, 512 MiB of cached audio, 200 MiB per downloaded file. Live streams are rejected because playback downloads to a file.
-- Node 24 runs plain JavaScript natively; there is no build step and no TypeScript.
-- YouTube playback uses the `yt-dlp` binary directly (ytdl-core fails to decipher current YouTube player JS). Audio is downloaded to a file in `$TMPDIR/dj-audio` and played from there: YouTube's googlevideo audio URLs only answer closed-range requests, which ffmpeg cannot stream. The `player_client=android` extractor arg avoids YouTube's IP throttling (403s). Files older than a day are cleaned up.
+- `DISCORD_TOKEN` is required.
+- The DJ's conversation uses any OpenAI-compatible Responses API endpoint: `LLM_BASE_URL` (full `/responses` URL), `LLM_API_KEY`, optional `LLM_MODEL` (default `deepseek-v4-flash`). Without it the bot still plays music; announcements go out as plain text and tagged song requests are unavailable.
+- The optional fast router uses a System One endpoint: `DECISION_BASE_URL`, `DECISION_API_KEY` (required for the router; no fallback), optional `DECISION_MODEL` (default `jev-1.13-free`). Without it, the model chooses from the same command registry.
+- Spotify links use the scrape fallback; set `MUSIC_METADATA_CLIENT_ID` and `MUSIC_METADATA_CLIENT_SECRET` (both) for the official API.
+- The optional radio voice uses `SPEECH_API_KEY`, `SPEECH_VOICE_ID`, optional `SPEECH_MODEL_ID` (default `eleven_v4`). Without all required values the bot only plays music.
+- `LOG_LEVEL` (`debug|info|warn|error`) and `EXTRACTOR_COMMAND` are optional. Per-guild settings live in `data/guilds.json` (gitignored flat map, atomic writes, partial entries defaulted, corrupt files quarantined).
 
 ## Architecture
 
-- Entry point: `src/index.js`
-- Uses discord.js 14 + distube 5 for music playback
-- Plain JavaScript: relative imports carry the real on-disk `.js` extension (Node 24 ESM)
-- Tests run with `bun run test` (`bun test` works too)
-- Music modules keep one concern each: `src/music/voice.js` owns the voice-channel permission checks used before joining, `src/music/yt-dlp-policy.js` owns the URL allowlist applied by `src/music/yt-dlp-plugin.js`, and `src/music/player.js` only wires plugins and DisTube options
-- Every user-triggerable action lives in `src/actions/`, one file each, with its model schema, router metadata and handler. `src/actions/index.js` is the only registry: Jev, the LLM tools and the now-playing buttons all dispatch through it, so adding an action is one file plus one import
-- The DJ layer lives in `src/dj/`: messages mentioning the bot are routed by Jev when `JEV_BASE_URL` is set, and by the LLM's tool choice through OpenCode Go's `/responses` endpoint otherwise; both paths use the same action registry. Plain messages in the configured channel still search YouTube directly
+```
+src/
+  index.ts          process entry: config, app, signals
+  app.ts            the only composition root
+  config.ts         env -> validated AppConfig (the only env reader)
+  core/             clock, errors, logger, async primitives, text, TTL map, JSON guards
+  ports/            MusicPort, SpeechPort, ConversationPort, DecisionPort, SettingsPort, RepliesPort
+  providers/        adapters; the only place a technology is named
+    music/          engine, catalogue, extractor, cache, stream, policy, welcome
+    speech/         voice synthesis + quota
+    language-model/ conversation wire format
+    classifier/     fast typed decision
+    settings/       flat JSON store
+  dj/               persona, prompts, conversation loop, replies, announcements
+  on-air/           station state machine, script, host
+  commands/         command specs, bus, fast router
+  discord/          gateway, message/interaction handlers, views, message slot
+  tests/            architecture contract
+```
+
+- `app.ts` builds every capability as a plain object (`musicEngine`, `speechSynthesizer`, `conversationModel`, `intentClassifier`, `settingsStore`) and wires the events. Nothing else constructs a provider.
+- **Dependency rule:** `app -> commands/discord/dj/on-air -> ports -> core`; providers sit behind ports and import `core`, `ports`, the `config` types plus `limits`/`messages`, and their own SDK. Providers never import `commands`, `discord`, `dj` or `on-air`. `src/tests/architecture.test.ts` enforces this.
+- **No technology names outside `src/providers/`.** A module is named for what it does (`music`, `speech`, `language-model`, `classifier`), never for the library behind it.
+- **Commands:** one `CommandBus` executes the fast router, the model's tool calls and the buttons. Preconditions, member authorization, confirmation, ack and error mapping live once.
+- **State:** no module-level mutable request state. The message slot owns its card ids/timers, the station owns cadence and prepared clips, the conversation owns its bounded history, the speech provider owns its quota cache. Every object that owns a timer, file or child exposes `dispose`/`flush`; bounded TTL maps die with the process.
+- **Lifecycle:** shutdown aborts in-flight work, flushes settings, leaves voice, kills extractor children and destroys the client with a timeout. Unhandled rejections stop the process cleanly with a non-zero exit.
+- **Errors:** `UserError` is safe to show, `ProviderError` carries a capability and a retryable/fatal/quota kind, and unknown errors are logged and answered with a generic message. Providers map their wire errors once.
+- **Types:** explicit at ports and exported signatures, inference inside. No `any`, no non-null assertions, no casts outside a runtime-validated boundary. No enums.
+
+## Behavior Invariants
+
+- The stream waits for the on-air line: `beforeStream` is awaited before the audio URL is returned, so a spoken line never plays over the music.
+- A prepared line belongs to one song; skip, removal, disconnect and reset delete it. One requested song in three is silent; autoplay speaks one in three; every fifth line is long. Cadence survives a disconnect and resets on a manual clear.
+- TTS, quota and model failures skip the line; they never break playback.
+- The conversation has a deadline, tool-round/call caps and a final tool-free answer; history is trimmed to whole exchanges.
+- Every command is authorized against the invoking member before any side effect.
+- Untrusted titles, names and persona text only appear inside a `dataBlock`; they can never close the block or become instructions.
+- Music limits: 50 songs per playlist, 200 in the queue, 512 MiB cache, 200 MiB per download, live streams rejected, URL allowlist before the extractor.
+- A failed song or an empty voice channel leaves the connection cleanly; the now-playing and queue cards are deleted with the session.
+
+## Testing
+
+- Pure rules (station, prompts, queue, text, policy) are tested without mocks.
+- Providers have contract tests with fake HTTP, a fake extractor binary and fake audio players; no network.
+- Handlers are tested with fake messages/channels and a fake `CommandBus`.
+- `src/tests/architecture.test.ts` fails on a cycle, a missing import, an upward dependency, a leaked technology name, a `process.env` read outside `config.ts`, a `console` call, or a non-test source file over 300 lines.
+- The e2e suite is event/status based (playback duration, queue size, voice state), uses a temporary settings file and is run manually while the service is stopped.
