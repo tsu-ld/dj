@@ -1,4 +1,4 @@
-import { ttlMap } from '../core/ttl-map.ts'
+import { ttlMap } from './ttl-map.ts'
 
 export interface Cooldown {
   has: (key: string) => boolean
@@ -8,8 +8,8 @@ export interface Cooldown {
 
 // A request that arrives inside the window is refused; the window is capped so
 // a busy server cannot grow the map forever.
-export function cooldown(ms: number, options: { maxEntries?: number } = {}): Cooldown {
-  const entries = ttlMap<string, true>({ ttlMs: ms, max: options.maxEntries ?? 1000 })
+export function cooldown(ms: number, options: { maxEntries?: number, now?: () => number } = {}): Cooldown {
+  const entries = ttlMap<string, true>({ ttlMs: ms, max: options.maxEntries ?? 1000, now: options.now })
 
   return {
     has: key => entries.get(key) === true,

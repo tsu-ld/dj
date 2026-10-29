@@ -1,6 +1,6 @@
 import type { QueueView } from '../../ports/music.ts'
 import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test'
-import { fakeMusic, log, track, view } from '../../commands/tests/fakes.ts'
+import { log, track, view } from '../../commands/tests/fakes.ts'
 import { NOW_PLAYING_REPOST_MS } from '../../limits.ts'
 import { messageSlot } from '../slot.ts'
 import { fakeChannel } from './fakes.ts'
@@ -285,22 +285,6 @@ describe('messageSlot', () => {
 
     expect(channel.sent).toHaveLength(1)
     expect(channel.sent[0]?.deletions()).toBe(0)
-  })
-
-  test('every music event payload is accepted by the slot', () => {
-    const music = fakeMusic()
-    const slot = messageSlot({ logger: log })
-
-    const offs = [
-      music.on('trackStarted', slot.trackStarted),
-      music.on('stateChanged', slot.stateChanged),
-      music.on('playlistQueued', slot.playlistQueued),
-      music.on('queueCleared', slot.queueCleared),
-    ]
-
-    expect(offs.every(off => typeof off === 'function')).toBe(true)
-
-    slot.dispose()
   })
 
   test('a payload without a text channel is ignored', async () => {

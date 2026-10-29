@@ -1,11 +1,13 @@
 import type { Logger } from '../../core/logger.ts'
 import { spawn } from 'node:child_process'
+import process from 'node:process'
 import { parseJson } from '../../core/json.ts'
 
 const METADATA_TIMEOUT_MS = 25_000
 const DOWNLOAD_TIMEOUT_MS = 180_000
 const STDOUT_LIMIT = 16 * 1024 * 1024
 const STDERR_LIMIT = 64 * 1024
+const KILL_GRACE_MS = 1_000
 
 // YouTube throttles the default android_vr client's media URLs (403) after a
 // burst of requests; the plain android client is unaffected and yields a
@@ -53,7 +55,10 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
       throw new Error('The extractor has been disposed.')
 
     return new Promise((resolve, reject) => {
-      const child = spawn(deps.command, [...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+      // Its own process group: the extractor spawns a downloader for merges and
+      // a plain SIGKILL to the leader would leave that child running.
+      const detached = process.platform !== 'win32'
+      const child = spawn(deps.command, [...args], { stdio: ['ignore', 'pipe', 'pipe'], detached })
       const stdout = child.stdout
       const stderr = child.stderr
 
@@ -70,6 +75,7 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
       let settled = false
       let entry: RunningProcess | null = null
       let timer: ReturnType<typeof setTimeout> | undefined
+      let hardStop: ReturnType<typeof setTimeout> | undefined
 
       const finish = (error: Error | null, code: number | null): void => {
         if (settled)
@@ -77,6 +83,7 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
 
         settled = true
         clearTimeout(timer)
+        clearTimeout(hardStop)
 
         if (entry)
           running.delete(entry)
@@ -87,11 +94,24 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
           resolve({ code, stdout: out, stderr: err })
       }
 
+      // A killed extractor can leave a grandchild holding its stdio pipes, so
+      // 'close' may never arrive. Settle shortly after the kill instead of
+      // leaving the caller waiting on a process that is already dead.
       const stop = (error: Error): void => {
         if (failure === null)
           failure = error
 
-        child.kill('SIGKILL')
+        try {
+          if (detached && child.pid !== undefined)
+            process.kill(-child.pid, 'SIGKILL')
+          else
+            child.kill('SIGKILL')
+        }
+        catch {
+          child.kill('SIGKILL')
+        }
+
+        hardStop ??= setTimeout(() => finish(failure, null), KILL_GRACE_MS)
       }
 
       entry = {
@@ -149,7 +169,18 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
 
     deps.logger.debug('music.extractor_disposed', { processes: active.length })
 
-    await Promise.allSettled(active.map(async entry => entry.closed))
+    const closed = Promise.allSettled(active.map(async entry => entry.closed))
+    let settle: ReturnType<typeof setTimeout> | undefined
+
+    await Promise.race([
+      closed,
+      new Promise<void>((resolve) => {
+        settle = setTimeout(resolve, KILL_GRACE_MS)
+      }),
+    ])
+
+    if (settle !== undefined)
+      clearTimeout(settle)
   }
 
   return { run, dispose }

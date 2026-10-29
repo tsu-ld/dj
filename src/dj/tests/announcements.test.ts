@@ -2,6 +2,7 @@ import type { ConversationPort } from '../../ports/conversation.ts'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
 import { djAnnouncements } from '../announcements.ts'
+import { djReplies } from '../replies.ts'
 import {
   scriptedModel,
   silentLogger,
@@ -24,9 +25,8 @@ describe('djAnnouncements', () => {
   test('a suppressed song does not announce', async () => {
     const channel = testChannel()
     const announcements = djAnnouncements({
-      model: nullReply(),
+      replies: djReplies({ model: nullReply(), logger: silentLogger() }),
       settings: testSettings(),
-      logger: silentLogger(),
       clock: testClock(),
     })
 
@@ -45,9 +45,8 @@ describe('djAnnouncements', () => {
   test('a song without a text channel is not announced', async () => {
     const model = scriptedModel([() => ({ text: null, toolCalls: [] })])
     const announcements = djAnnouncements({
-      model,
+      replies: djReplies({ model, logger: silentLogger() }),
       settings: testSettings(),
-      logger: silentLogger(),
       clock: testClock(),
     })
 
@@ -66,9 +65,8 @@ describe('djAnnouncements', () => {
   test('an added song is announced through the replies capability', async () => {
     const channel = testChannel()
     const announcements = djAnnouncements({
-      model: nullReply(),
+      replies: djReplies({ model: nullReply(), logger: silentLogger() }),
       settings: testSettings(),
-      logger: silentLogger(),
       clock: testClock(),
     })
 
@@ -87,9 +85,8 @@ describe('djAnnouncements', () => {
   test('an added playlist is announced with its count', async () => {
     const channel = testChannel()
     const announcements = djAnnouncements({
-      model: nullReply(),
+      replies: djReplies({ model: nullReply(), logger: silentLogger() }),
       settings: testSettings(),
-      logger: silentLogger(),
       clock: testClock(),
     })
 
@@ -109,9 +106,8 @@ describe('djAnnouncements', () => {
   test('a suppressed playlist does not announce', async () => {
     const channel = testChannel()
     const announcements = djAnnouncements({
-      model: nullReply(),
+      replies: djReplies({ model: nullReply(), logger: silentLogger() }),
       settings: testSettings(),
-      logger: silentLogger(),
       clock: testClock(),
     })
 
@@ -132,12 +128,11 @@ describe('djAnnouncements', () => {
     const channel = testChannel()
     const clock = testClock(1_000_000)
     const announcements = djAnnouncements({
-      model: nullReply(),
+      replies: djReplies({ model: nullReply(), logger: silentLogger() }),
       settings: testSettings(),
-      logger: silentLogger(),
       clock,
     })
-    const payload = { guildId: 'g1', error: new Error('boom'), cleanupAfterError: true, textChannel: channel.channel }
+    const payload = { guildId: 'g1', cleanupAfterError: true, textChannel: channel.channel }
 
     announcements.playbackError(payload)
     await settle()
@@ -157,17 +152,16 @@ describe('djAnnouncements', () => {
     const channel = testChannel()
     const clock = testClock(1_000_000)
     const announcements = djAnnouncements({
-      model: nullReply(),
+      replies: djReplies({ model: nullReply(), logger: silentLogger() }),
       settings: testSettings(),
-      logger: silentLogger(),
       clock,
     })
 
-    announcements.playbackError({ guildId: 'g1', error: new Error('boom'), cleanupAfterError: true, textChannel: null })
+    announcements.playbackError({ guildId: 'g1', cleanupAfterError: true, textChannel: null })
     await settle()
 
     clock.advance(1)
-    announcements.playbackError({ guildId: 'g1', error: new Error('boom'), cleanupAfterError: true, textChannel: channel.channel })
+    announcements.playbackError({ guildId: 'g1', cleanupAfterError: true, textChannel: channel.channel })
     await settle()
 
     expect(channel.sent).toEqual([])
@@ -177,14 +171,13 @@ describe('djAnnouncements', () => {
     const first = testChannel({ id: 'chan-1' })
     const second = testChannel({ id: 'chan-2' })
     const announcements = djAnnouncements({
-      model: nullReply(),
+      replies: djReplies({ model: nullReply(), logger: silentLogger() }),
       settings: testSettings(),
-      logger: silentLogger(),
       clock: testClock(1_000_000),
     })
 
-    announcements.playbackError({ guildId: 'g1', error: new Error('boom'), cleanupAfterError: true, textChannel: first.channel })
-    announcements.playbackError({ guildId: 'g2', error: new Error('boom'), cleanupAfterError: true, textChannel: second.channel })
+    announcements.playbackError({ guildId: 'g1', cleanupAfterError: true, textChannel: first.channel })
+    announcements.playbackError({ guildId: 'g2', cleanupAfterError: true, textChannel: second.channel })
     await settle()
 
     expect(first.sent).toEqual([MESSAGES.playbackError])

@@ -1,7 +1,6 @@
-import type { QueueView } from '../ports/music.ts'
 import type { CommandData, CommandSpec } from './spec.ts'
 import { UserError } from '../core/errors.ts'
-import { MAX_QUEUE_SIZE, MAX_SONGS_PER_REQUEST } from '../limits.ts'
+import { MAX_QUEUE_SIZE, MAX_SONGS_PER_REQUEST, queueRoom } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
 import { EMPTY_PARAMETERS } from './parameters.ts'
 
@@ -33,7 +32,7 @@ export const addSongs: CommandSpec = {
     if (!voiceChannel)
       throw new UserError(MESSAGES.joinVoiceChannel)
 
-    const room = queueRoom(context.queue)
+    const room = queueRoom(context.queue?.size ?? 0)
 
     if (room === 0)
       throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
@@ -73,7 +72,7 @@ export const query: CommandSpec = {
     if (!voiceChannel)
       throw new UserError(MESSAGES.joinVoiceChannel)
 
-    if (queueRoom(context.queue) === 0)
+    if (queueRoom(context.queue?.size ?? 0) === 0)
       throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
 
     const result = await context.services.music.play({
@@ -97,10 +96,6 @@ function cappedPlaylist(data: CommandData): string | null {
     return null
 
   return MESSAGES.playlistCapped(added - dropped, added)
-}
-
-function queueRoom(view: QueueView | null): number {
-  return Math.max(MAX_QUEUE_SIZE - (view?.size ?? 0), 0)
 }
 
 function readSongs(value: unknown): string[] {

@@ -7,9 +7,9 @@ import type { RepliesPort } from '../ports/replies.ts'
 import type { GuildSettings, SettingsPort } from '../ports/settings.ts'
 import type { MessageSlot } from './slot.ts'
 import { chooseRoute } from '../commands/route.ts'
+import { cooldown } from '../core/cooldown.ts'
 import { UPCOMING_PREVIEW } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
-import { cooldown } from './cooldown.ts'
 import { isChannelConfiguration, readMention } from './mentions.ts'
 
 export interface DjAgent {
@@ -129,7 +129,7 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
     // The decision can take a few hundred milliseconds; re-read the live queue
     // so a song that ended in the meantime does not leave a stale queue behind.
     const context = contextFor(message, member, settings)
-    const route = chooseRoute(text, choice, context)
+    const route = chooseRoute(deps.bus, text, choice, context)
 
     if (!route) {
       await askDj(message, text, context)

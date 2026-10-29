@@ -7,7 +7,7 @@ import { commandBus } from '../bus.ts'
 import { addSongs, query } from '../play.ts'
 import { fakeContext, fakeMusic, fakeUi, log, view } from './fakes.ts'
 
-function collector(requests: PlayRequest[], result: { added: number, total: number, first: string | null, dropped?: number }): ReturnType<typeof fakeMusic> {
+function collector(requests: PlayRequest[], result: { added: number, first: string | null, dropped?: number }): ReturnType<typeof fakeMusic> {
   return fakeMusic({
     async play(request) {
       requests.push(request)
@@ -15,9 +15,7 @@ function collector(requests: PlayRequest[], result: { added: number, total: numb
       return {
         added: result.added,
         first: result.first,
-        playlist: null,
         dropped: result.dropped ?? 0,
-        total: result.total,
       }
     },
   })
@@ -43,7 +41,7 @@ describe('query', () => {
 
   test('a query plays the search text as an announced request', async () => {
     const requests: PlayRequest[] = []
-    const music = collector(requests, { added: 1, total: 1, first: 'A' })
+    const music = collector(requests, { added: 1, first: 'A' })
     const bus = commandBus({ specs: [query], logger: log })
     const ui = fakeUi()
     const context = fakeContext({ services: { music }, ui })
@@ -60,7 +58,7 @@ describe('query', () => {
 
   test('the queue cap confirmation reports kept and total', async () => {
     const ui = fakeUi()
-    const music = collector([], { added: 5, total: 3, first: 'A', dropped: 2 })
+    const music = collector([], { added: 5, first: 'A', dropped: 2 })
     const bus = commandBus({ specs: [query], logger: log })
 
     const outcome = await bus.run('query', { query: 'playlist' }, fakeContext({ ui, services: { music } }))
@@ -72,7 +70,7 @@ describe('query', () => {
 
   test('a full queue is refused before joining voice', async () => {
     const requests: PlayRequest[] = []
-    const music = collector(requests, { added: 1, total: 1, first: 'A' })
+    const music = collector(requests, { added: 1, first: 'A' })
     const bus = commandBus({ specs: [query], logger: log })
 
     const outcome = await bus.run('query', { query: 'cumbia' }, fakeContext({ queue: view({ size: MAX_QUEUE_SIZE }), services: { music } }))
@@ -93,7 +91,7 @@ describe('query', () => {
 describe('add_songs', () => {
   test('queues the requested songs without announcing each one', async () => {
     const requests: PlayRequest[] = []
-    const music = collector(requests, { added: 2, total: 7, first: 'A' })
+    const music = collector(requests, { added: 2, first: 'A' })
     const bus = commandBus({ specs: [addSongs], logger: log })
 
     const outcome = await bus.run('add_songs', { songs: [' A ', 'B', 'C'] }, fakeContext({ services: { music } }))
@@ -105,7 +103,7 @@ describe('add_songs', () => {
 
   test('never asks for more than ten songs', async () => {
     const requests: PlayRequest[] = []
-    const music = collector(requests, { added: 10, total: 10, first: 'A' })
+    const music = collector(requests, { added: 10, first: 'A' })
     const songs = Array.from({ length: 12 }, (_, index) => `Song ${index + 1}`)
 
     await addSongs.run({ songs }, fakeContext({ services: { music } }))
@@ -115,7 +113,7 @@ describe('add_songs', () => {
 
   test('only asks for the room left in the queue', async () => {
     const requests: PlayRequest[] = []
-    const music = collector(requests, { added: 5, total: 5, first: 'A' })
+    const music = collector(requests, { added: 5, first: 'A' })
     const songs = Array.from({ length: 8 }, (_, index) => `Song ${index + 1}`)
 
     await addSongs.run({ songs }, fakeContext({ queue: view({ size: MAX_QUEUE_SIZE - 5 }), services: { music } }))

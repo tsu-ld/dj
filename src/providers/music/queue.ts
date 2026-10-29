@@ -1,7 +1,7 @@
 import type { MusicEventMap, QueueView, Track } from '../../ports/music.ts'
 import type { MutableTrackQueue, QueueState, SkippableQueue, StoppableQueue, TrackQueue } from './types.ts'
 import { isRecord } from '../../core/json.ts'
-import { MAX_QUEUE_SIZE } from '../../limits.ts'
+import { isPositionInQueue as atPosition, MAX_QUEUE_SIZE, queueRoom as roomFor } from '../../limits.ts'
 
 export function errorCodeOf(error: unknown): string | null {
   if (!isRecord(error))
@@ -13,13 +13,11 @@ export function errorCodeOf(error: unknown): string | null {
 }
 
 export function isPositionInQueue(queue: TrackQueue, position: number): boolean {
-  return position > 0 && position <= queue.songs.length
+  return atPosition(queue.songs.length, position)
 }
 
 export function queueRoom(queue: TrackQueue | null | undefined, max = MAX_QUEUE_SIZE): number {
-  const occupied = queue?.songs.length ?? 0
-
-  return Math.max(max - occupied, 0)
+  return roomFor(queue?.songs.length ?? 0, max)
 }
 
 export function capQueue(queue: MutableTrackQueue, max = MAX_QUEUE_SIZE): number {

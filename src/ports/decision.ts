@@ -8,7 +8,6 @@ export interface DecisionInput {
   readonly state: Record<string, unknown>
   readonly options: readonly DecisionOption[]
   readonly sessionId: string
-  readonly signal?: AbortSignal
 }
 
 // A fast typed classification. Null means "no confident choice", never an

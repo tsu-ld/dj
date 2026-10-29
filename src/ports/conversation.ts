@@ -27,7 +27,6 @@ export interface CompletionRequest {
   readonly maxOutputTokens?: number
   readonly reasoning?: 'none' | 'low' | 'medium' | 'high'
   readonly sessionId: string
-  readonly signal?: AbortSignal
 }
 
 export interface CompletionReply {

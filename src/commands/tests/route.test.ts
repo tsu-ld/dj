@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
+import { commandBus } from '../bus.ts'
+import { commands } from '../index.ts'
 import { chooseRoute } from '../route.ts'
-import { fakeContext, track, view } from './fakes.ts'
+import { fakeContext, log, track, view } from './fakes.ts'
 
 const queue = view({
   current: track({ title: 'a' }),
@@ -11,23 +13,24 @@ const queue = view({
 
 const withQueue = fakeContext({ queue })
 const withoutQueue = fakeContext({ queue: null })
+const bus = commandBus({ specs: commands, logger: log })
 
 describe('chooseRoute', () => {
   test('a route command with no arguments runs', () => {
-    const route = chooseRoute('pausá', 'pause', withQueue)
+    const route = chooseRoute(bus, 'pausá', 'pause', withQueue)
 
     expect(route && 'spec' in route ? route.spec.name : null).toBe('pause')
     expect(route && 'args' in route ? route.args : null).toEqual({})
   })
 
   test('a queue command without a queue asks to start one', () => {
-    expect(chooseRoute('pausá', 'pause', withoutQueue)).toEqual({ refusal: MESSAGES.nothingPlaying })
-    expect(chooseRoute('remove 1', 'remove', withoutQueue)).toEqual({ refusal: MESSAGES.nothingPlaying })
+    expect(chooseRoute(bus, 'pausá', 'pause', withoutQueue)).toEqual({ refusal: MESSAGES.nothingPlaying })
+    expect(chooseRoute(bus, 'remove 1', 'remove', withoutQueue)).toEqual({ refusal: MESSAGES.nothingPlaying })
   })
 
   test('remove needs a valid position or the dj infers it', () => {
     const argsOf = (text: string): unknown => {
-      const route = chooseRoute(text, 'remove', withQueue)
+      const route = chooseRoute(bus, text, 'remove', withQueue)
 
       return route && 'args' in route ? route.args : null
     }
@@ -39,9 +42,9 @@ describe('chooseRoute', () => {
   })
 
   test('internal or unknown commands never route directly', () => {
-    expect(chooseRoute('sé un dj', 'set_persona', withQueue)).toBeNull()
-    expect(chooseRoute('usa esto', 'query', withQueue)).toBeNull()
-    expect(chooseRoute('hola', 'nope', withQueue)).toBeNull()
-    expect(chooseRoute('hola', 'dj', withQueue)).toBeNull()
+    expect(chooseRoute(bus, 'sé un dj', 'set_persona', withQueue)).toBeNull()
+    expect(chooseRoute(bus, 'usa esto', 'query', withQueue)).toBeNull()
+    expect(chooseRoute(bus, 'hola', 'nope', withQueue)).toBeNull()
+    expect(chooseRoute(bus, 'hola', 'dj', withQueue)).toBeNull()
   })
 })

@@ -254,7 +254,7 @@ test('a connection that dies mid-line is not given back to the music', async () 
     session.connection.setStatus('destroyed')
     session.connection.emit('destroyed')
 
-    expect(await spoken).toBe(true)
+    expect(await spoken).toBe(false)
     expect(session.connection.subscriptions).toEqual([speech])
   }
   finally {

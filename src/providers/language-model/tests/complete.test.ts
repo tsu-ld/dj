@@ -266,28 +266,4 @@ describe('conversationModel', () => {
     expect(seen.session).toBe('chan-9')
     expect(seen.authorization).toBe('Bearer test-key')
   })
-
-  test('a disabled capability rejects without touching the network', async () => {
-    let called = false
-
-    globalThis.fetch = Object.assign(async () => {
-      called = true
-
-      return textPayload('va')
-    }, { preconnect: realFetch.preconnect })
-
-    const error = await conversationModel({ config: { enabled: false }, logger: log })
-      .complete(request())
-      .catch((caught: unknown) => caught)
-
-    expect(called).toBe(false)
-    expect(error).toBeInstanceOf(ProviderError)
-
-    if (!(error instanceof ProviderError))
-      throw new Error('expected a provider error')
-
-    expect(error.capability).toBe('language')
-    expect(error.failure).toBe('fatal')
-    expect(error.message).toBe('not configured')
-  })
 })

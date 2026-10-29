@@ -45,7 +45,7 @@ export async function createApp(config: AppConfig): Promise<App> {
   const speech = speechSynthesizer({ config: config.speech, logger: log, clock })
   const slot = messageSlot({ logger: log })
   const replies = djReplies({ model, logger: log })
-  const announcements = djAnnouncements({ model, settings, logger: log, clock })
+  const announcements = djAnnouncements({ replies, settings, clock })
 
   const hostRef: { current: OnAirHost | null } = { current: null }
 
@@ -112,7 +112,12 @@ export async function createApp(config: AppConfig): Promise<App> {
       if (payload.cleanupAfterError)
         slot.queueCleared({ guildId: payload.guildId })
     }),
-    music.on('disconnected', ({ guildId }) => host.disconnected(guildId)),
+    music.on('disconnected', ({ guildId }) => {
+      // A kick or a drag out of the channel leaves the queue without a stop
+      // event; the card must not keep advertising a song that is not playing.
+      slot.queueCleared({ guildId })
+      host.disconnected(guildId)
+    }),
   ]
 
   const onMessageEvent = (message: Message): void => {
@@ -160,13 +165,26 @@ export async function createApp(config: AppConfig): Promise<App> {
       client.off(Events.InteractionCreate, onInteractionEvent)
       slot.dispose()
 
+      // Every step runs even if an earlier one throws: temp clips must be
+      // deleted and pending settings writes flushed before the process exits.
+      const steps: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
+        ['music', async () => music.dispose()],
+        ['on-air', async () => host.dispose()],
+        ['speech', async () => speech.dispose()],
+        ['settings', async () => settings.flush()],
+        ['discord', async () => client.destroy()],
+      ]
+
       try {
         await withTimeout((async () => {
-          await music.dispose()
-          await host.dispose()
-          await speech.dispose()
-          await settings.flush()
-          await client.destroy()
+          for (const [name, step] of steps) {
+            try {
+              await step()
+            }
+            catch (error) {
+              log.error('app.stop_step_failed', error, { step: name })
+            }
+          }
         })(), SHUTDOWN_TIMEOUT_MS, 'graceful shutdown timed out')
       }
       catch (error) {

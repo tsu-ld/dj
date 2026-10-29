@@ -285,6 +285,31 @@ describe('commandBus', () => {
     expect(outcome.kind).toBe('ok')
   })
 
+  test('a tool call still runs the command authorization', async () => {
+    const ui = fakeUi()
+    let ran = 0
+    const bus = commandBus({
+      specs: [command({
+        name: 'guarded',
+        authorize() {
+          throw new UserError('nope')
+        },
+        async run() {
+          ran++
+
+          return {}
+        },
+      })],
+      logger: log,
+    })
+
+    const outcome = await bus.runTool('guarded', {}, fakeContext({ ui }))
+
+    expect(ran).toBe(0)
+    expect(outcome).toEqual({ kind: 'refused', message: 'nope' })
+    expect(ui.errors).toEqual(['nope'])
+  })
+
   test('an unknown command fails without bothering the user', async () => {
     const ui = fakeUi()
     const bus = commandBus({ specs: [], logger: log })

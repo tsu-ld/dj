@@ -7,6 +7,6 @@ export interface SpeechPort {
   synthesize: (text: string) => Promise<string | null>
   // The caller deletes the clip after airing; this releases the provider's
   // bookkeeping so a long-running process does not remember every line.
-  release?: (path: string) => void
+  release: (path: string) => void
   dispose: () => Promise<void>
 }

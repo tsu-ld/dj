@@ -71,7 +71,6 @@ function clockAt(start = 1_700_000_000_000): TestClock {
 
   return {
     now: () => now,
-    sleep: async () => {},
     advance: (milliseconds) => {
       now += milliseconds
     },
@@ -174,7 +173,7 @@ describe('rendering', () => {
     if (file === null)
       throw new Error('Expected a clip')
 
-    expect(dirname(file)).toBe(join(directory, 'dj-audio'))
+    expect(dirname(file)).toBe(join(directory, 'dj-speech'))
     expect(basename(file)).toMatch(/^tts-1700000000000-[a-z0-9]+\.mp3$/)
     expect([...await readFile(file)]).toEqual([1, 2, 3])
     expect(existsSync(file)).toBe(true)

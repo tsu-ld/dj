@@ -26,14 +26,20 @@ function sourceFiles(directory: string): string[] {
   return files
 }
 
+// Static imports, re-exports, dynamic imports and require all count: a cycle or
+// an upward dependency hidden behind `await import()` is still that dependency.
 function importsOf(file: string): string[] {
   const source = readFileSync(file, 'utf8')
 
-  return [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)]
+  return [...source.matchAll(/(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]([^'"]+)['"]/g)]
     .map(match => match[1])
     .filter((specifier): specifier is string => specifier !== undefined)
     .filter(specifier => specifier.startsWith('.'))
     .map(specifier => resolve(dirname(file), specifier))
+}
+
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
 }
 
 function areaOf(file: string): string {
@@ -92,12 +98,13 @@ test('the source graph is acyclic', () => {
 
 const FORBIDDEN: Record<string, readonly string[]> = {
   'providers': ['commands', 'discord', 'dj', 'on-air', 'app'],
+  'root': ['providers', 'commands', 'discord', 'dj', 'on-air', 'app'],
   'dj': ['providers', 'discord', 'on-air', 'app'],
   'on-air': ['providers', 'discord', 'commands', 'app'],
   'commands': ['providers', 'discord', 'dj', 'on-air', 'app'],
   'discord': ['providers', 'dj', 'on-air', 'app'],
   'ports': ['providers', 'discord', 'dj', 'on-air', 'commands', 'app'],
-  'core': ['providers', 'discord', 'dj', 'on-air', 'commands', 'root', 'app'],
+  'core': ['ports', 'providers', 'discord', 'dj', 'on-air', 'commands', 'root', 'app'],
 }
 
 test('no area imports a layer above it', () => {
@@ -127,7 +134,7 @@ test('no area imports a layer above it', () => {
 // The provider folder is the only place a technology may be named. Keeping the
 // check on paths means a folder cannot quietly become the architecture.
 test('a provider technology name never leaks into a path', () => {
-  const names = ['distube', 'yt-dlp', 'ytdlp', 'elevenlabs', 'openai', 'jev', 'systemone']
+  const names = ['distube', 'yt-dlp', 'ytdlp', 'elevenlabs', 'openai', 'jev', 'systemone', 'spotify', 'ffmpeg', 'deepseek', 'typesafe', 'opencode', 'mediaplex', 'davey']
   const leaked = files
     .map(file => relative(SRC, file).toLowerCase())
     .filter(path => names.some(name => path.includes(name)))
@@ -137,7 +144,7 @@ test('a provider technology name never leaks into a path', () => {
 
 test('only the configuration module reads the environment', () => {
   const readers = files
-    .filter(file => readFileSync(file, 'utf8').includes('process.env'))
+    .filter(file => /\b(?:process|Bun)\.env\b/.test(stripComments(readFileSync(file, 'utf8'))))
     .map(file => relative(SRC, file))
 
   expect(readers).toEqual(['config.ts'])

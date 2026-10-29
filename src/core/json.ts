@@ -12,9 +12,3 @@ export function parseJson(text: string): unknown {
     return null
   }
 }
-
-export function readString(record: Record<string, unknown>, key: string): string | null {
-  const value = record[key]
-
-  return typeof value === 'string' ? value : null
-}

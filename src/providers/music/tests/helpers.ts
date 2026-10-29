@@ -64,6 +64,7 @@ export function extractionStub(overrides: Partial<Extractor> = {}): Extractor {
 export function streamStub(overrides: Partial<StreamResolver> = {}): StreamResolver {
   return {
     remember: () => {},
+    forget: () => {},
     playableUrl: async () => 'https://cdn.test/audio',
     dispose: () => {},
     ...overrides,

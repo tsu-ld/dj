@@ -21,12 +21,6 @@ function mapFailure(error: unknown): ProviderError {
   return new ProviderError('decision', errorMessage(error), { failure: 'retryable', cause: error })
 }
 
-function requestSignal(timeoutMs: number, signal?: AbortSignal): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs)
-
-  return signal ? AbortSignal.any([signal, timeout]) : timeout
-}
-
 async function decide(config: DecisionConfig, input: DecisionInput): Promise<string | null> {
   const criteria = Object.fromEntries(input.options.map(option => [option.name, option.description]))
 
@@ -48,7 +42,7 @@ async function decide(config: DecisionConfig, input: DecisionInput): Promise<str
         action: { type: 'choice', instructions: INSTRUCTIONS, criteria },
       },
     }),
-    signal: requestSignal(config.timeoutMs, input.signal),
+    signal: AbortSignal.timeout(config.timeoutMs),
   })
 
   if (!response.ok) {
@@ -119,14 +113,6 @@ export function intentClassifier(deps: {
         return choice
       }
       catch (error) {
-        // A caller cancellation is not a provider failure; opening the breaker
-        // would take the fast path down for a request nobody is waiting on.
-        if (input.signal?.aborted) {
-          breaker.success()
-
-          throw error
-        }
-
         breaker.failure()
         logger.error('classifier.failed', error)
 

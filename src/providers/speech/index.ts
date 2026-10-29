@@ -27,11 +27,13 @@ export function speechSynthesizer(deps: {
   const { config, logger, clock } = deps
 
   if (!config.enabled)
-    return { available: false, synthesize: async () => null, dispose: async () => {} }
+    return { available: false, synthesize: async () => null, release: () => {}, dispose: async () => {} }
 
   const { apiKey, voiceId, model, timeoutMs, maxChars, quotaCacheMs } = config
   const client = speechClient({ apiKey, voiceId, model, timeoutMs })
-  const audioDir = join(tmpdir(), 'dj-audio')
+  // The music cache prunes old files from its own directory; a clip that shares
+  // it can be deleted between synthesis and playback. Keep them apart.
+  const audioDir = join(tmpdir(), 'dj-speech')
   const files = new Set<string>()
   let available = true
   let usage: UsageEntry | null = null

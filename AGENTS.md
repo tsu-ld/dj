@@ -22,7 +22,7 @@
 
 - `DISCORD_TOKEN` is required.
 - The DJ's conversation uses any OpenAI-compatible Responses API endpoint: `LLM_BASE_URL` (full `/responses` URL), `LLM_API_KEY`, optional `LLM_MODEL` (default `deepseek-v4-flash`). Without it the bot still plays music; announcements go out as plain text and tagged song requests are unavailable.
-- The optional fast router uses a System One endpoint: `DECISION_BASE_URL`, `DECISION_API_KEY` (falls back to `LLM_API_KEY`), optional `DECISION_MODEL` (default `jev-1.13-free`). Without it, the model chooses from the same command registry.
+- The optional fast router uses a System One endpoint: `DECISION_BASE_URL`, `DECISION_API_KEY` (required for the router; no fallback), optional `DECISION_MODEL` (default `jev-1.13-free`). Without it, the model chooses from the same command registry.
 - Spotify links use the scrape fallback; set `MUSIC_METADATA_CLIENT_ID` and `MUSIC_METADATA_CLIENT_SECRET` (both) for the official API.
 - The optional radio voice uses `SPEECH_API_KEY`, `SPEECH_VOICE_ID`, optional `SPEECH_MODEL_ID` (default `eleven_v4`). Without all required values the bot only plays music.
 - `LOG_LEVEL` (`debug|info|warn|error`) and `EXTRACTOR_COMMAND` are optional. Per-guild settings live in `data/guilds.json` (gitignored flat map, atomic writes, partial entries defaulted, corrupt files quarantined).
@@ -50,10 +50,10 @@ src/
 ```
 
 - `app.ts` builds every capability as a plain object (`musicEngine`, `speechSynthesizer`, `conversationModel`, `intentClassifier`, `settingsStore`) and wires the events. Nothing else constructs a provider.
-- **Dependency rule:** `app -> commands/discord/dj/on-air -> ports -> core`; providers sit behind ports and import only `core`, `ports` and their own SDK. Providers never import `commands`, `discord`, `dj` or `on-air`. `src/tests/architecture.test.ts` enforces this.
+- **Dependency rule:** `app -> commands/discord/dj/on-air -> ports -> core`; providers sit behind ports and import `core`, `ports`, the `config` types plus `limits`/`messages`, and their own SDK. Providers never import `commands`, `discord`, `dj` or `on-air`. `src/tests/architecture.test.ts` enforces this.
 - **No technology names outside `src/providers/`.** A module is named for what it does (`music`, `speech`, `language-model`, `classifier`), never for the library behind it.
 - **Commands:** one `CommandBus` executes the fast router, the model's tool calls and the buttons. Preconditions, member authorization, confirmation, ack and error mapping live once.
-- **State:** no module-level mutable request state. The message slot owns its card ids/timers, the station owns cadence and prepared clips, the conversation owns its bounded history, the speech provider owns its quota cache. Every long-lived object exposes `dispose`/`flush`.
+- **State:** no module-level mutable request state. The message slot owns its card ids/timers, the station owns cadence and prepared clips, the conversation owns its bounded history, the speech provider owns its quota cache. Every object that owns a timer, file or child exposes `dispose`/`flush`; bounded TTL maps die with the process.
 - **Lifecycle:** shutdown aborts in-flight work, flushes settings, leaves voice, kills extractor children and destroys the client with a timeout. Unhandled rejections stop the process cleanly with a non-zero exit.
 - **Errors:** `UserError` is safe to show, `ProviderError` carries a capability and a retryable/fatal/quota kind, and unknown errors are logged and answered with a generic message. Providers map their wire errors once.
 - **Types:** explicit at ports and exported signatures, inference inside. No `any`, no non-null assertions, no casts outside a runtime-validated boundary. No enums.
@@ -74,5 +74,5 @@ src/
 - Pure rules (station, prompts, queue, text, policy) are tested without mocks.
 - Providers have contract tests with fake HTTP, a fake extractor binary and fake audio players; no network.
 - Handlers are tested with fake messages/channels and a fake `CommandBus`.
-- `src/tests/architecture.test.ts` fails on a cycle, a missing import, an upward dependency, a leaked technology name, a `process.env` read outside `config.ts`, a `console` call, or a source file over 300 lines.
+- `src/tests/architecture.test.ts` fails on a cycle, a missing import, an upward dependency, a leaked technology name, a `process.env` read outside `config.ts`, a `console` call, or a non-test source file over 300 lines.
 - The e2e suite is event/status based (playback duration, queue size, voice state), uses a temporary settings file and is run manually while the service is stopped.

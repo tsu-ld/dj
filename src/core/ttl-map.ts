@@ -2,7 +2,6 @@ export interface TtlMap<K, V> {
   get: (key: K) => V | undefined
   set: (key: K, value: V) => void
   delete: (key: K) => void
-  clear: () => void
   size: () => number
 }
 
@@ -57,9 +56,6 @@ export function ttlMap<K, V>(options: { ttlMs: number, max: number, now?: () => 
     },
     delete(key) {
       entries.delete(key)
-    },
-    clear() {
-      entries.clear()
     },
     size() {
       prune(now())

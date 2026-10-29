@@ -10,8 +10,10 @@ function stripBotMention(content: string, botId: string): string {
   return content.replaceAll(`<@${botId}>`, '').replaceAll(`<@!${botId}>`, '')
 }
 
-// The users collection is the real signal: a plain name that looks like a
-// mention, or one inside a code block, never reaches it.
+// The users collection is the API's parsed mention list, not a name that looks
+// like one. Channel mentions come from the same list and are not render-aware:
+// a channel id inside backticks still counts, so set_channel keeps its admin
+// permission check.
 export function readMention(message: Message): Mention {
   const botId = message.client.user?.id
   const botMentioned = botId !== undefined && message.mentions.users.has(botId)

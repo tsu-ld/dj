@@ -84,7 +84,6 @@ function fakeClock(): TestClock {
 
   return {
     now: () => now,
-    sleep: async () => {},
     advance: (milliseconds) => {
       now += milliseconds
     },
@@ -141,6 +140,7 @@ function fakeSpeech(options: { available?: boolean, synthesize?: (text: string) 
     get available() {
       return available
     },
+    release() {},
     async synthesize(text) {
       calls.push(text)
 
@@ -241,7 +241,7 @@ describe('beforeStream', () => {
     const { host, music } = createHost({ model: model.port, speech: speech.port })
     const song = track('A')
 
-    await host.beforeStream({ guildId: 'g1', track: song, view: view({ current: song }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: song }) })
 
     expect(model.requests).toHaveLength(1)
     expect(music.clips).toEqual(speech.files)
@@ -263,10 +263,10 @@ describe('beforeStream', () => {
     const { host, music } = createHost({ model: model.port, speech: speech.port })
     const [a, b] = [track('A'), track('B')]
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a, upcoming: [b] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => model.requests.length === 2 && speech.calls.length === 2)
 
-    await host.beforeStream({ guildId: 'g1', track: b, view: view({ current: b }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
 
     expect(music.clips).toHaveLength(2)
     expect(music.clips[1]).toBe(speech.files[1])
@@ -288,15 +288,15 @@ describe('beforeStream', () => {
     const c = track('C')
     const d = track('D')
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a, upcoming: [b] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => model.requests.length === 2 && speech.calls.length === 2)
 
-    await host.beforeStream({ guildId: 'g1', track: b, view: view({ current: b, upcoming: [c] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b, upcoming: [c] }) })
 
     expect(model.requests).toHaveLength(2)
     expect(music.clips).toHaveLength(2)
 
-    await host.beforeStream({ guildId: 'g1', track: c, view: view({ current: c, upcoming: [d] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: c, upcoming: [d] }) })
 
     expect(music.clips).toHaveLength(2)
     expect(model.requests).toHaveLength(3)
@@ -312,33 +312,30 @@ describe('beforeStream', () => {
     const { host, music } = createHost({ model: model.port, speech: speech.port })
     const [a, b] = [track('A'), track('B')]
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
 
     expect(model.requests).toHaveLength(2)
     expect(speech.calls).toHaveLength(0)
     expect(music.clips).toHaveLength(0)
 
-    await host.beforeStream({ guildId: 'g1', track: b, view: view({ current: b }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
 
     expect(model.requests).toHaveLength(3)
     expect(model.requests[2]?.instructions).toContain('two sentences')
     expect(speech.calls).toHaveLength(1)
   })
 
-  test('the line belongs to the track on the card, not to the resolved stream', async () => {
+  test('an empty card means no line', async () => {
     const model = fakeModel([line('Card line')])
     const speech = fakeSpeech()
     const { host, music } = createHost({ model: model.port, speech: speech.port })
-    const card = track('Card')
-    const search = track('Search')
 
-    await host.beforeStream({ guildId: 'g1', track: search, view: view({ current: card }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: track('Card') }) })
 
     expect(model.requests[0]?.instructions).toContain('Playing now: Card')
-    expect(model.requests[0]?.instructions).not.toContain('Search')
     expect(music.clips).toHaveLength(1)
 
-    await host.beforeStream({ guildId: 'g1', track: search, view: view({}) })
+    await host.beforeStream({ guildId: 'g1', view: view({}) })
 
     expect(model.requests).toHaveLength(1)
     expect(music.clips).toHaveLength(1)
@@ -356,12 +353,12 @@ describe('beforeStream', () => {
     })
     const [a, b] = [track('A'), track('B')]
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
 
     expect(music.clips).toHaveLength(1)
     expect(existsSync(first(speech.files))).toBe(false)
 
-    await host.beforeStream({ guildId: 'g1', track: b, view: view({ current: b }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
 
     expect(model.requests[1]?.instructions).toContain('two sentences')
   })
@@ -372,10 +369,10 @@ describe('beforeStream', () => {
     const { host } = createHost({ model: model.port, speech: speech.port })
     const [a, b] = [track('A'), track('B')]
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a, upcoming: [b] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => speech.calls.length === 2)
 
-    await host.beforeStream({ guildId: 'g1', track: b, view: view({ current: b, paused: true }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b, paused: true }) })
 
     expect(speech.calls).toHaveLength(2)
     expect(existsSync(first(speech.files.slice(1)))).toBe(true)
@@ -388,7 +385,7 @@ describe('beforeStream', () => {
     const a = track('A')
     const b = track('B')
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a, upcoming: [b] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
     host.trackQueued({ guildId: 'g1', track: b, view: view({ current: a, upcoming: [b] }) })
     await Bun.sleep(5)
 
@@ -401,7 +398,7 @@ describe('beforeStream', () => {
     const { host, music } = createHost({ model: null, speech: speech.port })
     const a = track('A')
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
 
     expect(speech.calls).toHaveLength(0)
     expect(music.clips).toHaveLength(0)
@@ -413,12 +410,12 @@ describe('beforeStream', () => {
     const { host, music } = createHost({ model: model.port, speech: speech.port })
     const [a, b] = [track('A'), track('B')]
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
 
     expect(speech.calls).toHaveLength(1)
     expect(music.clips).toHaveLength(0)
 
-    await host.beforeStream({ guildId: 'g1', track: b, view: view({ current: b }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
 
     expect(music.clips).toHaveLength(0)
     expect(model.requests[1]?.instructions).toContain('two sentences')
@@ -432,7 +429,7 @@ describe('beforeStream', () => {
     const b = track('B')
     const c = track('C')
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
     host.playlistQueued({ guildId: 'g1', view: view({ current: a, upcoming: [b, c] }) })
     await waitFor(() => speech.calls.length === 2)
 
@@ -448,7 +445,7 @@ describe('transitions', () => {
     const { host, music } = createHost({ model: model.port, speech: speech.port })
     const [a, b] = [track('A'), track('B')]
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a, upcoming: [b] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => speech.calls.length === 2)
 
     const prepared = first(speech.files.slice(1))
@@ -456,7 +453,7 @@ describe('transitions', () => {
     host.disconnected('g1')
     await waitFor(() => !existsSync(prepared))
 
-    await host.beforeStream({ guildId: 'g1', track: b, view: view({ current: b }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
 
     expect(model.requests[2]?.instructions).toContain('one sentence')
     expect(music.clips).toHaveLength(2)
@@ -468,7 +465,7 @@ describe('transitions', () => {
     const { host } = createHost({ model: model.port, speech: speech.port })
     const [a, b] = [track('A'), track('B')]
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a, upcoming: [b] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => speech.calls.length === 2)
 
     const prepared = first(speech.files.slice(1))
@@ -476,7 +473,7 @@ describe('transitions', () => {
     host.reset('g1')
     await waitFor(() => !existsSync(prepared))
 
-    await host.beforeStream({ guildId: 'g1', track: b, view: view({ current: b }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
 
     expect(model.requests[2]?.instructions).toContain('two sentences')
   })
@@ -489,12 +486,12 @@ describe('transitions', () => {
     const b = track('B')
     const c = track('C')
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a, upcoming: [b] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => speech.calls.length === 2)
 
     const prepared = first(speech.files.slice(1))
 
-    await host.beforeStream({ guildId: 'g1', track: c, view: view({ current: c }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: c }) })
 
     expect(existsSync(prepared)).toBe(false)
     expect(music.clips).toHaveLength(2)
@@ -510,11 +507,11 @@ describe('transitions', () => {
     const b = track('B')
     const c = track('C')
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
     host.trackQueued({ guildId: 'g1', track: b, view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => model.requests.length === 2)
 
-    await host.beforeStream({ guildId: 'g1', track: c, view: view({ current: c, paused: true }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: c, paused: true }) })
 
     pending.resolve(line('B line'))
     await waitFor(() => speech.calls.length === 2)
@@ -533,7 +530,7 @@ describe('transitions', () => {
     const b = track('B')
     const d = track('D')
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
 
     host.trackQueued({ guildId: 'g1', track: b, view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => model.requests.length === 2)
@@ -555,8 +552,8 @@ describe('transitions', () => {
     const { host } = createHost({ model: model.port, speech: speech.port })
     const [a, b, d] = [track('A'), track('B'), track('D')]
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a }) })
-    await host.beforeStream({ guildId: 'g1', track: b, view: view({ current: b }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
 
     expect(model.requests).toHaveLength(4)
 
@@ -572,7 +569,7 @@ describe('transitions', () => {
     const { host } = createHost({ model: model.port, speech: speech.port })
     const [a, b] = [track('A'), track('B')]
 
-    await host.beforeStream({ guildId: 'g1', track: a, view: view({ current: a, upcoming: [b] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => speech.calls.length === 2)
 
     const prepared = first(speech.files.slice(1))

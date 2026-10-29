@@ -33,14 +33,11 @@ export interface PlayRequest {
 export interface PlayResult {
   readonly added: number
   readonly first: string | null
-  readonly playlist: { readonly name: string, readonly count: number } | null
   readonly dropped: number
-  readonly total: number
 }
 
 export interface BeforeStreamInput {
   readonly guildId: string
-  readonly track: Track
   readonly view: QueueView
 }
 
@@ -51,7 +48,7 @@ export interface MusicEventMap {
   stateChanged: { guildId: string, view: QueueView, textChannel: GuildTextBasedChannel | null }
   queueEnded: { guildId: string }
   queueCleared: { guildId: string, resetStation: boolean }
-  playbackError: { guildId: string, error: unknown, textChannel: GuildTextBasedChannel | null, cleanupAfterError: boolean }
+  playbackError: { guildId: string, textChannel: GuildTextBasedChannel | null, cleanupAfterError: boolean }
   disconnected: { guildId: string }
 }
 

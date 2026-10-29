@@ -10,7 +10,6 @@ import { logger } from '../../core/logger.ts'
 
 export interface TestClock extends Clock {
   advance: (milliseconds: number) => void
-  set: (milliseconds: number) => void
 }
 
 export function testClock(start = 1_000_000): TestClock {
@@ -18,14 +17,8 @@ export function testClock(start = 1_000_000): TestClock {
 
   return {
     now: () => current,
-    sleep: async (milliseconds) => {
-      current += milliseconds
-    },
     advance(milliseconds) {
       current += milliseconds
-    },
-    set(milliseconds) {
-      current = milliseconds
     },
   }
 }
@@ -201,7 +194,6 @@ export interface TestContextOptions {
   channel?: GuildTextBasedChannel
   message?: Message | null
   settings?: GuildSettings
-  settingsPort?: SettingsPort
   view?: QueueView | null
   music?: MusicPort
   logger?: Logger
@@ -209,7 +201,7 @@ export interface TestContextOptions {
 
 export function testContext(options: TestContextOptions = {}): CommandContext {
   const channel = options.channel ?? testChannel().channel
-  const settingsPort = options.settingsPort ?? testSettings(options.settings)
+  const settingsPort = testSettings(options.settings)
 
   return {
     guildId: '123456789012345678',

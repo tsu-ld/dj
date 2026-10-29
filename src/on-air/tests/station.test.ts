@@ -12,7 +12,6 @@ function fakeClock(start = 1_000_000): TestClock {
 
   return {
     now: () => now,
-    sleep: async () => {},
     advance: (milliseconds) => {
       now += milliseconds
     },

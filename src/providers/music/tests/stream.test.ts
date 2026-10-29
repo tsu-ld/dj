@@ -29,7 +29,6 @@ function cacheStub(overrides: Partial<AudioCache> = {}): AudioCache {
 function fixedClock(value: { now: number }): Clock {
   return {
     now: () => value.now,
-    sleep: async () => {},
   }
 }
 
@@ -204,4 +203,35 @@ test('a song without a url cannot be downloaded', async () => {
   })
 
   expect(await rejection(async () => resolver.playableUrl(song({ url: undefined })))).toMatch(/no url/)
+})
+
+test('a forgotten url is resolved again instead of failing on a dead one', async () => {
+  let calls = 0
+
+  const resolver = streamResolver({
+    cache: cacheStub(),
+    extraction: extractionStub({
+      streamUrl: async () => {
+        calls++
+
+        return `https://cdn.test/audio-${calls}?expire=${Math.floor(Date.now() / 1000) + 3600}`
+      },
+    }),
+    clock: fixedClock({ now: Date.now() }),
+    logger: log,
+    beforeStream: async () => {},
+  })
+
+  const first = await resolver.playableUrl(song())
+  const remembered = await resolver.playableUrl(song())
+
+  expect(remembered).toBe(first)
+  expect(calls).toBe(1)
+
+  resolver.forget('song-1')
+
+  const resolved = await resolver.playableUrl(song())
+
+  expect(resolved).not.toBe(first)
+  expect(calls).toBe(2)
 })

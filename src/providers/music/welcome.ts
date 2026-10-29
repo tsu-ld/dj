@@ -56,8 +56,6 @@ export function audioOverMusic(deps: {
       player.stop(true)
     }
 
-    voice.connection.once(VoiceConnectionStatus.Destroyed, stopSpeech)
-
     return track((async (): Promise<boolean> => {
       const attempt = new AbortController()
 
@@ -68,6 +66,10 @@ export function audioOverMusic(deps: {
           SPEECH_TIMEOUT_MS,
           AbortSignal.any([abort.signal, attempt.signal]),
         )
+
+        // Registered after the wait: stopping the player emits idle, and the
+        // destroyed connection must settle the line as failed, not as aired.
+        voice.connection.once(VoiceConnectionStatus.Destroyed, stopSpeech)
 
         voice.connection.subscribe(player)
 
@@ -87,7 +89,7 @@ export function audioOverMusic(deps: {
         if (outcome === 'error' || outcome === 'timeout' || outcome === 'aborted')
           logger.warn('music.line_failed', { guildId, outcome })
 
-        return outcome === 'idle' || outcome === 'destroyed'
+        return outcome === 'idle'
       }
       catch (error) {
         attempt.abort()
@@ -155,8 +157,6 @@ export function audioOverMusic(deps: {
       player.stop(true)
     }
 
-    voice.connection.once(VoiceConnectionStatus.Destroyed, stopIntro)
-
     const attempt = new AbortController()
 
     try {
@@ -166,6 +166,8 @@ export function audioOverMusic(deps: {
         INTRO_TIMEOUT_MS,
         AbortSignal.any([abort.signal, attempt.signal]),
       )
+
+      voice.connection.once(VoiceConnectionStatus.Destroyed, stopIntro)
 
       voice.connection.subscribe(player)
 

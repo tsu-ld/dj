@@ -33,13 +33,8 @@ export function musicPlay(deps: {
     if (code === 'LIVE_UNSUPPORTED')
       return new UserError(MESSAGES.liveUnsupported)
 
-    if (error instanceof PolicyError) {
-      if (error.code === 'LIVE_UNSUPPORTED')
-        return new UserError(MESSAGES.liveUnsupported)
-
-      if (error.code === 'UNSUPPORTED_URL')
-        return new UserError(MESSAGES.unsupportedUrl)
-    }
+    if (error instanceof PolicyError && error.code === 'UNSUPPORTED_URL')
+      return new UserError(MESSAGES.unsupportedUrl)
 
     logger.error('music.play_failed', error, { guildId: request.voiceChannel.guild.id })
 
@@ -88,7 +83,7 @@ export function musicPlay(deps: {
 
       await audio.playWelcome(request.voiceChannel)
 
-      const capture: PlayCapture = { announce: request.announce, playlist: null }
+      const capture: PlayCapture = { announce: request.announce }
       const before = player.getQueue(guildId)?.songs.length ?? 0
 
       plays.set(guildId, capture)
@@ -142,9 +137,7 @@ export function musicPlay(deps: {
       return {
         added,
         first: firstSong ? catalog.trackOf(firstSong).title : null,
-        playlist: capture.playlist,
         dropped,
-        total: queue?.songs.length ?? 0,
       }
     })
   }

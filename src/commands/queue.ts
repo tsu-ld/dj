@@ -1,6 +1,6 @@
-import type { QueueView } from '../ports/music.ts'
 import type { CommandSpec } from './spec.ts'
 import { UserError } from '../core/errors.ts'
+import { isPositionInQueue } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
 import { EMPTY_PARAMETERS } from './parameters.ts'
 
@@ -44,23 +44,19 @@ export const remove: CommandSpec = {
 
     const position = Number.parseInt(raw, 10)
 
-    return isPositionInQueue(context.queue, position) ? { position } : null
+    return isPositionInQueue(context.queue?.size ?? 0, position) ? { position } : null
   },
   async run(args, context) {
     const raw = args.position
     const position = typeof raw === 'number' ? raw : Number(raw)
 
-    if (!Number.isInteger(position) || !isPositionInQueue(context.queue, position))
+    if (!Number.isInteger(position) || !isPositionInQueue(context.queue?.size ?? 0, position))
       throw new UserError(MESSAGES.removeOutOfRange)
 
     const removed = await context.services.music.remove(context.guildId, position)
 
     return { removed }
   },
-}
-
-function isPositionInQueue(view: QueueView | null, position: number): boolean {
-  return view !== null && position > 0 && position <= view.size
 }
 
 export const clear: CommandSpec = {

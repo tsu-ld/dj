@@ -17,6 +17,7 @@ export interface StreamEntry {
 
 export interface StreamResolver {
   remember: (id: string | null | undefined, formats: unknown) => void
+  forget: (id: string | null | undefined) => void
   playableUrl: (song: Song) => Promise<string>
   dispose: () => void
 }
@@ -164,6 +165,10 @@ export function streamResolver(deps: {
 
   return {
     remember,
+    forget(id) {
+      if (id !== null && id !== undefined && id !== '')
+        streamUrls.delete(id)
+    },
     playableUrl: resolvePlayableUrl,
     dispose() {
       streamUrls.clear()

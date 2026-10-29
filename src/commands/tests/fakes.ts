@@ -58,7 +58,7 @@ export function fakeMusic(overrides: Partial<MusicPort> = {}): MusicRecorder {
     async play() {
       calls.push('play')
 
-      return { added: 0, first: null, playlist: null, dropped: 0, total: 0 }
+      return { added: 0, first: null, dropped: 0 }
     },
     async pause() {
       calls.push('pause')

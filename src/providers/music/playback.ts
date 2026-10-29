@@ -113,6 +113,7 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
     emitter,
     plays,
     beforeStream: deps.beforeStream,
+    forgetStream: songId => stream.forget(songId),
     leave,
     viewOf,
     logger,

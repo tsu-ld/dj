@@ -28,7 +28,6 @@ function fakeClock(start = 1_000_000): Clock & { advance: (milliseconds: number)
 
   return {
     now: () => now,
-    sleep: async () => {},
     advance(milliseconds) {
       now += milliseconds
     },

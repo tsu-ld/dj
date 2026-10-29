@@ -23,11 +23,11 @@ flowchart TD
 ## Dependency rule
 
 `app -> commands/discord/dj/on-air -> ports -> core`. Providers implement ports
-and import only `core`, `ports` and their own SDK. A feature never imports a
-provider; a provider never imports a feature. `src/tests/architecture.test.ts`
-fails on a cycle, a missing import, an upward dependency, a leaked technology
-name, a `process.env` read outside `config.ts`, a `console` call, or a source
-file over 300 lines.
+and import `core`, `ports`, the `config` types, `limits`/`messages` and their own
+SDK. A feature never imports a provider; a provider never imports a feature.
+`src/tests/architecture.test.ts` fails on a cycle, a missing import, an upward
+dependency, a leaked technology name, an environment read outside `config.ts`, a
+`console` call, or a non-test source file over 300 lines.
 
 ## Capabilities
 
@@ -40,9 +40,11 @@ file over 300 lines.
 | `SettingsPort` | `providers/settings` | flat JSON, atomic writes, partial entries defaulted | empty settings |
 | `RepliesPort` | `dj/replies` | in-character rewrite with plain fallback | plain text |
 
-Only `src/providers/**` may name a technology. The capability modules and their
-files are named for what they do: `music`, `speech`, `language-model`,
-`classifier`, `on-air`, `commands`.
+The five vendor names (`distube`, `yt-dlp`, `elevenlabs`, `openai`, `jev`) never
+appear in file, folder, type or function names outside `src/providers/**`.
+`discord.js` is the platform boundary, so its types appear in ports and handlers.
+The capability modules are named for what they do: `music`, `speech`,
+`language-model`, `classifier`, `on-air`, `commands`.
 
 ## Command path
 
@@ -102,9 +104,10 @@ line always lands in the gap and never over the song.
 
 ## On air
 
-The on-air host is a small state machine per guild plus an effects executor:
+The on-air host is a per-guild cadence plus an effects executor. There is no
+explicit state enum: two in-flight sets (generating, airing) and the station's
+counters decide what happens next.
 
-- states: idle, preparing, ready, airing;
 - cadence: one requested song in three is silent, autoplay speaks one in three,
   every fifth line is long, the first line is long;
 - a prepared clip belongs to one song, expires after 20 minutes, and is deleted
@@ -129,8 +132,9 @@ from the user's message, not from configuration.
 - `UserError`: safe to show, mapped by the bus.
 - `ProviderError`: capability, retryable/fatal/quota; adapters map wire errors once.
 - Unknown errors: logged with context and answered with a generic message.
-- Every external call has a timeout. Retries are bounded and never retry a
-  cancelled request. A broken provider degrades to the plain path, not a crash.
+- Every external call we own has a timeout. Retries are bounded and never retry
+  a cancelled request. Discord REST calls rely on the SDK's own timeout. A broken
+  provider degrades to the plain path, not a crash.
 - Speech quota/credential failures skip lines; music and the conversation keep
   working.
 

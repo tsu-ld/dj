@@ -74,12 +74,12 @@ The internals are described in [docs/architecture.md](docs/architecture.md): cap
    export DECISION_API_KEY=your_typesafe_key
    ```
 
-   Or with OpenCode's Console endpoint and the same OpenCode key:
+   Or with OpenCode's Console endpoint and the same OpenCode key (set it explicitly; there is no fallback):
 
    ```bash
    export DECISION_BASE_URL=https://opencode.ai/inference/systemone/v1/systemone
    export DECISION_MODEL=jev-1.13-free  # optional
-   # DECISION_API_KEY defaults to LLM_API_KEY
+   export DECISION_API_KEY=your_opencode_key
    ```
 
    Without it, or when the model is unavailable, the DJ falls back to choosing actions with the conversation model.

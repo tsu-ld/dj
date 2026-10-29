@@ -27,12 +27,6 @@ function mapFailure(error: unknown): ProviderError {
   return new ProviderError('language', errorMessage(error), { failure: 'retryable', cause: error })
 }
 
-function deadlineSignal(deadline: number, signal?: AbortSignal): AbortSignal {
-  const timeout = AbortSignal.timeout(Math.max(deadline - Date.now(), 1))
-
-  return signal ? AbortSignal.any([signal, timeout]) : timeout
-}
-
 function toInputItems(message: ChatMessage): readonly Record<string, unknown>[] {
   if (message.role === 'tool')
     return [{ type: 'function_call_output', call_id: message.toolCallId, output: message.content }]
@@ -91,7 +85,6 @@ async function sendWithRetry(
   send: () => Promise<Response>,
   deadline: number,
   logger: Logger,
-  signal?: AbortSignal,
 ): Promise<Response> {
   try {
     const response = await send()
@@ -102,12 +95,9 @@ async function sendWithRetry(
   catch (error) {
     // Retrying a timed-out request would double the caller's deadline; only
     // immediate connection failures get a second attempt.
-    if (isAbortError(error) || signal?.aborted)
+    if (isAbortError(error))
       throw error
   }
-
-  if (signal?.aborted)
-    throw signal.reason instanceof Error ? signal.reason : new Error('The request was aborted.')
 
   const remaining = deadline - Date.now()
 
@@ -169,13 +159,13 @@ export async function completeConversation(options: {
       'x-opencode-session': request.sessionId,
     },
     body,
-    signal: deadlineSignal(deadline, request.signal),
+    signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
   })
 
   let response: Response
 
   try {
-    response = await sendWithRetry(send, deadline, logger, request.signal)
+    response = await sendWithRetry(send, deadline, logger)
   }
   catch (error) {
     throw mapFailure(error)

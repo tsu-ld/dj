@@ -25,7 +25,6 @@ export interface StoppableQueue {
 
 export interface PlayCapture {
   readonly announce: boolean
-  playlist: { name: string, count: number } | null
 }
 
 export type MusicEmitter = {

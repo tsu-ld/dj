@@ -42,8 +42,14 @@ export function onAirHost(deps: {
     if (file === null)
       return
 
-    await rm(file, { force: true }).catch(error => logger.warn('on-air.clip_delete_failed', { file, error: errorMessage(error) }))
-    speech.release?.(file)
+    try {
+      await rm(file, { force: true })
+      speech.release(file)
+    }
+    catch (error) {
+      // The provider keeps the path so dispose can retry the delete.
+      logger.warn('on-air.clip_delete_failed', { file, error: errorMessage(error) })
+    }
   }
 
   function liveView(guildId: string): QueueView | null {
@@ -84,6 +90,8 @@ export function onAirHost(deps: {
       })
       const line = sanitizeLine(reply.text, maxChars)
 
+      // The retry is for the model answering with nothing; a provider that
+      // cannot synthesize will not succeed on a second model request.
       if (line !== null)
         return speech.synthesize(line)
     }

@@ -99,6 +99,38 @@ test('a hung extractor process is killed at the timeout', async () => {
   }
 })
 
+test('a killed extractor takes its grandchild down instead of hanging', async () => {
+  const { dir, cleanup } = await tempDir()
+
+  try {
+    const pidFile = join(dir, 'grandchild')
+    // The background sleep inherits the pipes: killing only the shell makes
+    // 'close' wait forever while the grandchild keeps them open.
+    const command = await shellScript(dir, 'tree.sh', `sleep 30 & echo $! > '${pidFile}'\nwait`)
+    const runner = extractorProcess({ command, logger: log })
+    const started = Date.now()
+    const running = runner.run([], 200).then(() => 'resolved', error => errorMessage(error))
+    const grandchild = Number.parseInt((await readEventually(pidFile)).trim(), 10)
+
+    expect(isAlive(grandchild)).toBe(true)
+    expect(await running).toMatch(/timed out/)
+
+    // The fixed grace period, not the 30s sleep, bounds the wait.
+    expect(Date.now() - started).toBeLessThan(4_000)
+
+    // Signal delivery and the reaper are asynchronous: give them a moment.
+    for (let attempt = 0; attempt < 20 && isAlive(grandchild); attempt++)
+      await Bun.sleep(50)
+
+    expect(isAlive(grandchild)).toBe(false)
+
+    await runner.dispose()
+  }
+  finally {
+    await cleanup()
+  }
+})
+
 test('dispose kills a running extractor child', async () => {
   const { dir, cleanup } = await tempDir()
 

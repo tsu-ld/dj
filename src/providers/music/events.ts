@@ -34,11 +34,13 @@ export function musicEvents(deps: {
   emitter: MusicEmitter
   plays: Map<string, PlayCapture>
   beforeStream: (input: BeforeStreamInput) => Promise<void>
+  forgetStream: (songId: string) => void
   leave: (guildId: string) => void
   viewOf: (queue: Queue) => QueueView
   logger: Logger
 }): { detach: Array<() => void>, beforeStreamFor: (song: Song) => Promise<void> } {
-  const { player, client, catalog, cache, emitter, plays, beforeStream, leave, viewOf, logger } = deps
+  const { player, client, catalog, cache, emitter, plays, beforeStream, forgetStream, leave, viewOf, logger } = deps
+  const lastSong = new Map<string, string>()
   const detach: Array<() => void> = []
 
   function queueForSong(song: Song): Queue | null {
@@ -66,7 +68,7 @@ export function musicEvents(deps: {
     if (!current)
       return
 
-    await beforeStream({ guildId: queue.id, track: catalog.trackOf(current), view: viewOf(queue) })
+    await beforeStream({ guildId: queue.id, view: viewOf(queue) })
   }
 
   function onAddSong(queue: Queue, song: Song): void {
@@ -89,9 +91,6 @@ export function musicEvents(deps: {
 
     logger.info('music.playlist_added', { guildId: queue.id, name, count })
 
-    if (capture)
-      capture.playlist = { name, count }
-
     emitter.playlistQueued({
       guildId: queue.id,
       name,
@@ -104,6 +103,7 @@ export function musicEvents(deps: {
 
   function onPlaySong(queue: Queue, song: Song): void {
     logger.info('music.playing', { guildId: queue.id, title: song.name ?? song.id })
+    lastSong.set(queue.id, song.id)
     emitter.trackStarted({
       guildId: queue.id,
       track: catalog.trackOf(song),
@@ -135,9 +135,17 @@ export function musicEvents(deps: {
     if (!queue)
       return
 
+    // A remembered progressive url can answer 403 after a few plays. Forget it
+    // for this song so the next request resolves a fresh one instead of failing
+    // on the same dead url for the rest of its lifetime.
+    const failed = lastSong.get(queue.id)
+
+    if (failed !== undefined)
+      forgetStream(failed)
+
     const cleanup = shouldCleanupAfterError(queue, player.getQueue(queue.id))
 
-    emitter.playbackError({ guildId: queue.id, error, textChannel: queue.textChannel ?? null, cleanupAfterError: cleanup })
+    emitter.playbackError({ guildId: queue.id, textChannel: queue.textChannel ?? null, cleanupAfterError: cleanup })
 
     if (cleanup) {
       logger.info('music.error_left_queue_empty', { guildId: queue.id })
