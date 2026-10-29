@@ -1,111 +1,17 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Logger } from '../../core/logger.ts'
-import type { AudioOverMusic } from '../../ports/music.ts'
+import type { AudioPlayerLike, MusicAudio, VoiceAccess, VoiceSession } from './audio-types.ts'
 import { createReadStream, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { AudioPlayerStatus, createAudioPlayer, createAudioResource, VoiceConnectionStatus } from '@discordjs/voice'
+import { errorMessage } from '../../core/errors.ts'
+import { waitForAudio } from './audio-wait.ts'
+
+export type { AudioPlayerLike, MusicAudio, VoiceAccess, VoiceConnectionLike, VoiceSession } from './audio-types.ts'
 
 const SPEECH_TIMEOUT_MS = 30_000
 const INTRO_TIMEOUT_MS = 30_000
 const WELCOME_FILE = resolve(import.meta.dirname, '../../../assets/welcome.mp3')
-
-// The SDK's players and connections declare their emitters as methods: turning
-// them into function properties makes their parameters contravariant and rejects
-// the real objects at the seam.
-/* eslint-disable ts/method-signature-style */
-export interface AudioPlayerLike {
-  readonly state: { readonly status: string }
-  on(event: string, listener: (...args: unknown[]) => void): unknown
-  once(event: string, listener: (...args: unknown[]) => void): unknown
-  off(event: string, listener: (...args: unknown[]) => void): unknown
-  play(resource: unknown): unknown
-  stop(force?: boolean): unknown
-  pause(): unknown
-}
-
-export interface VoiceConnectionLike {
-  readonly state: { readonly status: string }
-  on(event: string, listener: (...args: unknown[]) => void): unknown
-  once(event: string, listener: (...args: unknown[]) => void): unknown
-  off(event: string, listener: (...args: unknown[]) => void): unknown
-  subscribe(player: AudioPlayerLike): unknown
-}
-/* eslint-enable ts/method-signature-style */
-
-export interface VoiceSession {
-  readonly connection: VoiceConnectionLike
-  readonly audioPlayer: AudioPlayerLike
-}
-
-export interface VoiceAccess {
-  readonly voice: (guildId: string) => VoiceSession | null
-  readonly queue: (guildId: string) => { readonly songs: readonly unknown[], readonly paused: boolean } | null
-  readonly join: (channel: VoiceBasedChannel) => Promise<VoiceSession>
-}
-
-export interface MusicAudio extends AudioOverMusic {
-  readonly playWelcome: (channel: VoiceBasedChannel) => Promise<void>
-  readonly dispose: () => Promise<void>
-}
-
-type AudioOutcome = 'idle' | 'error' | 'destroyed' | 'timeout' | 'aborted'
-
-// A connection plays one stream at a time, so a line or the intro takes the
-// connection while the music holds its position: the SDK's player pauses itself
-// when it loses the subscriber and resumes when it gets it back. Queue state is
-// never touched, so the now-playing card keeps saying "Playing".
-async function waitForAudio(
-  player: AudioPlayerLike,
-  connection: VoiceConnectionLike,
-  timeoutMs: number,
-  signal: AbortSignal,
-): Promise<AudioOutcome> {
-  return new Promise((resolveOutcome) => {
-    let settled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
-
-    function finish(outcome: AudioOutcome): void {
-      if (settled)
-        return
-
-      settled = true
-      clearTimeout(timer)
-      player.off(AudioPlayerStatus.Idle, onIdle)
-      player.off('error', onError)
-      connection.off(VoiceConnectionStatus.Destroyed, onDestroyed)
-      signal.removeEventListener('abort', onAbort)
-      resolveOutcome(outcome)
-    }
-
-    function onIdle(): void {
-      finish('idle')
-    }
-
-    function onError(): void {
-      finish('error')
-    }
-
-    function onDestroyed(): void {
-      finish('destroyed')
-    }
-
-    function onAbort(): void {
-      finish('aborted')
-    }
-
-    timer = setTimeout(() => finish('timeout'), timeoutMs)
-
-    player.on(AudioPlayerStatus.Idle, onIdle)
-    player.on('error', onError)
-    connection.on(VoiceConnectionStatus.Destroyed, onDestroyed)
-    signal.addEventListener('abort', onAbort, { once: true })
-
-    if (signal.aborted)
-      onAbort()
-    else if (connection.state.status === VoiceConnectionStatus.Destroyed)
-      onDestroyed()
-  })
-}
 
 export function audioOverMusic(deps: {
   access: VoiceAccess
@@ -161,7 +67,17 @@ export function audioOverMusic(deps: {
         )
 
         voice.connection.subscribe(player)
-        player.play(createAudioResource(createReadStream(filePath)))
+
+        const stream = createReadStream(filePath)
+
+        // The clip is a temp file: a concurrent cleanup or a crash can remove it
+        // between synthesis and playback. Settle the wait instead of letting the
+        // stream's unhandled error take the process down.
+        stream.once('error', (error) => {
+          logger.warn('music.clip_unreadable', { guildId, error: errorMessage(error) })
+          attempt.abort()
+        })
+        player.play(createAudioResource(stream))
 
         const outcome = await waiting
 
@@ -249,7 +165,14 @@ export function audioOverMusic(deps: {
       )
 
       voice.connection.subscribe(player)
-      player.play(createAudioResource(createReadStream(welcomeFile)))
+
+      const stream = createReadStream(welcomeFile)
+
+      stream.once('error', (error) => {
+        logger.warn('music.welcome_unreadable', { guildId: channel.guild.id, error: errorMessage(error) })
+        attempt.abort()
+      })
+      player.play(createAudioResource(stream))
 
       const outcome = await waiting
 

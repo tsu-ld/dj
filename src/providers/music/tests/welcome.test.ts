@@ -2,6 +2,7 @@ import type { VoiceBasedChannel } from 'discord.js'
 import type { AudioPlayerLike, VoiceAccess, VoiceConnectionLike, VoiceSession } from '../welcome.ts'
 import { EventEmitter } from 'node:events'
 import { writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 import { audioOverMusic } from '../welcome.ts'
@@ -194,6 +195,23 @@ test('an empty queue never gets a line', async () => {
   finally {
     await audio.dispose()
     await cleanup()
+  }
+})
+
+test('a missing clip is skipped without taking the process down', async () => {
+  const session = fakeConnection()
+  const audio = audioOverMusic({
+    access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
+    logger: log,
+    createPlayer: () => fakePlayer(),
+  })
+
+  try {
+    expect(await audio.playClip('g9', join(tmpdir(), 'dj-missing-clip-does-not-exist.mp3'))).toBe(false)
+    expect(session.connection.current).toBe(session.audioPlayer)
+  }
+  finally {
+    await audio.dispose()
   }
 })
 
