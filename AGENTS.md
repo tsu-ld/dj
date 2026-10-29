@@ -21,11 +21,11 @@
 ## Configuration
 
 - `DISCORD_TOKEN` is required.
-- The DJ's conversation uses any OpenAI-compatible Responses API endpoint: `OPENAI_BASE_URL` (full `/responses` URL), `OPENAI_API_KEY`, optional `OPENAI_MODEL` (default `deepseek-v4-flash`). Without it the bot still plays music; announcements go out as plain text and tagged song requests are unavailable.
-- The optional fast router uses a System One endpoint: `JEV_BASE_URL`, `JEV_API_KEY` (falls back to `OPENAI_API_KEY`), optional `JEV_MODEL` (default `jev-1.13-free`). Without it, the model chooses from the same command registry.
-- Spotify links use the scrape fallback; set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` (both) for the official API.
-- The optional radio voice uses `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, optional `ELEVENLABS_MODEL_ID` (default `eleven_v4`). Without all required values the bot only plays music.
-- `LOG_LEVEL` (`debug|info|warn|error`) and `EXTRACTOR_COMMAND` are optional. Per-guild settings live in `data/guilds.json` (gitignored, versioned, atomic writes, legacy files migrated, corrupt files quarantined).
+- The DJ's conversation uses any OpenAI-compatible Responses API endpoint: `LLM_BASE_URL` (full `/responses` URL), `LLM_API_KEY`, optional `LLM_MODEL` (default `deepseek-v4-flash`). Without it the bot still plays music; announcements go out as plain text and tagged song requests are unavailable.
+- The optional fast router uses a System One endpoint: `DECISION_BASE_URL`, `DECISION_API_KEY` (falls back to `LLM_API_KEY`), optional `DECISION_MODEL` (default `jev-1.13-free`). Without it, the model chooses from the same command registry.
+- Spotify links use the scrape fallback; set `MUSIC_METADATA_CLIENT_ID` and `MUSIC_METADATA_CLIENT_SECRET` (both) for the official API.
+- The optional radio voice uses `SPEECH_API_KEY`, `SPEECH_VOICE_ID`, optional `SPEECH_MODEL_ID` (default `eleven_v4`). Without all required values the bot only plays music.
+- `LOG_LEVEL` (`debug|info|warn|error`) and `EXTRACTOR_COMMAND` are optional. Per-guild settings live in `data/guilds.json` (gitignored flat map, atomic writes, partial entries defaulted, corrupt files quarantined).
 
 ## Architecture
 
@@ -41,7 +41,7 @@ src/
     speech/         voice synthesis + quota
     language-model/ conversation wire format
     classifier/     fast typed decision
-    settings/       versioned JSON store
+    settings/       flat JSON store
   dj/               persona, prompts, conversation loop, replies, announcements
   on-air/           station state machine, script, host
   commands/         command specs, bus, fast router

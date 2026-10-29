@@ -6,13 +6,10 @@ import { errorMessage } from '../../core/errors.ts'
 import { isRecord, parseJson } from '../../core/json.ts'
 import { DEFAULT_SETTINGS } from '../../ports/settings.ts'
 
-interface StoredFile {
-  version: 1
-  guilds: Record<string, GuildSettings>
-}
+type StoredSettings = Record<string, GuildSettings>
 
-// A release before the settings file was versioned wrote only the fields a
-// guild had changed. Missing fields mean defaults, never a corrupt file.
+// A guild entry only carries the fields that differ from the defaults. Missing
+// fields mean defaults, never a corrupt file.
 function normalizeSettings(value: unknown): GuildSettings | null {
   if (!isRecord(value))
     return null
@@ -31,42 +28,30 @@ function normalizeSettings(value: unknown): GuildSettings | null {
   }
 }
 
-function normalizeMap(values: Record<string, unknown>): Record<string, GuildSettings> {
-  const guilds: Record<string, GuildSettings> = {}
+// The file is a flat guild map. One bad entry drops only that guild; a file
+// where no entry is an object is not a settings file and gets quarantined.
+function normalizeMap(value: unknown): StoredSettings | null {
+  if (!isRecord(value))
+    return null
 
-  for (const [guildId, value] of Object.entries(values)) {
-    const settings = normalizeSettings(value)
+  const entries = Object.entries(value)
 
-    if (settings)
-      guilds[guildId] = settings
+  if (entries.length > 0 && !entries.some(([, settings]) => isRecord(settings)))
+    return null
+
+  const guilds: StoredSettings = {}
+
+  for (const [guildId, settings] of entries) {
+    const normalized = normalizeSettings(settings)
+
+    if (normalized)
+      guilds[guildId] = normalized
   }
 
   return guilds
 }
 
-// The first release wrote a bare guild map. Reading it costs ten lines and
-// saves every server from reconfiguring its channel and persona.
-function migrate(raw: unknown): StoredFile | null {
-  if (!isRecord(raw))
-    return null
-
-  if (raw.version === 1)
-    return isRecord(raw.guilds) ? { version: 1, guilds: normalizeMap(raw.guilds) } : null
-
-  if (raw.version !== undefined)
-    return null
-
-  // A bare guild map. One bad entry drops only that guild; a file where no
-  // entry is even an object is not a settings file and is quarantined.
-  const entries = Object.entries(raw)
-
-  if (entries.length > 0 && !entries.some(([, value]) => isRecord(value)))
-    return null
-
-  return { version: 1, guilds: normalizeMap(raw) }
-}
-
-async function read(filePath: string, logger: Logger): Promise<StoredFile> {
+async function read(filePath: string, logger: Logger): Promise<StoredSettings> {
   let text: string
 
   try {
@@ -74,12 +59,12 @@ async function read(filePath: string, logger: Logger): Promise<StoredFile> {
   }
   catch (error) {
     if (isRecord(error) && error.code === 'ENOENT')
-      return { version: 1, guilds: {} }
+      return {}
 
     throw error
   }
 
-  const parsed = migrate(parseJson(text))
+  const parsed = normalizeMap(parseJson(text))
 
   if (parsed)
     return parsed
@@ -94,7 +79,7 @@ async function read(filePath: string, logger: Logger): Promise<StoredFile> {
     logger.warn('settings.quarantine_failed', { path: filePath, error: errorMessage(error) })
   }
 
-  return { version: 1, guilds: {} }
+  return {}
 }
 
 export async function settingsStore(options: { path: string, logger: Logger }): Promise<SettingsPort> {
@@ -116,19 +101,16 @@ export async function settingsStore(options: { path: string, logger: Logger }): 
 
   return {
     get(guildId) {
-      const settings = file.guilds[guildId]
+      const settings = file[guildId]
 
       return settings ? { ...settings } : { ...DEFAULT_SETTINGS }
     },
     async update(guildId, patch) {
-      const current = file.guilds[guildId] ?? DEFAULT_SETTINGS
+      const current = file[guildId] ?? DEFAULT_SETTINGS
 
       file = {
-        version: 1,
-        guilds: {
-          ...file.guilds,
-          [guildId]: { ...current, ...patch },
-        },
+        ...file,
+        [guildId]: { ...current, ...patch },
       }
       await persist()
     },

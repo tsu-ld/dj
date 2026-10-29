@@ -27,19 +27,23 @@ describe('settingsStore', () => {
     expect(store.get('g1')).toEqual({ textChannelId: null, persona: null })
   })
 
-  test('an update is persisted and read back', async () => {
+  test('an update is persisted as a flat guild map and read back', async () => {
     const path = await tempFile()
     const store = await settingsStore({ path, logger: log })
 
     await store.update('g1', { textChannelId: '123' })
     await store.flush()
 
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({
+      g1: { textChannelId: '123', persona: null },
+    })
+
     const reloaded = await settingsStore({ path, logger: log })
 
     expect(reloaded.get('g1')).toEqual({ textChannelId: '123', persona: null })
   })
 
-  test('a legacy entry with only one field keeps that field and defaults the rest', async () => {
+  test('an entry with only one field keeps that field and defaults the rest', async () => {
     const path = await tempFile()
     await writeFile(path, JSON.stringify({ g1: { textChannelId: '9' }, g2: { persona: 'un dj' } }))
     const store = await settingsStore({ path, logger: log })
@@ -48,29 +52,13 @@ describe('settingsStore', () => {
     expect(store.get('g2')).toEqual({ textChannelId: null, persona: 'un dj' })
   })
 
-  test('one bad legacy entry does not quarantine the good guilds', async () => {
+  test('one bad entry does not quarantine the good guilds', async () => {
     const path = await tempFile()
     await writeFile(path, JSON.stringify({ g1: { persona: 'un dj' }, bad: 'nope' }))
     const store = await settingsStore({ path, logger: log })
 
     expect(store.get('g1').persona).toBe('un dj')
     expect(store.get('bad')).toEqual({ textChannelId: null, persona: null })
-  })
-
-  test('a legacy bare map is migrated in memory and on the next write', async () => {
-    const path = await tempFile()
-    await writeFile(path, JSON.stringify({ g1: { textChannelId: '9', persona: 'un dj' } }))
-    const store = await settingsStore({ path, logger: log })
-
-    expect(store.get('g1')).toEqual({ textChannelId: '9', persona: 'un dj' })
-
-    await store.update('g2', { persona: 'otro' })
-    await store.flush()
-
-    const saved = JSON.parse(await readFile(path, 'utf8')) as { version: number, guilds: Record<string, unknown> }
-
-    expect(saved.version).toBe(1)
-    expect(saved.guilds.g1).toEqual({ textChannelId: '9', persona: 'un dj' })
   })
 
   test('a corrupt file is quarantined and replaced with an empty store', async () => {
@@ -83,7 +71,9 @@ describe('settingsStore', () => {
     await store.update('g1', { persona: 'un dj' })
     await store.flush()
 
-    expect(JSON.parse(await readFile(path, 'utf8'))).toMatchObject({ version: 1 })
+    expect(JSON.parse(await readFile(path, 'utf8'))).toEqual({
+      g1: { textChannelId: null, persona: 'un dj' },
+    })
 
     const backups = (await readdir(join(path, '..'))).filter(name => name.startsWith('guilds.json.corrupt-'))
 

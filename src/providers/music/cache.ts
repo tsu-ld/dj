@@ -21,7 +21,7 @@ export interface AudioCache {
   dispose: () => void
 }
 
-// yt-dlp leaves <id>.<ext>.part (and legacy .ytdl) files behind mid-download;
+// yt-dlp leaves <id>.<ext>.part (and .ytdl) files behind mid-download;
 // only a finished file may be played.
 export function finishedAudioFile(files: readonly string[], id: string): string | undefined {
   return files.find(file => file.startsWith(`${id}.`) && !file.endsWith('.part') && !file.endsWith('.ytdl'))

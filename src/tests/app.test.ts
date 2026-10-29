@@ -24,7 +24,7 @@ async function config(): Promise<AppConfig> {
       cacheMaxBytes: 1024,
       cacheMaxAgeMs: 1_000,
       extractorCommand: 'false',
-      spotify: { enabled: false },
+      metadata: { enabled: false },
     },
     language: { enabled: false },
     decision: { enabled: false },

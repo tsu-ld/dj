@@ -141,7 +141,7 @@ describe('configuration', () => {
   })
 
   test('without a voice id the key alone is not enough', () => {
-    const loaded = loadConfig({ DISCORD_TOKEN: 'token', ELEVENLABS_API_KEY: 'key' })
+    const loaded = loadConfig({ DISCORD_TOKEN: 'token', SPEECH_API_KEY: 'key' })
 
     expect(loaded.speech.enabled).toBe(false)
   })

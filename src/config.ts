@@ -13,7 +13,7 @@ export interface AppConfig {
     readonly cacheMaxBytes: number
     readonly cacheMaxAgeMs: number
     readonly extractorCommand: string
-    readonly spotify: { readonly enabled: true, readonly clientId: string, readonly clientSecret: string } | { readonly enabled: false }
+    readonly metadata: { readonly enabled: true, readonly clientId: string, readonly clientSecret: string } | { readonly enabled: false }
   }
   readonly language: {
     readonly enabled: true
@@ -48,7 +48,7 @@ export interface AppConfig {
 }
 
 const LOG_LEVELS = new Set<LogLevel>(['debug', 'info', 'warn', 'error'])
-const DEFAULT_LANGUAGE_MODEL = 'deepseek-v4-flash'
+const DEFAULT_LLM_MODEL = 'deepseek-v4-flash'
 const DEFAULT_DECISION_MODEL = 'jev-1.13-free'
 const DEFAULT_SPEECH_MODEL = 'eleven_v4'
 
@@ -112,51 +112,51 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (!LOG_LEVELS.has(logLevelRaw as LogLevel))
     issues.push(`LOG_LEVEL must be one of ${[...LOG_LEVELS].join(', ')}.`)
 
-  const languageUrl = httpUrl(env, 'OPENAI_BASE_URL', issues)
-  const languageKey = text(env, 'OPENAI_API_KEY')
+  const languageUrl = httpUrl(env, 'LLM_BASE_URL', issues)
+  const languageKey = text(env, 'LLM_API_KEY')
   const language = languageUrl !== null && languageKey !== null
     ? {
         enabled: true as const,
         baseUrl: languageUrl,
         apiKey: languageKey,
-        model: text(env, 'OPENAI_MODEL') ?? DEFAULT_LANGUAGE_MODEL,
-        timeoutMs: positiveInt(env, 'OPENAI_TIMEOUT_MS', 40_000, issues),
-        maxOutputTokens: positiveInt(env, 'OPENAI_MAX_OUTPUT_TOKENS', 800, issues),
+        model: text(env, 'LLM_MODEL') ?? DEFAULT_LLM_MODEL,
+        timeoutMs: positiveInt(env, 'LLM_TIMEOUT_MS', 40_000, issues),
+        maxOutputTokens: positiveInt(env, 'LLM_MAX_OUTPUT_TOKENS', 800, issues),
       }
     : { enabled: false as const }
 
-  const decisionUrl = httpUrl(env, 'JEV_BASE_URL', issues)
-  const decisionKey = text(env, 'JEV_API_KEY') ?? languageKey
+  const decisionUrl = httpUrl(env, 'DECISION_BASE_URL', issues)
+  const decisionKey = text(env, 'DECISION_API_KEY')
   const decision = decisionUrl !== null && decisionKey !== null
     ? {
         enabled: true as const,
         baseUrl: decisionUrl,
         apiKey: decisionKey,
-        model: text(env, 'JEV_MODEL') ?? DEFAULT_DECISION_MODEL,
-        timeoutMs: positiveInt(env, 'JEV_TIMEOUT_MS', 5_000, issues),
+        model: text(env, 'DECISION_MODEL') ?? DEFAULT_DECISION_MODEL,
+        timeoutMs: positiveInt(env, 'DECISION_TIMEOUT_MS', 5_000, issues),
         minConfidence: 0.6,
         retryAfterMs: 60_000,
       }
     : { enabled: false as const }
 
-  const speechKey = text(env, 'ELEVENLABS_API_KEY')
-  const speechVoice = text(env, 'ELEVENLABS_VOICE_ID')
+  const speechKey = text(env, 'SPEECH_API_KEY')
+  const speechVoice = text(env, 'SPEECH_VOICE_ID')
   const speech = speechKey !== null && speechVoice !== null
     ? {
         enabled: true as const,
         apiKey: speechKey,
         voiceId: speechVoice,
-        model: text(env, 'ELEVENLABS_MODEL_ID') ?? DEFAULT_SPEECH_MODEL,
-        timeoutMs: positiveInt(env, 'ELEVENLABS_TIMEOUT_MS', 12_000, issues),
+        model: text(env, 'SPEECH_MODEL_ID') ?? DEFAULT_SPEECH_MODEL,
+        timeoutMs: positiveInt(env, 'SPEECH_TIMEOUT_MS', 12_000, issues),
         maxChars: 300,
         quotaCacheMs: 300_000,
       }
     : { enabled: false as const }
 
-  const spotifyId = text(env, 'SPOTIFY_CLIENT_ID')
-  const spotifySecret = text(env, 'SPOTIFY_CLIENT_SECRET')
-  const spotify = spotifyId !== null && spotifySecret !== null
-    ? { enabled: true as const, clientId: spotifyId, clientSecret: spotifySecret }
+  const metadataId = text(env, 'MUSIC_METADATA_CLIENT_ID')
+  const metadataSecret = text(env, 'MUSIC_METADATA_CLIENT_SECRET')
+  const musicMetadata = metadataId !== null && metadataSecret !== null
+    ? { enabled: true as const, clientId: metadataId, clientSecret: metadataSecret }
     : { enabled: false as const }
 
   if (issues.length > 0)
@@ -171,7 +171,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       cacheMaxBytes: 512 * 1024 * 1024,
       cacheMaxAgeMs: 86_400_000,
       extractorCommand: text(env, 'EXTRACTOR_COMMAND') ?? 'yt-dlp',
-      spotify,
+      metadata: musicMetadata,
     },
     language,
     decision,

@@ -37,7 +37,7 @@ file over 300 lines.
 | `SpeechPort` | `providers/speech` | voice synthesis, quota cache, bad-credential latch, temp clips | no spoken lines |
 | `ConversationPort` | `providers/language-model` | Responses API wire format, retries, timeouts | plain text |
 | `DecisionPort` | `providers/classifier` | fast typed choice, confidence, breaker | DJ tool routing |
-| `SettingsPort` | `providers/settings` | versioned JSON, migration, atomic writes | empty settings |
+| `SettingsPort` | `providers/settings` | flat JSON, atomic writes, partial entries defaulted | empty settings |
 | `RepliesPort` | `dj/replies` | in-character rewrite with plain fallback | plain text |
 
 Only `src/providers/**` may name a technology. The capability modules and their

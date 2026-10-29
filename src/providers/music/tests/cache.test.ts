@@ -29,7 +29,7 @@ test('files belonging to other songs are ignored', () => {
   expect(finishedAudioFile(['def456.m4a', 'abc123.m4a.part', 'xyz789.webm'], 'abc123')).toBeUndefined()
 })
 
-test('partial and legacy ytdl downloads are never played', () => {
+test('partial and .ytdl downloads are never played', () => {
   expect(finishedAudioFile(['abc123.webm.part'], 'abc123')).toBeUndefined()
   expect(finishedAudioFile(['abc123.webm.ytdl'], 'abc123')).toBeUndefined()
 })

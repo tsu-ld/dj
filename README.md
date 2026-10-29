@@ -13,7 +13,7 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 - **Full control surface**: pause, resume, skip, shuffle, radio, clear (the button asks for confirmation) and a paginated queue view, as buttons on the now-playing message or by asking `@DJ` in plain language.
 - **Playlists**: paste a playlist link and it queues up to 50 songs.
 - **Leaves when done**: disconnects when the queue ends (unless radio is on) or the voice channel empties.
-- **Remembers its channel**: the listening channel and persona are per server; they survive restarts, and the old settings file is migrated automatically.
+- **Remembers its channel**: the listening channel and persona are per server and survive restarts.
 - **Welcome audio**: plays `assets/welcome.mp3` the first time it joins a voice channel each session (optional).
 
 ## Tech Stack
@@ -52,9 +52,9 @@ The internals are described in [docs/architecture.md](docs/architecture.md): cap
 3. **(Optional) give it a voice**: point the bot at any OpenAI-compatible Responses API endpoint (`/responses`):
 
    ```bash
-   export OPENAI_BASE_URL=https://your-endpoint/v1/responses
-   export OPENAI_API_KEY=your_api_key
-   export OPENAI_MODEL=your_model  # optional, defaults to deepseek-v4-flash
+   export LLM_BASE_URL=https://your-endpoint/v1/responses
+   export LLM_API_KEY=your_api_key
+   export LLM_MODEL=your_model  # optional, defaults to deepseek-v4-flash
    ```
 
    Without these, the bot still plays music: announcements go out as plain text, refusals keep their plain reason, and tagged song requests are unavailable. The buttons, fast-routed controls and plain messages in the listening channel keep working.
@@ -62,24 +62,24 @@ The internals are described in [docs/architecture.md](docs/architecture.md): cap
 4. **(Optional) Spotify credentials**: Spotify links work without them by scraping a web token, which is fragile. Set the credentials from a [Spotify app](https://developer.spotify.com/dashboard) to use the official API:
 
    ```bash
-   export SPOTIFY_CLIENT_ID=your_client_id
-   export SPOTIFY_CLIENT_SECRET=your_client_secret
+   export MUSIC_METADATA_CLIENT_ID=your_client_id
+   export MUSIC_METADATA_CLIENT_SECRET=your_client_secret
    ```
 
-5. **(Optional) fast action routing**: point `JEV_BASE_URL` at a System One endpoint. With the official TypeSafe API:
+5. **(Optional) fast action routing**: point `DECISION_BASE_URL` at a System One endpoint. With the official TypeSafe API:
 
    ```bash
-   export JEV_BASE_URL=https://api.typesafe.ai/v1/systemone
-   export JEV_MODEL=jev-latest
-   export JEV_API_KEY=your_typesafe_key
+   export DECISION_BASE_URL=https://api.typesafe.ai/v1/systemone
+   export DECISION_MODEL=jev-latest
+   export DECISION_API_KEY=your_typesafe_key
    ```
 
    Or with OpenCode's Console endpoint and the same OpenCode key:
 
    ```bash
-   export JEV_BASE_URL=https://opencode.ai/inference/systemone/v1/systemone
-   export JEV_MODEL=jev-1.13-free  # optional
-   # JEV_API_KEY defaults to OPENAI_API_KEY
+   export DECISION_BASE_URL=https://opencode.ai/inference/systemone/v1/systemone
+   export DECISION_MODEL=jev-1.13-free  # optional
+   # DECISION_API_KEY defaults to LLM_API_KEY
    ```
 
    Without it, or when the model is unavailable, the DJ falls back to choosing actions with the conversation model.
@@ -87,9 +87,9 @@ The internals are described in [docs/architecture.md](docs/architecture.md): cap
 6. **(Optional) radio voice**: give the DJ a voice in the voice channel with [ElevenLabs](https://elevenlabs.io/). Add a male Spanish (Argentina) voice from the [voice library](https://elevenlabs.io/voice-library) and copy its ID:
 
    ```bash
-   export ELEVENLABS_API_KEY=your_api_key
-   export ELEVENLABS_VOICE_ID=your_voice_id
-   export ELEVENLABS_MODEL_ID=eleven_v4  # optional
+   export SPEECH_API_KEY=your_api_key
+   export SPEECH_VOICE_ID=your_voice_id
+   export SPEECH_MODEL_ID=eleven_v4  # optional
    ```
 
    The line is written while the previous song plays and airs in the gap, so the music never plays underneath it. The first song after a reconnect, and the autoplay songs, are written on the spot. The provider checks its character quota every five minutes and skips lines when the period is exhausted, so the free tier never breaks playback. Lines are capped at 95 characters (one long line of up to 200 characters every fifth line), with audio tags (`[laughs]`, `[sighs]`, `[excited]`) for a performed delivery.

@@ -86,13 +86,13 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
     // The spotify package ships CJS declarations that extend the CJS copy of the
     // SDK's plugin class, while this ESM package resolves the ESM copy. At
     // runtime both are the same plugin type the engine accepts.
-    if (!deps.config.spotify.enabled)
+    if (!deps.config.metadata.enabled)
       return new SpotifyPlugin() as unknown as DisTubePlugin
 
     return new SpotifyPlugin({
       api: {
-        clientId: deps.config.spotify.clientId,
-        clientSecret: deps.config.spotify.clientSecret,
+        clientId: deps.config.metadata.clientId,
+        clientSecret: deps.config.metadata.clientSecret,
       },
     }) as unknown as DisTubePlugin
   }
