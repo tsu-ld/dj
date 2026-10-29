@@ -30,12 +30,12 @@ export interface MessageHandlerDeps {
 
 const QUERY_OPTION: DecisionOption = {
   name: 'query',
-  description: 'Play the message as a song search, an artist, or a YouTube/Spotify link. Use it when the user names something to play.',
+  description: 'Play the message as a song search, an artist, a genre name, or a YouTube/Spotify link. Use it when the user names something to play. Examples: cumbia, rock nacional, lofi beats, jazz, a song title, a band or a link.',
 }
 
 const DJ_OPTION: DecisionOption = {
   name: 'dj',
-  description: 'Everything else: talk to the user, answer questions, or choose and queue music from a song, artist, mood, genre or era.',
+  description: 'Everything else: talk to the user, answer questions, or choose and queue music from a song, artist, mood, genre or era. Users say: poneme algo tranqui, poneme algo para cocinar, recomendame una banda, play something chill.',
 }
 
 export function messageHandler(deps: MessageHandlerDeps): (message: Message) => Promise<void> {
