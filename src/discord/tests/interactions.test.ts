@@ -1,5 +1,6 @@
 import type { Interaction } from 'discord.js'
 import type { MusicRecorder } from '../../commands/tests/fakes.ts'
+import type { Logger } from '../../core/logger.ts'
 import type { ViewMessage } from '../views.ts'
 import type { SlotRecorder } from './fakes.ts'
 import { describe, expect, test } from 'bun:test'
@@ -12,19 +13,20 @@ import { MESSAGES } from '../../messages.ts'
 import { interactionHandler } from '../interactions.ts'
 import { editContent, fakeChannel, fakeInteraction, fakeSlot, optionContent } from './fakes.ts'
 
-function setup(options: { music?: MusicRecorder, slot?: SlotRecorder } = {}): {
+function setup(options: { music?: MusicRecorder, slot?: SlotRecorder, logger?: Logger } = {}): {
   handler: (interaction: Interaction) => Promise<void>
   music: MusicRecorder
   slot: SlotRecorder
 } {
   const music = options.music ?? fakeMusic()
   const slot = options.slot ?? fakeSlot()
+  const logger = options.logger ?? log
   const handler = interactionHandler({
-    bus: commandBus({ specs: commands, logger: log }),
+    bus: commandBus({ specs: commands, logger }),
     music,
     settings: fakeSettings(),
     slot,
-    logger: log,
+    logger,
   })
 
   return { handler, music, slot }
@@ -73,8 +75,39 @@ describe('now-playing buttons', () => {
     await handler(recorder.interaction)
 
     expect(recorder.deferredUpdates()).toBe(1)
-    expect(editContent(recorder.editReplies[0])).toBe('✅')
+    expect(editContent(recorder.editReplies[0])).toBe(MESSAGES.cleared)
     expect(calls).toEqual([['123456789012345678', { resetStation: true }]])
+  })
+
+  test('a failed confirmation edit does not report the clear as failed', async () => {
+    const warnings: string[] = []
+    const logger: Logger = {
+      debug: () => {},
+      info: () => {},
+      warn: event => warnings.push(event),
+      error: () => {},
+      child: () => logger,
+    }
+    const recorder = fakeInteraction({ customId: 'nc:clear:yes', failEditReply: true })
+    const { handler } = setup({ music: fakeMusic({ view: () => view() }), logger })
+
+    await handler(recorder.interaction)
+
+    expect(recorder.followUps).toEqual([])
+    expect(warnings).toEqual(['discord.clear_feedback_failed'])
+  })
+
+  test('radio announces the mode in an ephemeral follow-up', async () => {
+    const recorder = fakeInteraction({ customId: 'np:radio' })
+    const { handler } = setup({ music: fakeMusic({ view: () => view(), radio: async () => true }) })
+
+    await handler(recorder.interaction)
+
+    expect(recorder.deferredUpdates()).toBe(1)
+    expect(recorder.replies).toEqual([])
+    expect(recorder.followUps).toHaveLength(1)
+    expect(recorder.followUps[0]?.content).toBe(MESSAGES.radioEnabled)
+    expect(recorder.followUps[0]?.flags).toBe(MessageFlags.Ephemeral)
   })
 
   test('cancelling keeps playing', async () => {

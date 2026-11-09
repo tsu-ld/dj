@@ -11,19 +11,28 @@ function command(overrides: Partial<CommandSpec> & Pick<CommandSpec, 'name' | 'r
   return { description: overrides.name, parameters: EMPTY_PARAMETERS, ...overrides }
 }
 
-function recordingLogger(): { logger: Logger, errors: string[] } {
+interface WarningRecord {
+  readonly event: string
+  readonly name?: unknown
+  readonly error?: unknown
+}
+
+function recordingLogger(): { logger: Logger, errors: string[], warnings: WarningRecord[] } {
   const errors: string[] = []
+  const warnings: WarningRecord[] = []
   const logger: Logger = {
     debug: () => {},
     info: () => {},
-    warn: () => {},
+    warn(event, fields) {
+      warnings.push({ event, ...fields })
+    },
     error(event, error) {
       errors.push(`${event}:${error instanceof Error ? error.message : String(error)}`)
     },
     child: () => logger,
   }
 
-  return { logger, errors }
+  return { logger, errors, warnings }
 }
 
 describe('commandBus', () => {
@@ -78,6 +87,54 @@ describe('commandBus', () => {
 
     await fallback.run('thing', {}, fakeContext({ ui: loud }))
     expect(loud.acks()).toBe(1)
+  })
+
+  test('a failed ack does not turn a finished command into an error', async () => {
+    const recording = recordingLogger()
+    const ui = fakeUi()
+
+    ui.ack = async () => {
+      throw new Error('missing reactions permission')
+    }
+
+    const bus = commandBus({
+      specs: [command({ name: 'thing', async run() { return { done: true } } })],
+      logger: recording.logger,
+    })
+
+    const outcome = await bus.run('thing', {}, fakeContext({ ui }))
+
+    expect(outcome).toEqual({ kind: 'ok', data: { done: true } })
+    expect(ui.errors).toEqual([])
+    expect(recording.warnings).toEqual([{
+      event: 'command.feedback_failed',
+      name: 'thing',
+      error: 'missing reactions permission',
+    }])
+  })
+
+  test('a failed confirmation does not turn a finished command into an error', async () => {
+    const recording = recordingLogger()
+    const ui = fakeUi()
+
+    ui.reply = async () => {
+      throw new Error('channel deleted')
+    }
+
+    const bus = commandBus({
+      specs: [command({ name: 'thing', async run() { return { done: true } }, confirm: () => 'Saved.' })],
+      logger: recording.logger,
+    })
+
+    const outcome = await bus.run('thing', {}, fakeContext({ ui }))
+
+    expect(outcome).toEqual({ kind: 'ok', data: { done: true } })
+    expect(ui.errors).toEqual([])
+    expect(recording.warnings).toEqual([{
+      event: 'command.feedback_failed',
+      name: 'thing',
+      error: 'channel deleted',
+    }])
   })
 
   test('authorization refuses with the user error and never runs the command', async () => {
