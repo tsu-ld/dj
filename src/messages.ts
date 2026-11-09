@@ -20,6 +20,9 @@ export const MESSAGES = {
   djActed: 'Done.',
   djUnavailable: 'The DJ is not configured right now, so I can only play what you send me.',
   djError: 'I couldn\'t reach the DJ just now. Try again in a moment.',
+  djNoAnswer: 'The DJ didn\'t have an answer just now. Try again in a moment.',
+  radioEnabled: 'Radio is on: I pick the next songs when the queue runs dry.',
+  radioDisabled: 'Radio is off: the music stops when the queue runs dry.',
   rateLimited: 'Give me a few seconds before the next request.',
   wrongChannel: (channelId: string) => `I listen in <#${channelId}>. Mention me there and I'll help.`,
   emptyMention: 'Tell me what you need, or mention a channel to set where I listen.',
@@ -31,4 +34,5 @@ export const MESSAGES = {
   playlistCapped: (kept: number, total: number) => `The queue hit its limit: I kept ${kept} of ${total} songs.`,
   clearConfirm: 'Clear the queue and leave the voice channel?',
   clearCancelled: 'Kept playing.',
+  cleared: 'Cleared the queue and left the voice channel.',
 } as const

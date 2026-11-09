@@ -457,14 +457,15 @@ describe('messageHandler dj requests', () => {
     expect(inputs).toEqual([{ request: 'hola dj', guildId: GUILD }])
   })
 
-  test('a silent dj reply is not read as an answer', async () => {
+  test('a silent dj reply says the dj failed instead of a bare reaction', async () => {
     const agent = { ask: async () => null }
     const { handler } = setup({ agent })
     const message = fakeIncomingMessage({ content: '<@999> hola', users: BOT })
 
     await handler(message.message)
 
-    expect(message.reactions).toEqual(['❌'])
+    expect(message.replies).toEqual([MESSAGES.djNoAnswer])
+    expect(message.reactions).toEqual([])
   })
 
   test('a dj failure replies with its own message', async () => {

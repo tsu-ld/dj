@@ -118,12 +118,9 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
     try {
       const reply = await agent.ask({ request: text, context })
 
-      // A null reply means the model never said anything, which the person
-      // would otherwise read as being ignored.
-      if (reply !== null)
-        await message.reply(reply)
-      else
-        await message.react('❌')
+      // A null reply means the model never said anything; say so instead of
+      // leaving a bare reaction the person has to interpret.
+      await message.reply(reply ?? MESSAGES.djNoAnswer)
     }
     catch (error) {
       deps.logger.error('discord.dj_failed', error)

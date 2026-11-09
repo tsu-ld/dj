@@ -1,11 +1,12 @@
-import type { PlayRequest } from '../../ports/music.ts'
-import { describe, expect, test } from 'bun:test'
+import type { GuildTextBasedChannel } from 'discord.js'
+import type { PlayRequest, PlayResult } from '../../ports/music.ts'
+import { describe, expect, jest, test } from 'bun:test'
 import { UserError } from '../../core/errors.ts'
 import { MAX_QUEUE_SIZE } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
 import { commandBus } from '../bus.ts'
 import { addSongs, query } from '../play.ts'
-import { fakeContext, fakeMusic, fakeUi, log, view } from './fakes.ts'
+import { fakeContext, fakeMusic, fakeTextChannel, fakeUi, log, view } from './fakes.ts'
 
 function collector(requests: PlayRequest[], result: { added: number, first: string | null, dropped?: number }): ReturnType<typeof fakeMusic> {
   return fakeMusic({
@@ -54,6 +55,123 @@ describe('query', () => {
     expect(requests[0]?.member).toBe(context.member)
     expect(requests[0]?.voiceChannel ?? null).toBe(context.voiceChannel)
     expect(ui.replies).toEqual([])
+  })
+
+  test('a query shows a typing indicator before searching', async () => {
+    const events: string[] = []
+    const textChannel = {
+      ...fakeTextChannel(),
+      async sendTyping() {
+        events.push('typing')
+      },
+    } as unknown as GuildTextBasedChannel
+    const music = fakeMusic({
+      async play() {
+        events.push('play')
+
+        return { added: 1, first: 'A', dropped: 0 }
+      },
+    })
+    const bus = commandBus({ specs: [query], logger: log })
+
+    await bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music } }))
+
+    expect(events).toEqual(['typing', 'play'])
+  })
+
+  test('a query still searches when the typing indicator fails', async () => {
+    let played = false
+    const textChannel = {
+      ...fakeTextChannel(),
+      async sendTyping() {
+        throw new Error('typing failed')
+      },
+    } as unknown as GuildTextBasedChannel
+    const music = fakeMusic({
+      async play() {
+        played = true
+
+        return { added: 1, first: 'A', dropped: 0 }
+      },
+    })
+    const bus = commandBus({ specs: [query], logger: log })
+
+    const outcome = await bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music } }))
+
+    expect(outcome.kind).toBe('ok')
+    expect(played).toBe(true)
+  })
+
+  test('a query keeps refreshing the typing indicator until it finishes', async () => {
+    jest.useFakeTimers()
+
+    try {
+      let typing = 0
+      let finish: (result: PlayResult) => void = () => {}
+      const textChannel = {
+        ...fakeTextChannel(),
+        async sendTyping() {
+          typing++
+        },
+      } as unknown as GuildTextBasedChannel
+      const music = fakeMusic({
+        play: async () => new Promise<PlayResult>((resolve) => {
+          finish = resolve
+        }),
+      })
+      const bus = commandBus({ specs: [query], logger: log })
+      const running = bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music } }))
+
+      expect(typing).toBe(1)
+
+      jest.advanceTimersByTime(8_000)
+      expect(typing).toBe(2)
+
+      finish({ added: 1, first: 'A', dropped: 0 })
+      await running
+
+      jest.advanceTimersByTime(8_000)
+      expect(typing).toBe(2)
+    }
+    finally {
+      jest.useRealTimers()
+    }
+  })
+
+  test('a query stops refreshing the typing indicator after a minute', async () => {
+    jest.useFakeTimers()
+
+    try {
+      let typing = 0
+      let finish: (result: PlayResult) => void = () => {}
+      const textChannel = {
+        ...fakeTextChannel(),
+        async sendTyping() {
+          typing++
+        },
+      } as unknown as GuildTextBasedChannel
+      const music = fakeMusic({
+        play: async () => new Promise<PlayResult>((resolve) => {
+          finish = resolve
+        }),
+      })
+      const bus = commandBus({ specs: [query], logger: log })
+      const running = bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music } }))
+
+      expect(typing).toBe(1)
+
+      jest.advanceTimersByTime(60_000)
+      expect(typing).toBe(8)
+
+      jest.advanceTimersByTime(8_000)
+      expect(typing).toBe(8)
+
+      finish({ added: 1, first: 'A', dropped: 0 })
+      await running
+    }
+    finally {
+      jest.useRealTimers()
+    }
   })
 
   test('the queue cap confirmation reports kept and total', async () => {

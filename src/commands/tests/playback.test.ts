@@ -66,6 +66,21 @@ describe('playback commands', () => {
     expect(await radio.run({}, fakeContext({ services: { music }, queue: view() }))).toEqual({ radio: true })
   })
 
+  test('radio announces the state it left behind', async () => {
+    const bus = commandBus({ specs: [radio], logger: log })
+
+    for (const enabled of [true, false]) {
+      const ui = fakeUi()
+      const music = fakeMusic({ view: () => view(), radio: async () => enabled })
+
+      const outcome = await bus.run('radio', {}, fakeContext({ ui, services: { music }, queue: view() }))
+
+      expect(outcome).toEqual({ kind: 'ok', data: { radio: enabled } })
+      expect(ui.replies).toEqual([enabled ? MESSAGES.radioEnabled : MESSAGES.radioDisabled])
+      expect(ui.acks()).toBe(0)
+    }
+  })
+
   test('every playback command refuses without a queue', async () => {
     const bus = commandBus({ specs: commands, logger: log })
 

@@ -1,3 +1,4 @@
+import type { GuildTextBasedChannel } from 'discord.js'
 import type { CommandData, CommandSpec } from './spec.ts'
 import { UserError } from '../core/errors.ts'
 import { MAX_QUEUE_SIZE, MAX_SONGS_PER_REQUEST, queueRoom } from '../limits.ts'
@@ -5,6 +6,38 @@ import { MESSAGES } from '../messages.ts'
 import { EMPTY_PARAMETERS } from './parameters.ts'
 
 const NO_SONGS = 'no songs were given'
+const TYPING_REFRESH_MS = 8_000
+const TYPING_MAX_MS = 60_000
+
+// Discord drops a typing indicator after ten seconds; a search, an extraction
+// and the first line can keep the channel quiet for longer than that.
+function keepTyping(channel: GuildTextBasedChannel): () => void {
+  let refresh: ReturnType<typeof setInterval> | null = null
+  let deadline: ReturnType<typeof setTimeout> | null = null
+
+  const send = (): void => {
+    if (typeof channel.sendTyping === 'function')
+      void channel.sendTyping().catch(() => {})
+  }
+
+  const stop = (): void => {
+    if (refresh !== null) {
+      clearInterval(refresh)
+      refresh = null
+    }
+
+    if (deadline !== null) {
+      clearTimeout(deadline)
+      deadline = null
+    }
+  }
+
+  send()
+  refresh = setInterval(send, TYPING_REFRESH_MS)
+  deadline = setTimeout(stop, TYPING_MAX_MS)
+
+  return stop
+}
 
 export const addSongs: CommandSpec = {
   name: 'add_songs',
@@ -75,16 +108,23 @@ export const query: CommandSpec = {
     if (queueRoom(context.queue?.size ?? 0) === 0)
       throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
 
-    const result = await context.services.music.play({
-      kind: 'text',
-      value: text,
-      member: context.member,
-      voiceChannel,
-      textChannel: context.textChannel,
-      announce: true,
-    })
+    const stopTyping = keepTyping(context.textChannel)
 
-    return { added: result.added, dropped: result.dropped }
+    try {
+      const result = await context.services.music.play({
+        kind: 'text',
+        value: text,
+        member: context.member,
+        voiceChannel,
+        textChannel: context.textChannel,
+        announce: true,
+      })
+
+      return { added: result.added, dropped: result.dropped }
+    }
+    finally {
+      stopTyping()
+    }
   },
 }
 

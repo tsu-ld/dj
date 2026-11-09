@@ -159,6 +159,14 @@ describe('nowPlayingMessage', () => {
     expect(field(message?.embeds[0], 'Requested by')).toBe('Unknown')
   })
 
+  test('a song the radio picked is labelled radio', () => {
+    const inherited = nowPlayingMessage(view({ current: track({ requestedBy: 'tsu', fromRadio: true }) }))
+    const anonymous = nowPlayingMessage(view({ current: track({ requestedBy: null, fromRadio: true }) }))
+
+    expect(field(inherited?.embeds[0], 'Requested by')).toBe('Radio')
+    expect(field(anonymous?.embeds[0], 'Requested by')).toBe('Radio')
+  })
+
   test('a card without a current song is not rendered', () => {
     expect(nowPlayingMessage(view({ current: null, size: 0 }))).toBeNull()
   })
