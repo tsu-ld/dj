@@ -62,7 +62,7 @@ src/
 ## Behavior Invariants
 
 - The stream waits for the on-air line: `beforeStream` is awaited before the audio URL is returned, so a spoken line never plays over the music.
-- A prepared line belongs to one song; skip, removal, disconnect and reset delete it. One requested song in three is silent; autoplay speaks one in three; every fifth line is long. Cadence survives a disconnect and resets on a manual clear.
+- A prepared line belongs to one song; skip, removal, disconnect and reset delete it. One requested song in three is silent; autoplay speaks one in three; every fifth line is long. Short lines use the run (who asked, the last song, what comes next); long lines add one fact the model is sure of. Cadence survives a disconnect and resets on a manual clear; the recent-song window lasts half an hour.
 - TTS, quota and model failures skip the line; they never break playback.
 - The conversation has a deadline, tool-round/call caps and a final tool-free answer; history is trimmed to whole exchanges.
 - Every command is authorized against the invoking member before any side effect.

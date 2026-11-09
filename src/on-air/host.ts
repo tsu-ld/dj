@@ -4,6 +4,7 @@ import type { ConversationPort } from '../ports/conversation.ts'
 import type { BeforeStreamInput, MusicPort, QueueView, Track } from '../ports/music.ts'
 import type { SettingsPort } from '../ports/settings.ts'
 import type { SpeechPort } from '../ports/speech.ts'
+import type { PlayedSong } from './station.ts'
 import { rm } from 'node:fs/promises'
 import { errorMessage } from '../core/errors.ts'
 import { buildOnAirPrompt, lineLimit, lineRequest, sanitizeLine } from './script.ts'
@@ -65,7 +66,7 @@ export function onAirHost(deps: {
 
   // The model occasionally spends the whole budget on reasoning and answers
   // with nothing; one retry is cheaper than a silent transition.
-  async function generateLine(guildId: string, track: Track, view: QueueView): Promise<string | null> {
+  async function generateLine(guildId: string, track: Track, view: QueueView, context: { position: number, recent: readonly PlayedSong[], streak: number }): Promise<string | null> {
     if (!model || !speech.available)
       return null
 
@@ -76,6 +77,7 @@ export function onAirHost(deps: {
       track,
       view,
       long,
+      ...context,
     })
 
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -122,7 +124,9 @@ export function onAirHost(deps: {
       return
 
     // Do not spend a model call and a synthesis on a song that stays silent.
-    if (!shouldSpeak(station.nextSongIndex(guildId), track.fromRadio))
+    const position = station.nextSongIndex(guildId)
+
+    if (!shouldSpeak(position, track.fromRadio))
       return
 
     preparing.add(guildId)
@@ -131,7 +135,11 @@ export function onAirHost(deps: {
       // The prompt talks about the song that will be on air, so the queue view
       // is shifted to make that song the current one.
       const nextView: QueueView = { ...view, current: track, upcoming: view.upcoming.slice(1) }
-      const file = await generateLine(guildId, track, nextView)
+      const file = await generateLine(guildId, track, nextView, {
+        position,
+        recent: station.recent(guildId),
+        streak: station.nextStreak(guildId, track),
+      })
 
       if (file === null)
         return
@@ -185,17 +193,21 @@ export function onAirHost(deps: {
     if (!song)
       return
 
-    const index = station.recordSong(input.guildId, song.id)
+    const index = station.recordSong(input.guildId, song)
 
     if (!speech.available || model === null || linesInFlight.has(input.guildId) || input.view.paused)
       return
 
+    // recordSong put this song last; capture the run before any await so a
+    // concurrent transition cannot shift it under the line.
+    const recent = station.recent(input.guildId).slice(0, -1)
+    const streak = station.streak(input.guildId).count
     const { clip, discarded } = station.takePrepared(input.guildId, song.id)
 
-    if (discarded)
-      await remove(discarded.file)
-
     if (!shouldSpeak(index, song.fromRadio)) {
+      if (discarded)
+        await remove(discarded.file)
+
       if (clip !== null)
         await remove(clip.file)
 
@@ -209,9 +221,16 @@ export function onAirHost(deps: {
     let file = clip?.file ?? null
 
     try {
+      if (discarded)
+        await remove(discarded.file)
+
       // A prepared line is the fast path; the first song of a session and the
       // autoplay songs, which cannot be prepared ahead, get one written here.
-      file ??= await generateLine(input.guildId, song, input.view)
+      file ??= await generateLine(input.guildId, song, input.view, {
+        position: index,
+        recent,
+        streak,
+      })
 
       if (file === null)
         return

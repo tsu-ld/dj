@@ -1,7 +1,12 @@
 import type { Clock } from '../../core/clock.ts'
+import type { StationSong } from '../station.ts'
 import { describe, expect, test } from 'bun:test'
-import { PREPARED_CLIP_TTL_MS } from '../../limits.ts'
+import { PREPARED_CLIP_TTL_MS, RADIO_MEMORY_MS, RADIO_MEMORY_SIZE } from '../../limits.ts'
 import { onAirStation, shouldSpeak } from '../station.ts'
+
+function song(id: string, extra: Partial<StationSong> = {}): StationSong {
+  return { id, title: id.toUpperCase(), requestedBy: null, fromRadio: false, ...extra }
+}
 
 interface TestClock extends Clock {
   advance: (milliseconds: number) => void
@@ -64,7 +69,7 @@ describe('cadence', () => {
   test('ending a session keeps the cadence', () => {
     const station = onAirStation({ clock: fakeClock() })
 
-    station.recordSong('g-end', 'a')
+    station.recordSong('g-end', song('a'))
     station.endSession('g-end')
 
     expect(station.nextSongIndex('g-end')).toBe(2)
@@ -74,10 +79,10 @@ describe('cadence', () => {
   test('a manual reset starts the cadence over', () => {
     const station = onAirStation({ clock: fakeClock() })
 
-    station.recordSong('g-reset', 'a')
+    station.recordSong('g-reset', song('a'))
     station.reset('g-reset')
 
-    expect(station.recordSong('g-reset', 'b')).toBe(1)
+    expect(station.recordSong('g-reset', song('b'))).toBe(1)
   })
 
   test('the next song takes the slot right after the one on air', () => {
@@ -85,7 +90,7 @@ describe('cadence', () => {
 
     expect(station.nextSongIndex('g-next')).toBe(1)
 
-    station.recordSong('g-next', 'a')
+    station.recordSong('g-next', song('a'))
 
     expect(station.nextSongIndex('g-next')).toBe(2)
   })
@@ -149,7 +154,7 @@ describe('prepared clips', () => {
   test('ending a session drops the clip without touching the cadence', () => {
     const station = onAirStation({ clock: fakeClock() })
 
-    station.recordSong('g1', 'a')
+    station.recordSong('g1', song('a'))
     station.setPrepared('g1', { songId: 'b', file: '/tmp/b.mp3' })
 
     const clip = station.endSession('g1')
@@ -162,7 +167,7 @@ describe('prepared clips', () => {
   test('a reset drops the clip and the cadence', () => {
     const station = onAirStation({ clock: fakeClock() })
 
-    station.recordSong('g1', 'a')
+    station.recordSong('g1', song('a'))
     station.recordLine('g1')
     station.setPrepared('g1', { songId: 'b', file: '/tmp/b.mp3' })
 
@@ -183,5 +188,107 @@ describe('prepared clips', () => {
 
     expect(clips.toSorted()).toEqual(['/tmp/a.mp3', '/tmp/b.mp3'])
     expect(station.preparedFor('g1', 'a')).toBe(false)
+  })
+})
+
+describe('recent songs', () => {
+  test('keeps the run in order, repeats included', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    station.recordSong('g1', song('a', { title: 'Matador', requestedBy: 'tsu' }))
+    station.recordSong('g1', song('b', { title: 'La Luna', fromRadio: true }))
+    station.recordSong('g1', song('a', { title: 'Matador', requestedBy: 'tsu' }))
+
+    expect(station.recent('g1').map(played => [played.title, played.requestedBy, played.fromRadio])).toEqual([
+      ['Matador', 'tsu', false],
+      ['La Luna', null, true],
+      ['Matador', 'tsu', false],
+    ])
+  })
+
+  test('keeps the window bounded', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    for (let index = 0; index < RADIO_MEMORY_SIZE + 3; index++)
+      station.recordSong('g1', song(String(index)))
+
+    expect(station.recent('g1').map(played => played.id)).toEqual(
+      Array.from({ length: RADIO_MEMORY_SIZE }, (_, index) => String(index + 3)),
+    )
+  })
+
+  test('forgets a song after half an hour', () => {
+    const clock = fakeClock()
+    const station = onAirStation({ clock })
+
+    station.recordSong('g1', song('a'))
+    clock.advance(RADIO_MEMORY_MS)
+
+    expect(station.recent('g1')).toHaveLength(1)
+
+    clock.advance(1)
+
+    expect(station.recent('g1')).toHaveLength(0)
+  })
+
+  test('a disconnect keeps the recent songs and a reset drops them', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    station.recordSong('g1', song('a'))
+    station.endSession('g1')
+
+    expect(station.recent('g1')).toHaveLength(1)
+
+    station.reset('g1')
+
+    expect(station.recent('g1')).toHaveLength(0)
+  })
+})
+
+describe('request streaks', () => {
+  test('counts past the history window and predicts the next song', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    for (let index = 0; index < RADIO_MEMORY_SIZE + 4; index++)
+      station.recordSong('g1', song(String(index), { requestedBy: 'tsu' }))
+
+    expect(station.streak('g1')).toEqual({ requester: 'tsu', count: RADIO_MEMORY_SIZE + 4 })
+    expect(station.nextStreak('g1', song('next', { requestedBy: 'tsu' }))).toBe(RADIO_MEMORY_SIZE + 5)
+    expect(station.nextStreak('g1', song('other', { requestedBy: 'ana' }))).toBe(1)
+    expect(station.nextStreak('g1', song('radio', { fromRadio: true }))).toBe(0)
+  })
+
+  test('a radio song breaks the streak', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    station.recordSong('g1', song('a', { requestedBy: 'tsu' }))
+    station.recordSong('g1', song('b', { fromRadio: true }))
+    station.recordSong('g1', song('c', { requestedBy: 'tsu' }))
+
+    expect(station.streak('g1')).toEqual({ requester: 'tsu', count: 1 })
+  })
+
+  test('a reset forgets the streak and a disconnect keeps it', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    station.recordSong('g1', song('a', { requestedBy: 'tsu' }))
+    station.endSession('g1')
+
+    expect(station.streak('g1').count).toBe(1)
+
+    station.reset('g1')
+
+    expect(station.streak('g1')).toEqual({ requester: null, count: 0 })
+  })
+
+  test('a streak ages out with the recent window', () => {
+    const clock = fakeClock()
+    const station = onAirStation({ clock })
+
+    station.recordSong('g1', song('a', { requestedBy: 'tsu' }))
+    clock.advance(RADIO_MEMORY_MS + 1)
+
+    expect(station.streak('g1')).toEqual({ requester: null, count: 0 })
+    expect(station.nextStreak('g1', song('b', { requestedBy: 'tsu' }))).toBe(1)
   })
 })

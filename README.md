@@ -8,7 +8,7 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 
 - **No tag needed**: in the listening channel, the fast router reads the intent of every message. "pausá" pauses, "mostrame la cola" shows the queue, "cumbia" plays a search, and a mood like "poneme algo tranqui" goes to the DJ.
 - **Talk to it like a DJ**: tag the bot with a plain request ("poneme algo tranqui de rock nacional") and it chooses the songs, queues them and answers in character.
-- **Radio voice**: with a voice configured, the DJ speaks in the gap before a song starts and never over it. One song in three runs without a line, autoplay songs talk less, and every fifth line is a longer radio rant.
+- **Radio voice**: with a voice configured, the DJ speaks in the gap before a song starts and never over it. One song in three runs without a line and autoplay songs talk less. Short lines keep the run moving (who asked, what just played, what comes next); every fifth line is longer and gets one fact about the song or artist, only when the model is sure of it.
 - **Personality per server**: ask it to talk a certain way (`@DJ sé un dj cumbiero`) and the setting lives with the server.
 - **Play anything**: YouTube links and search terms, and `open.spotify.com` links (track, album, playlist, artist). Other pasted links are rejected before they reach the extractor.
 - **Full control surface**: pause, resume, skip, shuffle, radio, clear (the button asks for confirmation) and a paginated queue view, as buttons on the now-playing message or by asking `@DJ` in plain language.
@@ -93,7 +93,7 @@ The internals are described in [docs/architecture.md](docs/architecture.md): cap
    export SPEECH_MODEL_ID=eleven_v4  # optional
    ```
 
-   The line is written while the previous song plays and airs in the gap, so the music never plays underneath it. The first song after a reconnect, and the autoplay songs, are written on the spot. The provider checks its character quota every five minutes and skips lines when the period is exhausted, so the free tier never breaks playback. Lines are capped at 95 characters (one long line of up to 200 characters every fifth line), with audio tags (`[laughs]`, `[sighs]`, `[excited]`) for a performed delivery.
+   The line is written while the previous song plays and airs in the gap, so the music never plays underneath it. The first song after a reconnect, and the autoplay songs, are written on the spot. The provider checks its character quota every five minutes and skips lines when the period is exhausted, so the free tier never breaks playback. Lines target 100 characters and are hard-capped at 120; the fifth line targets 210 and is capped at 230. Audio tags (`[laughs]`, `[sighs]`, `[excited]`) direct the delivery.
 
 7. **(Optional) welcome audio**: put an MP3 at `assets/welcome.mp3`.
 

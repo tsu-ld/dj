@@ -252,9 +252,13 @@ describe('beforeStream', () => {
     expect(request.maxOutputTokens).toBe(1_200)
     expect(request.reasoning).toBe('none')
     expect(request.sessionId).toBe('voice:g1')
-    expect(request.messages).toEqual([{ role: 'user', content: 'Take it away.' }])
+    expect(request.messages).toEqual([{
+      role: 'user',
+      content: 'Open the next stretch: one fact about this song or artist the listener does not know, then a hand-off to what follows.',
+    }])
     expect(request.instructions).toContain('two sentences')
-    expect(request.instructions).toContain('200')
+    expect(request.instructions).toContain('210')
+    expect(request.instructions).toContain('This is song 1 of this session.')
   })
 
   test('airs the prepared line without calling the model again', async () => {
@@ -277,6 +281,8 @@ describe('beforeStream', () => {
 
     expect(prepareRequest.instructions).toContain('Playing now: B')
     expect(prepareRequest.instructions).toContain('one sentence')
+    expect(prepareRequest.instructions).toContain('Just played: A')
+    expect(prepareRequest.instructions).toContain('This is song 2 of this session.')
   })
 
   test('a silent slot asks for no line and prepares the song after it', async () => {
@@ -405,10 +411,10 @@ describe('beforeStream', () => {
   })
 
   test('a speech skip airs nothing and leaves the long slot', async () => {
-    const model = fakeModel([line('A'), line('B')])
+    const model = fakeModel([line('A'), line('B'), line('B again')])
     const speech = fakeSpeech({ synthesize: async () => null })
     const { host, music } = createHost({ model: model.port, speech: speech.port })
-    const [a, b] = [track('A'), track('B')]
+    const [a, b] = [track('A', { requestedBy: 'tsu' }), track('B', { requestedBy: 'tsu' })]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
 
@@ -419,6 +425,61 @@ describe('beforeStream', () => {
 
     expect(music.clips).toHaveLength(0)
     expect(model.requests[1]?.instructions).toContain('two sentences')
+    expect(model.requests[1]?.instructions).toContain('Requests in a row from tsu: 2, including this one.')
+    expect(model.requests[1]?.instructions).toContain('Just played: A')
+    expect(model.requests[1]?.instructions).not.toContain('Just played: B')
+  })
+
+  test('a repeated song keeps the earlier play in the run', async () => {
+    const model = fakeModel([line('A'), line('B'), line('A again')])
+    const speech = fakeSpeech()
+    const { host } = createHost({ model: model.port, speech: speech.port })
+    const [a, b, c] = [track('A'), track('B'), track('C')]
+
+    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b, c, a] }) })
+    await waitFor(() => model.requests.length === 2 && speech.calls.length === 2)
+
+    await host.beforeStream({ guildId: 'g1', view: view({ current: b, upcoming: [c, a] }) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: c, upcoming: [a] }) })
+    await waitFor(() => model.requests.length === 3)
+
+    expect(model.requests[2]?.instructions).toContain('Just played: A | B | C')
+    expect(model.requests[2]?.instructions).toContain('This is song 4 of this session.')
+
+    await host.dispose()
+  })
+
+  test('a prepared long line counts the streak across the whole run', async () => {
+    const model = fakeModel([line('A'), line('B'), line('D'), line('E'), line('G'), line('H')])
+    const speech = fakeSpeech()
+    const { host } = createHost({ model: model.port, speech: speech.port })
+    const tracks = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(title => track(title, { requestedBy: 'tsu' }))
+    const at = (index: number) => view({ current: tracks[index], upcoming: tracks.slice(index + 1) })
+
+    await host.beforeStream({ guildId: 'g1', view: at(0) })
+    await waitFor(() => model.requests.length === 2)
+
+    await host.beforeStream({ guildId: 'g1', view: at(1) })
+    await host.beforeStream({ guildId: 'g1', view: at(2) })
+    await waitFor(() => model.requests.length === 3)
+
+    await host.beforeStream({ guildId: 'g1', view: at(3) })
+    await waitFor(() => model.requests.length === 4)
+
+    await host.beforeStream({ guildId: 'g1', view: at(4) })
+    await host.beforeStream({ guildId: 'g1', view: at(5) })
+    await waitFor(() => model.requests.length === 5)
+
+    await host.beforeStream({ guildId: 'g1', view: at(6) })
+    await waitFor(() => model.requests.length === 6)
+
+    const prepared = model.requests[5]?.instructions ?? ''
+
+    expect(prepared).toContain('two sentences')
+    expect(prepared).toContain('This is song 8 of this session.')
+    expect(prepared).toContain('Requests in a row from tsu: 8, including this one.')
+
+    await host.dispose()
   })
 
   test('a playlist prepares the first song it added', async () => {

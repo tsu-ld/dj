@@ -114,6 +114,11 @@ counters decide what happens next.
 
 - cadence: one requested song in three is silent, autoplay speaks one in three,
   every fifth line is long, the first line is long;
+- the station keeps the last eight songs for half an hour; the prompt carries the
+  song number, the last four, the next two or three, who asked, and the request
+  streak on long lines. A short line names the run (who asked, what just played,
+  what comes next); a long line adds one fact the model is sure of, never an
+  invented story, a credit or an artist count;
 - a prepared clip belongs to one song, expires after 20 minutes, and is deleted
   on skip, removal, reset, disconnect or dispose;
 - generation runs while the current song plays, with an 8s timeout, two attempts,
@@ -121,7 +126,8 @@ counters decide what happens next.
 - any failure (model, quota, speech, clip playback) skips the line and never
   throws into the stream.
 
-Cadence survives a disconnect; a manual clear resets it.
+Cadence survives a disconnect; a manual clear resets it. The recent-song window
+also survives a disconnect and ages out after half an hour.
 
 ## Prompts
 
@@ -129,7 +135,9 @@ Every prompt is built in `dj/prompts.ts` or `on-air/script.ts`. Untrusted text
 (song titles, display names, persona) goes through `oneLine` and a `dataBlock`
 with a fixed tag. `oneLine` strips angle brackets, so data cannot close its block;
 the rules state that the block is data, never instructions. Speaker language comes
-from the user's message, not from configuration.
+from the user's message, not from configuration. The on-air block is the only truth
+for the queue and the run; anything the model adds about the music must be a fact
+it is sure of.
 
 ## Failure model
 
