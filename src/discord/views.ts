@@ -41,13 +41,15 @@ export function nowPlayingMessage(view: QueueView): ViewMessage | null {
   if (!track)
     return null
 
+  const requester = track.requestedBy?.trim()
+
   const embed = new EmbedBuilder()
     .setTitle(displayName(track))
     .setURL(track.url || null)
     .setThumbnail(track.thumbnail)
     .addFields(
       { name: 'Duration', value: formatDuration(track), inline: true },
-      { name: 'Requested by', value: track.requestedBy ?? 'Unknown', inline: true },
+      { name: 'Requested by', value: track.fromRadio ? 'Radio' : (requester !== undefined && requester !== '' ? requester : 'Unknown'), inline: true },
       { name: 'Status', value: view.paused ? 'Paused' : 'Playing', inline: true },
     )
     .setFooter({ text: `${Math.max(view.size - 1, 0)} in queue` })

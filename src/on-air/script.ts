@@ -53,16 +53,18 @@ export function buildOnAirPrompt(input: {
   const target = lineTarget(input.long)
   const facts = [`Playing now: ${oneLine(displayName(input.track))}`]
 
-  if (input.track.requestedBy !== null && input.track.requestedBy !== '') {
+  // Autoplay songs inherit the member who started the queue, so the radio flag
+  // wins: a radio pick was never requested by that person.
+  if (input.track.fromRadio) {
+    facts.push('Nobody requested this song: the radio picked it.')
+  }
+  else if (input.track.requestedBy !== null && input.track.requestedBy !== '') {
     facts.push(`Requested by: ${oneLine(input.track.requestedBy)}`)
 
     // The count is the long line's payoff; on a short line it would become the
     // same opening every song.
     if (input.long && input.streak > 1)
       facts.push(`Requests in a row from ${oneLine(input.track.requestedBy)}: ${input.streak}, including this one.`)
-  }
-  else if (input.track.fromRadio) {
-    facts.push('Nobody requested this song: the radio picked it.')
   }
 
   facts.push(`This is song ${input.position} of this session.`)

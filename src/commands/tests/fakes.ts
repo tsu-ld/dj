@@ -44,7 +44,11 @@ export function fakeMember(options: { allowed?: boolean, voiceChannel?: VoiceBas
 }
 
 export function fakeTextChannel(id = '2'): GuildTextBasedChannel {
-  return { id, isTextBased: () => true } as unknown as GuildTextBasedChannel
+  return {
+    id,
+    isTextBased: () => true,
+    async sendTyping() {},
+  } as unknown as GuildTextBasedChannel
 }
 
 export interface MusicRecorder extends MusicPort {

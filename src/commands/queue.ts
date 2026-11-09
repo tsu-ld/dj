@@ -64,6 +64,9 @@ export const clear: CommandSpec = {
   description: 'Stop the music, clear the queue and leave the voice channel. Users say: cortala, limpiá la cola, cortá todo, pará todo, clear, stop the music, stop everything, leave, chau.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
+  // The button path renders its own confirmation; a text path needs an answer
+  // more explicit than the generic ack reaction.
+  confirm: (_data, context) => context.message === null ? null : MESSAGES.cleared,
   async run(_args, context) {
     await context.services.music.stop(context.guildId, { resetStation: true })
 

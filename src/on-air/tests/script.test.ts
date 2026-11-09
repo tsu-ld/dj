@@ -91,6 +91,13 @@ describe('buildOnAirPrompt', () => {
     const text = prompt({ persona: 'un dj', song: track('Tema', { fromRadio: true }), long: false })
 
     expect(text).toContain('Nobody requested this song: the radio picked it.')
+  })
+
+  test('a radio pick with a member attached is still nobody\'s request', () => {
+    const text = prompt({ persona: 'un dj', song: track('Tema', { requestedBy: 'tsu', fromRadio: true }), long: false })
+
+    expect(text).toContain('Nobody requested this song: the radio picked it.')
+    expect(text).not.toContain('Requested by:')
     expect(text).not.toContain('Requested by')
   })
 

@@ -2,7 +2,7 @@ import type { Logger } from '../core/logger.ts'
 import type { ToolSpec } from '../ports/conversation.ts'
 import type { DecisionOption } from '../ports/decision.ts'
 import type { CommandBus, CommandContext, CommandOutcome, CommandSpec } from './spec.ts'
-import { isUserError } from '../core/errors.ts'
+import { errorMessage, isUserError } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
 
 function toTool(spec: CommandSpec): ToolSpec {
@@ -54,12 +54,20 @@ export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger
       spec.authorize?.(scoped)
 
       const data = await spec.run(args, scoped)
-      const confirmation = spec.confirm?.(data, scoped) ?? null
 
-      if (confirmation !== null)
-        await scoped.ui.reply(confirmation)
-      else if (spec.ack !== false)
-        await scoped.ui.ack()
+      try {
+        const confirmation = spec.confirm?.(data, scoped) ?? null
+
+        if (confirmation !== null)
+          await scoped.ui.reply(confirmation)
+        else if (spec.ack !== false)
+          await scoped.ui.ack()
+      }
+      catch (error) {
+        // The action already happened: a missing reaction or a deleted channel
+        // must not be reported as a failed command.
+        deps.logger.warn('command.feedback_failed', { name, error: errorMessage(error) })
+      }
 
       return { kind: 'ok', data }
     }

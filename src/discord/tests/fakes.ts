@@ -135,6 +135,7 @@ export interface InteractionOptions {
   guildId?: string | null
   channel?: GuildTextBasedChannel | null
   member?: GuildMember
+  failEditReply?: boolean
 }
 
 export interface InteractionRecorder {
@@ -179,6 +180,9 @@ export function fakeInteraction(options: InteractionOptions): InteractionRecorde
       followUps.push(payload)
     },
     async editReply(payload: string | InteractionEditReplyOptions) {
+      if (options.failEditReply)
+        throw new Error('edit reply failed')
+
       editReplies.push(payload)
     },
   }

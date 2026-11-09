@@ -1,4 +1,5 @@
 import type { CommandSpec } from './spec.ts'
+import { MESSAGES } from '../messages.ts'
 import { EMPTY_PARAMETERS } from './parameters.ts'
 
 export const pause: CommandSpec = {
@@ -75,6 +76,9 @@ export const radio: CommandSpec = {
   description: 'Turn the radio on or off: when it is on, related songs keep playing after the queue runs dry. Users say: prendé la radio, apagá la radio, modo radio.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
+  confirm: data => typeof data?.radio === 'boolean'
+    ? (data.radio ? MESSAGES.radioEnabled : MESSAGES.radioDisabled)
+    : null,
   async run(_args, context) {
     const enabled = await context.services.music.radio(context.guildId)
 

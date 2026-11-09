@@ -5,6 +5,7 @@ import type { MusicPort, QueueView } from '../ports/music.ts'
 import type { SettingsPort } from '../ports/settings.ts'
 import type { MessageSlot } from './slot.ts'
 import { MessageFlags } from 'discord.js'
+import { errorMessage } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
 import { clearConfirmation, queueMessage } from './views.ts'
 
@@ -132,10 +133,16 @@ async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction
     return
   }
 
-  await interaction.editReply({
-    content: outcome.kind === 'ok' ? '✅' : outcome.message,
-    components: [],
-  })
+  try {
+    await interaction.editReply({
+      content: outcome.kind === 'ok' ? MESSAGES.cleared : outcome.message,
+      components: [],
+    })
+  }
+  catch (error) {
+    // The clear already happened; an expired prompt is not a failed command.
+    deps.logger.warn('discord.clear_feedback_failed', { error: errorMessage(error) })
+  }
 }
 
 async function handleQueuePage(deps: InteractionHandlerDeps, interaction: ButtonInteraction): Promise<void> {
