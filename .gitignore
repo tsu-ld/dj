@@ -30,5 +30,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 config.json
 data/
 
+# agent findings
+FINDINGS.md
+
 # binary assets
 assets/
