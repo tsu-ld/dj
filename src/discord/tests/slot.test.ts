@@ -1,11 +1,30 @@
 import type { QueueView } from '../../ports/music.ts'
+import type { ViewMessage } from '../views.ts'
 import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test'
+import { ComponentType } from 'discord.js'
 import { log, track, view } from '../../commands/tests/fakes.ts'
 import { NOW_PLAYING_REPOST_MS } from '../../limits.ts'
 import { messageSlot } from '../slot.ts'
 import { fakeChannel } from './fakes.ts'
 
 const GUILD = '123456789012345678'
+
+function cardText(payload: ViewMessage | undefined): string {
+  const container = payload?.components[0]?.toJSON()
+
+  if (!container)
+    return ''
+
+  return container.components.flatMap((component) => {
+    if (component.type === ComponentType.TextDisplay)
+      return [component.content]
+
+    if (component.type === ComponentType.Section)
+      return component.components.map(child => child.content)
+
+    return []
+  }).join('\n')
+}
 
 // Writes are serialized through promises, so a fake timer tick still needs a
 // few microtask turns before the card is on the fake channel.
@@ -39,7 +58,7 @@ describe('messageSlot', () => {
     await settle()
 
     expect(channel.sent).toHaveLength(1)
-    expect(channel.sent[0]?.payload.embeds[0]?.toJSON().title).toBe('Song 1')
+    expect(cardText(channel.sent[0]?.payload)).toContain('## [Song 1]')
 
     slot.dispose()
   })
@@ -56,7 +75,7 @@ describe('messageSlot', () => {
 
     expect(channel.sent).toHaveLength(1)
     expect(channel.sent[0]?.edits).toHaveLength(1)
-    expect(channel.sent[0]?.edits[0]?.embeds[0]?.toJSON().fields?.find(field => field.name === 'Status')?.value).toBe('Paused')
+    expect(cardText(channel.sent[0]?.edits[0])).toContain('**Paused**')
 
     slot.dispose()
   })
@@ -126,7 +145,7 @@ describe('messageSlot', () => {
 
     expect(first?.deletions()).toBe(1)
     expect(channel.sent).toHaveLength(2)
-    expect(channel.sent[1]?.payload.embeds[0]?.toJSON().title).toBe('Next')
+    expect(cardText(channel.sent[1]?.payload)).toContain('## [Next]')
 
     slot.dispose()
   })
@@ -196,7 +215,7 @@ describe('messageSlot', () => {
 
     expect(first?.deletions()).toBe(1)
     expect(channel.sent).toHaveLength(2)
-    expect(channel.sent[1]?.payload.embeds[0]?.toJSON().title).toBe('Queue (3 songs)')
+    expect(cardText(channel.sent[1]?.payload)).toContain('3 songs')
 
     slot.dispose()
   })
@@ -209,7 +228,7 @@ describe('messageSlot', () => {
     await settle()
 
     expect(channel.sent).toHaveLength(1)
-    expect(channel.sent[0]?.payload.embeds[0]?.toJSON().title).toBe('Queue (4 songs)')
+    expect(cardText(channel.sent[0]?.payload)).toContain('4 songs')
 
     slot.dispose()
   })

@@ -138,11 +138,16 @@ export interface InteractionOptions {
   failEditReply?: boolean
 }
 
+export interface CardEdit extends ViewMessage {
+  readonly content?: string | null
+  readonly embeds?: readonly unknown[]
+}
+
 export interface InteractionRecorder {
   readonly replies: (string | InteractionReplyOptions)[]
   readonly followUps: InteractionReplyOptions[]
   readonly editReplies: (string | InteractionEditReplyOptions)[]
-  readonly edits: ViewMessage[]
+  readonly edits: CardEdit[]
   readonly deferredUpdates: () => number
   readonly interaction: ButtonInteraction
 }
@@ -151,7 +156,7 @@ export function fakeInteraction(options: InteractionOptions): InteractionRecorde
   const replies: (string | InteractionReplyOptions)[] = []
   const followUps: InteractionReplyOptions[] = []
   const editReplies: (string | InteractionEditReplyOptions)[] = []
-  const edits: ViewMessage[] = []
+  const edits: CardEdit[] = []
   const member = options.member ?? fakeMember()
   let deferred = 0
   const message = {

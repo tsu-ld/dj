@@ -1,29 +1,65 @@
-import type { ActionRowBuilder, EmbedBuilder, MessageActionRowComponentBuilder } from 'discord.js'
+import type { ContainerBuilder } from 'discord.js'
 import type { QueueView } from '../../ports/music.ts'
+import type { ViewMessage } from '../views.ts'
 import { describe, expect, test } from 'bun:test'
 import { ButtonStyle, ComponentType, MessageFlags } from 'discord.js'
 import { track, view } from '../../commands/tests/fakes.ts'
-import { clearConfirmation, nowPlayingMessage, queueMessage } from '../views.ts'
+import { clearConfirmation, noticeMessage, nowPlayingMessage, queueMessage } from '../views.ts'
+
+type ContainerJson = ReturnType<ContainerBuilder['toJSON']>
+type ChildJson = ContainerJson['components'][number]
 
 interface ButtonInfo {
   readonly customId: string
   readonly label: string
   readonly disabled: boolean
   readonly style: number
+  readonly emoji: string | null
 }
 
-function buttonsOf(components: readonly ActionRowBuilder<MessageActionRowComponentBuilder>[]): ButtonInfo[] {
-  return components.flatMap(row => row.toJSON().components.flatMap((component) => {
-    if (component.type !== ComponentType.Button || !('custom_id' in component))
+function containerOf(message: ViewMessage): ContainerJson {
+  const container = message.components[0]
+
+  if (!container)
+    throw new Error('missing container')
+
+  return container.toJSON()
+}
+
+function textsOf(message: ViewMessage): string[] {
+  return containerOf(message).components.flatMap((component: ChildJson) => {
+    if (component.type === ComponentType.TextDisplay)
+      return [component.content]
+
+    if (component.type === ComponentType.Section)
+      return component.components.map(child => child.content)
+
+    return []
+  })
+}
+
+function textMatching(message: ViewMessage, pattern: RegExp): string | undefined {
+  return textsOf(message).find(value => pattern.test(value))
+}
+
+function buttonsOf(message: ViewMessage): ButtonInfo[] {
+  return containerOf(message).components.flatMap((component) => {
+    if (component.type !== ComponentType.ActionRow)
       return []
 
-    return [{
-      customId: component.custom_id,
-      label: component.label ?? '',
-      disabled: component.disabled ?? false,
-      style: component.style,
-    }]
-  }))
+    return component.components.flatMap((child) => {
+      if (child.type !== ComponentType.Button || !('custom_id' in child))
+        return []
+
+      return [{
+        customId: child.custom_id,
+        label: child.label ?? '',
+        disabled: child.disabled ?? false,
+        style: child.style,
+        emoji: child.emoji?.name ?? null,
+      }]
+    })
+  })
 }
 
 function queueOf(count: number): QueueView {
@@ -37,24 +73,23 @@ function queueOf(count: number): QueueView {
   })
 }
 
-function footer(embed: EmbedBuilder | undefined): string | undefined {
-  return embed?.toJSON().footer?.text
-}
+function queueLines(message: ViewMessage): string[] {
+  const list = textsOf(message).find(value => /^\d/.test(value) || value.startsWith('▶'))
 
-function field(embed: EmbedBuilder | undefined, name: string): string | undefined {
-  return embed?.toJSON().fields?.find(entry => entry.name === name)?.value
+  return list?.split('\n') ?? []
 }
 
 describe('queueMessage', () => {
   test('the first queue page lists ten songs and disables previous', () => {
     const message = queueMessage(queueOf(15), 1)
-    const data = message.embeds[0]?.toJSON()
+    const lines = queueLines(message)
 
-    expect(data?.description?.split('\n')).toHaveLength(10)
-    expect(data?.description?.split('\n')[0]).toBe('1. Song 1')
-    expect(footer(message.embeds[0])).toBe('Page 1 of 2')
+    expect(lines).toHaveLength(10)
+    expect(lines[0]).toBe('▶ 1. Song 1 · 3:00')
+    expect(textMatching(message, /Page 1 of 2/)).toBeDefined()
+    expect(textMatching(message, /15 songs/)).toBeDefined()
 
-    const [previous, next] = buttonsOf(message.components)
+    const [previous, next] = buttonsOf(message)
 
     expect(previous?.disabled).toBe(true)
     expect(next?.disabled).toBe(false)
@@ -63,108 +98,206 @@ describe('queueMessage', () => {
   })
 
   test('the second queue page lists the rest and disables next', () => {
-    const message = queueMessage(queueOf(15), 2)
-    const lines = message.embeds[0]?.toJSON().description?.split('\n') ?? []
+    const lines = queueLines(queueMessage(queueOf(15), 2))
 
     expect(lines).toHaveLength(5)
-    expect(lines[0]).toBe('11. Song 11')
+    expect(lines[0]).toBe('11. Song 11 · 3:00')
 
-    const [previous, next] = buttonsOf(message.components)
+    const [previous, next] = buttonsOf(queueMessage(queueOf(15), 2))
 
     expect(previous?.disabled).toBe(false)
     expect(next?.disabled).toBe(true)
   })
 
   test('out-of-range pages are clamped to the real pages', () => {
-    expect(footer(queueMessage(queueOf(15), 0).embeds[0])).toBe('Page 1 of 2')
-    expect(footer(queueMessage(queueOf(15), 99).embeds[0])).toBe('Page 2 of 2')
+    expect(textMatching(queueMessage(queueOf(15), 0), /Page 1 of 2/)).toBeDefined()
+    expect(textMatching(queueMessage(queueOf(15), 99), /Page 2 of 2/)).toBeDefined()
   })
 
-  test('an empty queue is one empty page', () => {
+  test('an empty queue explains how to start it', () => {
     const message = queueMessage(queueOf(0), 1)
-    const data = message.embeds[0]?.toJSON()
 
-    expect(data?.title).toBe('Queue (0 songs)')
-    expect(data?.description).toBe('Empty')
-    expect(footer(message.embeds[0])).toBe('Page 1 of 1')
-
-    for (const button of buttonsOf(message.components))
-      expect(button.disabled).toBe(true)
+    expect(textMatching(message, /^## Queue/m)).toContain('Nothing queued yet.')
+    expect(textMatching(message, /Ask me for a song/)).toBeDefined()
+    expect(buttonsOf(message)).toEqual([])
+    expect(containerOf(message).accent_color).toBe(0x57F287)
   })
 
-  test('the current song is position one and the upcoming songs follow', () => {
-    const message = queueMessage(queueOf(3), 1)
-    const lines = message.embeds[0]?.toJSON().description?.split('\n') ?? []
+  test('a single page has no paging controls', () => {
+    expect(buttonsOf(queueMessage(queueOf(3), 1))).toEqual([])
+  })
 
-    expect(lines).toEqual(['1. Song 1', '2. Song 2', '3. Song 3'])
+  test('the current song is marked first and the upcoming songs follow', () => {
+    const lines = queueLines(queueMessage(queueOf(3), 1))
+
+    expect(lines).toEqual(['▶ 1. Song 1 · 3:00', '2. Song 2 · 3:00', '3. Song 3 · 3:00'])
+  })
+
+  test('the total duration is shown once and unknown songs are marked', () => {
+    const known = queueMessage(queueOf(3), 1)
+    const mixed = queueMessage(view({
+      current: track(),
+      upcoming: [track({ id: 'track-2', title: 'Song 2', durationSeconds: 0 })],
+      size: 2,
+    }), 1)
+
+    expect(textMatching(known, /3 songs · 9m/)).toBeDefined()
+    expect(textMatching(mixed, /2 songs · ~3m/)).toBeDefined()
+  })
+
+  test('titles are escaped so markdown cannot change the list', () => {
+    const message = queueMessage(view({
+      current: track({ title: '*Song* [1]' }),
+      size: 1,
+    }), 1)
+
+    expect(queueLines(message)[0]).toBe('▶ 1. \\*Song\\* \\[1\\] · 3:00')
+  })
+
+  test('a paused queue uses the paused accent', () => {
+    expect(containerOf(queueMessage(view({ paused: true, size: 1 }), 1)).accent_color).toBe(0xFEE75C)
   })
 })
 
+function card(input: QueueView): ViewMessage {
+  const message = nowPlayingMessage(input)
+
+  if (!message)
+    throw new Error('missing now-playing card')
+
+  return message
+}
+
 describe('nowPlayingMessage', () => {
   test('the card shows the paused state', () => {
-    const playing = nowPlayingMessage(queueOf(2))
-    const paused = nowPlayingMessage(view({ paused: true, size: 2 }))
+    const playing = card(queueOf(2))
+    const paused = card(view({ paused: true, size: 2 }))
 
-    expect(field(playing?.embeds[0], 'Status')).toBe('Playing')
-    expect(field(paused?.embeds[0], 'Status')).toBe('Paused')
+    expect(textMatching(playing, /\*\*Playing\*\*/)).toBeDefined()
+    expect(textMatching(paused, /\*\*Paused\*\*/)).toBeDefined()
+    expect(containerOf(playing).accent_color).toBe(0x57F287)
+    expect(containerOf(paused).accent_color).toBe(0xFEE75C)
   })
 
   test('the toggle button names the action it triggers', () => {
-    const playing = buttonsOf(nowPlayingMessage(queueOf(2))?.components ?? [])
-    const paused = buttonsOf(nowPlayingMessage(view({ paused: true, size: 2 }))?.components ?? [])
+    const playing = buttonsOf(card(queueOf(2)))
+    const paused = buttonsOf(card(view({ paused: true, size: 2 })))
 
     expect(playing[0]?.label).toBe('Pause')
     expect(paused[0]?.label).toBe('Resume')
+    expect(playing[0]?.emoji).toBe('⏸️')
+    expect(paused[0]?.emoji).toBe('▶️')
   })
 
-  test('the buttons, radio state and queue count match the old card', () => {
-    const message = nowPlayingMessage(view({ radio: true, size: 4 }))
-    const buttons = buttonsOf(message?.components ?? [])
+  test('the buttons, radio state and queue count match the card', () => {
+    const upcoming = Array.from({ length: 3 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` }))
+    const message = card(view({ radio: true, size: 4, upcoming }))
+    const buttons = buttonsOf(message)
 
     expect(buttons.map(button => button.customId)).toEqual([
       'np:toggle',
       'np:skip',
-      'np:radio',
       'np:shuffle',
-      'np:clear',
+      'np:radio',
       'np:queue',
+      'np:clear',
     ])
-    expect(buttons[2]?.style).toBe(ButtonStyle.Success)
-    expect(buttons[4]?.style).toBe(ButtonStyle.Danger)
-    expect(footer(message?.embeds[0])).toBe('3 in queue')
+    expect(buttons[3]?.style).toBe(ButtonStyle.Success)
+    expect(buttons[5]?.label).toBe('Leave')
+    expect(buttons[5]?.style).toBe(ButtonStyle.Danger)
+    expect(textMatching(message, /3 in queue · radio on/)).toBeDefined()
   })
 
-  test('a song without a duration gets a safe placeholder', () => {
-    const message = nowPlayingMessage(view({ current: track({ durationSeconds: 0 }) }))
+  test('a song playing alone does not claim a queue', () => {
+    expect(textMatching(card(view({ size: 1 })), /in queue/)).toBeUndefined()
+  })
 
-    expect(field(message?.embeds[0], 'Duration')).toBe('Unknown')
-    expect(field(message?.embeds[0], 'Duration')?.length ?? 0).toBeGreaterThan(0)
+  test('a song without a duration leaves the label out', () => {
+    const message = card(view({ current: track({ durationSeconds: 0 }) }))
+    const status = textMatching(message, /\*\*Playing\*\*/) ?? ''
+
+    expect(status).toContain('**Playing**')
+    expect(status).not.toContain('Unknown')
   })
 
   test('a live song is labelled live', () => {
-    const message = nowPlayingMessage(view({ current: track({ isLive: true }) }))
-
-    expect(field(message?.embeds[0], 'Duration')).toBe('Live')
+    expect(textMatching(card(view({ current: track({ isLive: true }) })), /\*\*Playing\*\* · Live/)).toBeDefined()
   })
 
   test('a known duration is formatted in minutes and seconds', () => {
-    const message = nowPlayingMessage(view({ current: track({ durationSeconds: 185 }) }))
-
-    expect(field(message?.embeds[0], 'Duration')).toBe('3:05')
+    expect(textMatching(card(view({ current: track({ durationSeconds: 185 }) })), /\*\*Playing\*\* · 3:05/)).toBeDefined()
   })
 
-  test('an unknown requester is labelled unknown', () => {
-    const message = nowPlayingMessage(view({ current: track({ requestedBy: null }) }))
+  test('an unknown requester is left out instead of labelled unknown', () => {
+    const status = textMatching(card(view({ current: track({ requestedBy: null }) })), /\*\*Playing\*\*/) ?? ''
 
-    expect(field(message?.embeds[0], 'Requested by')).toBe('Unknown')
+    expect(status).not.toContain('Requested by')
+    expect(status).not.toContain('Unknown')
   })
 
-  test('a song the radio picked is labelled radio', () => {
-    const inherited = nowPlayingMessage(view({ current: track({ requestedBy: 'tsu', fromRadio: true }) }))
-    const anonymous = nowPlayingMessage(view({ current: track({ requestedBy: null, fromRadio: true }) }))
+  test('a song the radio picked credits the radio', () => {
+    const inherited = card(view({ current: track({ requestedBy: 'tsu', fromRadio: true }) }))
+    const anonymous = card(view({ current: track({ requestedBy: null, fromRadio: true }) }))
 
-    expect(field(inherited?.embeds[0], 'Requested by')).toBe('Radio')
-    expect(field(anonymous?.embeds[0], 'Requested by')).toBe('Radio')
+    expect(textMatching(inherited, /Picked by radio/)).toBeDefined()
+    expect(textMatching(anonymous, /Picked by radio/)).toBeDefined()
+  })
+
+  test('the next songs are previewed with their queue positions', () => {
+    const current = track({ title: 'Song 1' })
+    const upcoming = Array.from({ length: 5 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` }))
+    const preview = textMatching(card(view({ current, upcoming, size: 6 })), /\*\*Up next\*\*/) ?? ''
+
+    expect(preview.split('\n')).toEqual([
+      '**Up next**',
+      '2. Song 2 · 3:00',
+      '3. Song 3 · 3:00',
+      '4. Song 4 · 3:00',
+      '-# and 2 more',
+    ])
+  })
+
+  test('the artwork becomes a thumbnail section', () => {
+    const art = 'https://i.ytimg.com/vi/1/hq.jpg'
+    const withArt = card(view({ current: track({ thumbnail: art }) }))
+    const withoutArt = card(view({ current: track({ thumbnail: null }) }))
+    const unsafeArt = card(view({ current: track({ thumbnail: 'javascript:alert(1)' }) }))
+    const section = containerOf(withArt).components.find(component => component.type === ComponentType.Section)
+
+    expect(section).toMatchObject({ type: ComponentType.Section, accessory: { media: { url: art } } })
+    expect(containerOf(withoutArt).components.some(component => component.type === ComponentType.Section)).toBe(false)
+    expect(containerOf(unsafeArt).components.some(component => component.type === ComponentType.Section)).toBe(false)
+  })
+
+  test('the title links to the song and escapes markdown in its text', () => {
+    const message = card(view({ current: track({ title: '[live] *mix*' }) }))
+
+    expect(textMatching(message, /^## /)).toBe('## [\\[live\\] \\*mix\\*](https://youtu.be/1)\n**Playing** · 3:00 · Requested by tsu')
+  })
+
+  test('a parenthesized URL keeps the markdown link intact', () => {
+    const message = card(view({ current: track({ title: 'Mix', url: 'https://example.com/a(b' }) }))
+
+    expect(textMatching(message, /^## /)).toBe('## [Mix](https://example.com/a%28b)\n**Playing** · 3:00 · Requested by tsu')
+  })
+
+  test('a non-http song URL is not turned into a link', () => {
+    const message = card(view({ current: track({ title: 'Mix', url: 'javascript:alert(1)' }) }))
+
+    expect(textMatching(message, /^## /)).toBe('## Mix\n**Playing** · 3:00 · Requested by tsu')
+  })
+
+  test('the card is a components v2 message', () => {
+    const message = card(queueOf(1))
+
+    expect(message.flags).toBe(MessageFlags.IsComponentsV2)
+    expect(message.allowedMentions).toEqual({ parse: [] })
+  })
+
+  test('an @everyone in a title cannot ping the channel', () => {
+    const message = card(view({ current: track({ title: '@everyone listen' }) }))
+
+    expect(message.allowedMentions).toEqual({ parse: [] })
   })
 
   test('a card without a current song is not rendered', () => {
@@ -172,14 +305,30 @@ describe('nowPlayingMessage', () => {
   })
 })
 
+describe('noticeMessage', () => {
+  test('a notice is a text-only components v2 card', () => {
+    const message = noticeMessage('Nothing is playing right now.')
+
+    expect(textsOf(message)).toEqual(['Nothing is playing right now.'])
+    expect(message.flags).toBe(MessageFlags.IsComponentsV2)
+  })
+})
+
 describe('clearConfirmation', () => {
-  test('asks first with an ephemeral clear and cancel', () => {
+  test('asks first with an ephemeral leave and cancel', () => {
     const confirmation = clearConfirmation()
-    const buttons = buttonsOf(confirmation.components)
+    const buttons = confirmation.components
+      .flatMap(row => row.toJSON().components)
+      .flatMap((component) => {
+        if (component.type !== ComponentType.Button || !('custom_id' in component))
+          return []
+
+        return [{ customId: component.custom_id, label: component.label ?? '' }]
+      })
 
     expect(confirmation.content).toBe('Clear the queue and leave the voice channel?')
     expect(confirmation.flags).toBe(MessageFlags.Ephemeral)
     expect(buttons.map(button => button.customId)).toEqual(['nc:clear:yes', 'nc:clear:no'])
-    expect(buttons.map(button => button.label)).toEqual(['Clear', 'Cancel'])
+    expect(buttons.map(button => button.label)).toEqual(['Leave', 'Cancel'])
   })
 })
