@@ -31,6 +31,17 @@ describe('djReplies', () => {
     expect(model.requests[0]?.sessionId).toBe('chan-1')
   })
 
+  test('the rewrite request disables reasoning so it cannot time out thinking', async () => {
+    const channel = testChannel()
+    const { message } = testMessage(channel.channel)
+    const model = scriptedModel([() => textReply('argh, listo')])
+    const port = djReplies({ model, logger: silentLogger() })
+
+    await port.say(message, settings, 'Done.')
+
+    expect(model.requests[0]?.reasoning).toBe('none')
+  })
+
   test('say falls back to the plain text when the model fails', async () => {
     const channel = testChannel()
     const { message, replies } = testMessage(channel.channel)
