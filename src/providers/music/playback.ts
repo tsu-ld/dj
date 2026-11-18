@@ -9,6 +9,7 @@ import { SpotifyPlugin } from '@distube/spotify'
 import { DisTube } from 'distube'
 import { keyedQueue } from '../../core/async.ts'
 import { errorMessage } from '../../core/errors.ts'
+import { audioHealth } from './audio-health.ts'
 import { audioCache } from './cache.ts'
 import { MusicCatalog } from './catalog.ts'
 import { musicControls } from './controls.ts'
@@ -64,6 +65,7 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
 
   const mutations = keyedQueue()
   const { emitter, clear: clearEvents } = createEmitter()
+  const health = audioHealth({ clock: deps.clock, logger })
   const plays = new Map<string, PlayCapture>()
   let disposed = false
 
@@ -116,6 +118,7 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
     forgetStream: songId => stream.forget(songId),
     leave,
     viewOf,
+    health,
     logger,
   })
 
@@ -137,6 +140,7 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
 
       for (const off of events.detach) off()
 
+      health.dispose()
       plays.clear()
       await audio.dispose()
 
