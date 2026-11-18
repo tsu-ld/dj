@@ -53,7 +53,7 @@ export const remove: CommandSpec = {
     if (!Number.isInteger(position) || !isPositionInQueue(context.queue?.size ?? 0, position))
       throw new UserError(MESSAGES.removeOutOfRange)
 
-    const removed = await context.services.music.remove(context.guildId, position)
+    const removed = await context.services.music.remove(context.guildId, position, { id: context.member.id, name: context.member.displayName })
 
     return { removed }
   },

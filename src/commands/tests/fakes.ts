@@ -16,6 +16,8 @@ export function track(overrides: Partial<Track> = {}): Track {
     isLive: false,
     thumbnail: null,
     requestedBy: 'tsu',
+    requesterId: 'member-1',
+    artist: null,
     fromRadio: false,
     ...overrides,
   }

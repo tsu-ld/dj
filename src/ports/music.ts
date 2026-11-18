@@ -8,7 +8,14 @@ export interface Track {
   readonly isLive: boolean
   readonly thumbnail: string | null
   readonly requestedBy: string | null
+  readonly requesterId: string | null
+  readonly artist: string | null
   readonly fromRadio: boolean
+}
+
+export interface Listener {
+  readonly id: string
+  readonly name: string
 }
 
 export interface QueueView {
@@ -46,9 +53,10 @@ export interface MusicEventMap {
   playlistQueued: { guildId: string, name: string, count: number, view: QueueView, textChannel: GuildTextBasedChannel | null, announce: boolean }
   trackStarted: { guildId: string, track: Track, view: QueueView, textChannel: GuildTextBasedChannel | null }
   stateChanged: { guildId: string, view: QueueView, textChannel: GuildTextBasedChannel | null }
+  trackSkipped: { guildId: string, track: Track, by: Listener, playedMs: number }
   queueEnded: { guildId: string }
   queueCleared: { guildId: string, resetStation: boolean }
-  playbackError: { guildId: string, textChannel: GuildTextBasedChannel | null, cleanupAfterError: boolean }
+  playbackError: { guildId: string, songId: string | null, textChannel: GuildTextBasedChannel | null, cleanupAfterError: boolean }
   disconnected: { guildId: string }
 }
 
@@ -67,10 +75,10 @@ export interface MusicPort {
   pause: (guildId: string) => Promise<void>
   resume: (guildId: string) => Promise<void>
   toggle: (guildId: string) => Promise<boolean>
-  skip: (guildId: string) => Promise<void>
+  skip: (guildId: string, by: Listener) => Promise<void>
   stop: (guildId: string, options?: { resetStation?: boolean }) => Promise<void>
   shuffle: (guildId: string) => Promise<void>
-  remove: (guildId: string, position: number) => Promise<string>
+  remove: (guildId: string, position: number, by: Listener) => Promise<string>
   radio: (guildId: string, on?: boolean) => Promise<boolean>
   view: (guildId: string) => QueueView | null
   status: (guildId: string) => PlaybackStatus | null
