@@ -1,25 +1,24 @@
 import type { Clock } from '../core/clock.ts'
 import type { Logger } from '../core/logger.ts'
 import type { ConversationPort } from '../ports/conversation.ts'
-import type { BeforeStreamInput, MusicPort, QueueView, Track } from '../ports/music.ts'
+import type { ListenersPort } from '../ports/listeners.ts'
+import type { BeforeStreamInput, MusicEventMap, MusicPort, QueueView, Track } from '../ports/music.ts'
 import type { SettingsPort } from '../ports/settings.ts'
+import type { SongFactsPort } from '../ports/song-facts.ts'
 import type { SpeechPort } from '../ports/speech.ts'
-import type { PlayedSong } from './station.ts'
-import { rm } from 'node:fs/promises'
-import { errorMessage } from '../core/errors.ts'
-import { buildOnAirPrompt, lineLimit, lineRequest, sanitizeLine } from './script.ts'
+import { factsReader } from './facts.ts'
+import { clipRemover, queueReader } from './io.ts'
+import { clipKey, lineWriter, requesterOf } from './line.ts'
 import { onAirStation, shouldSpeak } from './station.ts'
-
-const LINE_TIMEOUT_MS = 8_000
-// The model reasons before answering and the reasoning counts against this cap:
-// with 160 it produced only reasoning, and with 600 it sometimes burned the
-// whole budget thinking and returned no line at all.
-const LINE_MAX_OUTPUT_TOKENS = 1_200
 
 export interface OnAirHost {
   beforeStream: (input: BeforeStreamInput) => Promise<void>
   trackQueued: (input: { guildId: string, track: Track, view: QueueView }) => void
   playlistQueued: (input: { guildId: string, view: QueueView }) => void
+  trackStarted: (input: { guildId: string, view: QueueView }) => void
+  stateChanged: (input: { guildId: string, view: QueueView }) => void
+  trackSkipped: (input: MusicEventMap['trackSkipped']) => void
+  playbackError: (input: { guildId: string, songId: string | null }) => void
   disconnected: (guildId: string) => void
   reset: (guildId: string) => void
   dispose: () => Promise<void>
@@ -30,90 +29,29 @@ export function onAirHost(deps: {
   speech: SpeechPort
   model: ConversationPort | null
   settings: SettingsPort
+  facts: SongFactsPort
+  listeners: ListenersPort
   logger: Logger
   clock: Clock
 }): OnAirHost {
-  const { music, speech, model, settings, logger, clock } = deps
-  const station = onAirStation({ clock })
+  const { music, speech, listeners, logger } = deps
+  const facts = factsReader(deps.facts, logger)
+  const station = onAirStation({ clock: deps.clock })
+  const writer = lineWriter(deps)
   const linesInFlight = new Set<string>()
   const preparing = new Set<string>()
+  const remove = clipRemover(speech, logger)
+  const liveView = queueReader(music, logger)
   let disposed = false
 
-  async function remove(file: string | null): Promise<void> {
-    if (file === null)
-      return
-
-    try {
-      await rm(file, { force: true })
-      speech.release(file)
-    }
-    catch (error) {
-      // The provider keeps the path so dispose can retry the delete.
-      logger.warn('on-air.clip_delete_failed', { file, error: errorMessage(error) })
-    }
-  }
-
-  function liveView(guildId: string): QueueView | null {
-    try {
-      return music.view(guildId)
-    }
-    catch (error) {
-      logger.warn('on-air.view_failed', { guildId, error: errorMessage(error) })
-
-      return null
-    }
-  }
-
-  // The model occasionally spends the whole budget on reasoning and answers
-  // with nothing; one retry is cheaper than a silent transition.
-  async function generateLine(guildId: string, track: Track, view: QueueView, context: { position: number, recent: readonly PlayedSong[], streak: number }): Promise<string | null> {
-    if (!model || !speech.available)
-      return null
-
-    const long = station.shouldUseLongLine(guildId)
-    const maxChars = lineLimit(long)
-    const instructions = buildOnAirPrompt({
-      settings: settings.get(guildId),
-      track,
-      view,
-      long,
-      ...context,
-    })
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const reply = await model.complete({
-        instructions,
-        messages: [{ role: 'user', content: lineRequest(long) }],
-        timeoutMs: LINE_TIMEOUT_MS,
-        maxOutputTokens: LINE_MAX_OUTPUT_TOKENS,
-        // Radio lines are short and live; thinking only adds seconds of silence.
-        reasoning: 'none',
-        sessionId: `voice:${guildId}`,
-      })
-      const line = sanitizeLine(reply.text, maxChars)
-
-      // The retry is for the model answering with nothing; a provider that
-      // cannot synthesize will not succeed on a second model request.
-      if (line !== null)
-        return speech.synthesize(line)
-    }
-
-    logger.info('on-air.line_missing', { guildId })
-
-    return null
-  }
-
   // The next line is written while the current song plays, so the only silence
-  // between songs is the line itself, not the model thinking and the provider
-  // synthesizing it.
+  // between songs is the line itself, not the lookups, the model and the
+  // synthesis.
   async function prepare(guildId: string, track: Track, view: QueueView): Promise<void> {
-    if (disposed || !speech.available || !model)
+    if (disposed || !speech.available || !writer.ready())
       return
 
     if (preparing.has(guildId) || linesInFlight.has(guildId))
-      return
-
-    if (station.preparedFor(guildId, track.id))
       return
 
     const onAir = station.songOnAir(guildId)
@@ -123,37 +61,71 @@ export function onAirHost(deps: {
     if (onAir === null || onAir !== view.current?.id)
       return
 
-    // Do not spend a model call and a synthesis on a song that stays silent.
-    const position = station.nextSongIndex(guildId)
+    // The prompt talks about the song that will be on air, so the queue view
+    // is shifted to make that song the current one. The song on air is assumed
+    // to play through; a skip changes the key and the line is written live.
+    const nextView: QueueView = { ...view, current: track, upcoming: view.upcoming.slice(1) }
+    const run = station.run(guildId)
+    const key = clipKey(track, nextView, run)
 
-    if (!shouldSpeak(position, track.fromRadio))
+    if (station.preparedFor(guildId, track.id, key))
+      return
+
+    // Do not spend a lookup, a model call and a synthesis on a silent song.
+    if (!shouldSpeak(station.nextSongIndex(guildId), track.fromRadio))
       return
 
     preparing.add(guildId)
 
+    // A new song on air: the line belongs to a song that will not play. A new
+    // queue or run: the line says something false and is written again.
+    let rewrite = false
+    const stale = (): boolean => {
+      if (disposed || station.songOnAir(guildId) !== onAir)
+        return true
+
+      const live = liveView(guildId) ?? view
+      const next = live.upcoming[0]
+
+      rewrite = next === undefined || clipKey(next, { upcoming: live.upcoming.slice(1), radio: live.radio }, station.run(guildId)) !== key
+
+      return rewrite
+    }
+
     try {
-      // The prompt talks about the song that will be on air, so the queue view
-      // is shifted to make that song the current one.
-      const nextView: QueueView = { ...view, current: track, upcoming: view.upcoming.slice(1) }
-      const file = await generateLine(guildId, track, nextView, {
-        position,
-        recent: station.recent(guildId),
-        streak: station.nextStreak(guildId, track),
+      const songFacts = await facts.lookup(track)
+
+      if (stale())
+        return
+
+      const written = await writer.write({
+        guildId,
+        track,
+        view: nextView,
+        first: false,
+        long: station.shouldUseLongLine(guildId),
+        run,
+        facts: songFacts,
+        listener: requesterOf(listeners, guildId, track, deps.clock.now()),
+        lastAngle: station.lastAngle(guildId),
       })
+
+      // A stale line never pays for the synthesis.
+      if (written === null || stale())
+        return
+
+      const file = await speech.synthesize(written.text)
 
       if (file === null)
         return
 
-      // The track changed while the line was being written: it belongs to a
-      // song that will not play, and a file left behind is a file nobody
-      // deletes.
-      if (disposed || station.songOnAir(guildId) !== onAir) {
+      if (stale()) {
         await remove(file)
 
         return
       }
 
-      const previous = station.setPrepared(guildId, { songId: track.id, file })
+      const previous = station.setPrepared(guildId, { songId: track.id, key, file, angle: written.angle, line: written.text })
 
       if (previous)
         await remove(previous.file)
@@ -163,21 +135,25 @@ export function onAirHost(deps: {
     }
     finally {
       preparing.delete(guildId)
+
+      // The change that made the line stale found this prepare running and
+      // returned early; nothing else would write the line again.
+      if (rewrite)
+        prepareNext(guildId, null)
     }
   }
 
-  function startPrepare(guildId: string, track: Track, view: QueueView): void {
-    void prepare(guildId, track, view).catch(error => logger.error('on-air.prepare_failed', error, { guildId }))
-  }
+  function prepareNext(guildId: string, view: QueueView | null): void {
+    if (disposed)
+      return
 
-  function prepareNext(guildId: string, view: QueueView): void {
     // The old hook read the queue again in its finally block: a song removed
     // while the line was airing must not be the one prepared next.
     const live = liveView(guildId) ?? view
-    const next = live.upcoming[0]
+    const next = live?.upcoming[0]
 
-    if (next)
-      startPrepare(guildId, next, live)
+    if (live && next)
+      void prepare(guildId, next, live).catch(error => logger.error('on-air.prepare_failed', error, { guildId }))
   }
 
   // Called before a song starts: the stream waits for this hook, so the line
@@ -188,96 +164,125 @@ export function onAirHost(deps: {
 
     // The line belongs to the song on the now-playing card, not to the search
     // result the stream resolved behind it. No card means nothing to announce.
+    const { guildId } = input
     const song = input.view.current
 
     if (!song)
       return
 
-    const index = station.recordSong(input.guildId, song)
+    // Captured before the song is recorded: the run is what played before it,
+    // and the profile counts the requests before this one. The request is
+    // recorded here, not when the song starts, because the next song's line is
+    // prepared right after this hook. An unnamed skip wins over a silent slot;
+    // a line still airing defers it while the skipped song is still the last.
+    const first = station.firstOfSession(guildId)
+    const run = station.run(guildId)
+    const listener = first ? null : requesterOf(listeners, guildId, song, deps.clock.now())
+    const index = station.recordSong(guildId, song)
+    const speaks = shouldSpeak(index, song.fromRadio) || (!first && run.skipPending)
 
-    if (!speech.available || model === null || linesInFlight.has(input.guildId) || input.view.paused)
+    if (!song.fromRadio && song.requesterId !== null)
+      listeners.recordRequest(guildId, { id: song.requesterId, name: song.requestedBy ?? '' }, { title: song.title, artist: song.artist })
+
+    if (!speech.available || linesInFlight.has(guildId) || input.view.paused)
       return
 
-    // recordSong put this song last; capture the run before any await so a
-    // concurrent transition cannot shift it under the line.
-    const recent = station.recent(input.guildId).slice(0, -1)
-    const streak = station.streak(input.guildId).count
-    const { clip, discarded } = station.takePrepared(input.guildId, song.id)
+    const { clip, discarded } = station.takePrepared(guildId, song.id, clipKey(song, input.view, run))
 
-    if (!shouldSpeak(index, song.fromRadio)) {
-      if (discarded)
-        await remove(discarded.file)
-
-      if (clip !== null)
-        await remove(clip.file)
-
-      prepareNext(input.guildId, input.view)
+    if (!speaks) {
+      await remove(discarded?.file ?? null)
+      await remove(clip?.file ?? null)
+      prepareNext(guildId, input.view)
 
       return
     }
 
-    linesInFlight.add(input.guildId)
+    linesInFlight.add(guildId)
 
     let file = clip?.file ?? null
 
     try {
-      if (discarded)
-        await remove(discarded.file)
+      await remove(discarded?.file ?? null)
 
-      // A prepared line is the fast path; the first song of a session and the
-      // autoplay songs, which cannot be prepared ahead, get one written here.
-      file ??= await generateLine(input.guildId, song, input.view, {
-        position: index,
-        recent,
-        streak,
-      })
+      // A prepared line is the fast path. The first song, autoplay songs and a
+      // stale clip get one written here, from what is already known.
+      const written = clip ?? await writer.write({
+        guildId,
+        track: song,
+        view: input.view,
+        first,
+        long: station.shouldUseLongLine(guildId),
+        run,
+        facts: first ? null : facts.cached(song),
+        listener,
+        lastAngle: station.lastAngle(guildId),
+      }).then(line => line && { angle: line.angle, line: line.text })
+
+      if (written === null)
+        return
+
+      file ??= await speech.synthesize(written.line)
 
       if (file === null)
         return
 
-      logger.info('on-air.on_air', { guildId: input.guildId, track: song.title })
+      if (await music.audio.playClip(guildId, file)) {
+        logger.info('on-air.on_air', { guildId, track: song.title, angle: written.angle, line: written.line })
+        station.recordLine(guildId)
+        station.recordAngle(guildId, written.angle)
 
-      if (await music.audio.playClip(input.guildId, file))
-        station.recordLine(input.guildId)
-      else
-        logger.debug('on-air.clip_skipped', { guildId: input.guildId, track: song.title })
+        if (written.angle === 'skip' && run.last !== null)
+          station.markSkipAnnounced(guildId, run.last)
+      }
+      else {
+        logger.info('on-air.clip_skipped', { guildId, track: song.title })
+      }
     }
     catch (error) {
-      logger.error('on-air.line_failed', error, { guildId: input.guildId })
+      logger.error('on-air.line_failed', error, { guildId })
     }
     finally {
-      if (file !== null)
-        await remove(file)
-
-      linesInFlight.delete(input.guildId)
-
-      prepareNext(input.guildId, input.view)
+      await remove(file)
+      linesInFlight.delete(guildId)
+      prepareNext(guildId, input.view)
     }
+  }
+
+  function drop(clip: { file: string } | null): void {
+    if (clip)
+      void remove(clip.file)
   }
 
   return {
     beforeStream,
     trackQueued({ guildId, track, view }) {
-      if (disposed || view.upcoming[0]?.id !== track.id)
-        return
-
-      startPrepare(guildId, track, view)
+      if (!disposed && view.upcoming[0]?.id === track.id)
+        void prepare(guildId, track, view).catch(error => logger.error('on-air.prepare_failed', error, { guildId }))
     },
     playlistQueued({ guildId, view }) {
+      prepareNext(guildId, view)
+    },
+    trackStarted({ view }) {
       if (!disposed)
-        prepareNext(guildId, view)
+        facts.prefetch(view)
+    },
+    // A shuffle, a removal or an addition changes what the line may say; the
+    // prepare is skipped when the key still matches.
+    stateChanged({ guildId, view }) {
+      prepareNext(guildId, view)
+    },
+    // The next song starts right away: a prepare would only race its live line.
+    trackSkipped({ guildId, track, by, playedMs }) {
+      station.markSkipped(guildId, track.id, by.name, playedMs)
+    },
+    playbackError({ guildId, songId }) {
+      station.forgetFailed(guildId, songId)
     },
     disconnected(guildId) {
-      const clip = station.endSession(guildId)
-
-      if (clip)
-        void remove(clip.file)
+      drop(station.endSession(guildId))
     },
     reset(guildId) {
-      const clip = station.reset(guildId)
-
-      if (clip)
-        void remove(clip.file)
+      drop(station.reset(guildId))
     },
     async dispose() {
       disposed = true

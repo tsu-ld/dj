@@ -1,49 +1,50 @@
 import type { Clock } from '../core/clock.ts'
-import { PREPARED_CLIP_TTL_MS, RADIO_LONG_EVERY, RADIO_MEMORY_MS, RADIO_MEMORY_SIZE, RADIO_SILENT_EVERY, RADIO_SPEAK_EVERY } from '../limits.ts'
+import type { Angle, PlayedEntry } from './angle.ts'
+import type { PreparedClip, PreparedClips } from './clips.ts'
+import { RADIO_LONG_EVERY, RADIO_MEMORY_MS, RADIO_MEMORY_SIZE, RADIO_SILENT_EVERY, RADIO_SPEAK_EVERY } from '../limits.ts'
+import { preparedClips } from './clips.ts'
 
 export interface StationSong {
   readonly id: string
   readonly title: string
+  readonly artist: string | null
   readonly requestedBy: string | null
+  readonly requesterId: string | null
   readonly fromRadio: boolean
 }
 
-export interface PlayedSong extends StationSong {
+export interface PlayedSong extends StationSong, PlayedEntry {
   readonly at: number
+  readonly skipAnnounced: boolean
 }
 
-export interface RequesterStreak {
-  readonly requester: string | null
-  readonly count: number
+// What played before the song about to go on air, newest first.
+export interface StationRun {
+  readonly lastId: string | null
+  readonly last: PlayedEntry | null
+  readonly earlier: readonly PlayedEntry[]
+  // the last song was skipped and no line has said so yet
+  readonly skipPending: boolean
 }
 
-export interface PreparedClip {
-  readonly songId: string
-  readonly file: string
-  readonly at: number
-}
+const MAX_EARLIER = 3
 
-export interface TakenClip {
-  readonly clip: PreparedClip | null
-  // A clip that belonged to another song or sat past its TTL: the caller owns
-  // the file and deletes it.
-  readonly discarded: PreparedClip | null
-}
-
-export interface Station {
+export interface Station extends Pick<PreparedClips, 'preparedFor' | 'setPrepared' | 'takePrepared'> {
   recordSong: (guildId: string, song: StationSong) => number
   nextSongIndex: (guildId: string) => number
   songOnAir: (guildId: string) => string | null
+  firstOfSession: (guildId: string) => boolean
   recent: (guildId: string) => readonly PlayedSong[]
-  streak: (guildId: string) => RequesterStreak
-  nextStreak: (guildId: string, song: StationSong) => number
+  run: (guildId: string) => StationRun
+  markSkipped: (guildId: string, songId: string, by: string, playedMs: number) => void
+  markSkipAnnounced: (guildId: string, entry: PlayedEntry) => void
+  forgetFailed: (guildId: string, songId: string | null) => void
   shouldUseLongLine: (guildId: string) => boolean
   recordLine: (guildId: string) => void
+  lastAngle: (guildId: string) => Angle | null
+  recordAngle: (guildId: string, angle: Angle) => void
   endSession: (guildId: string) => PreparedClip | null
   reset: (guildId: string) => PreparedClip | null
-  preparedFor: (guildId: string, songId: string) => boolean
-  setPrepared: (guildId: string, clip: { songId: string, file: string }) => PreparedClip | null
-  takePrepared: (guildId: string, songId: string) => TakenClip
   clear: () => readonly PreparedClip[]
 }
 
@@ -57,16 +58,18 @@ export function onAirStation(deps: { clock: Clock }): Station {
   const { clock } = deps
   const songs = new Map<string, { count: number, songId: string | null }>()
   const lines = new Map<string, number>()
-  const prepared = new Map<string, PreparedClip>()
+  const prepared = preparedClips(clock)
   const history = new Map<string, PlayedSong[]>()
-  const streaks = new Map<string, RequesterStreak & { at: number }>()
+  const angles = new Map<string, Angle>()
+  // guilds whose song on air already left the run after a failure
+  const failed = new Set<string>()
 
-  function dropPrepared(guildId: string): PreparedClip | null {
-    const clip = prepared.get(guildId) ?? null
+  // Old enough records are forgotten: a line after a long pause must not
+  // pretend the station kept playing.
+  function recent(guildId: string): readonly PlayedSong[] {
+    const now = clock.now()
 
-    prepared.delete(guildId)
-
-    return clip
+    return (history.get(guildId) ?? []).filter(song => now - song.at <= RADIO_MEMORY_MS)
   }
 
   return {
@@ -74,25 +77,25 @@ export function onAirStation(deps: { clock: Clock }): Station {
       const count = (songs.get(guildId)?.count ?? 0) + 1
 
       songs.set(guildId, { count, songId: song.id })
+      failed.delete(guildId)
 
-      const now = clock.now()
       const played = history.get(guildId) ?? []
 
       // The run is a rolling window: the line talks about the last songs, not
       // about everything that ever played.
-      played.push({ ...song, at: now })
+      played.push({
+        id: song.id,
+        title: song.title,
+        artist: song.artist,
+        requestedBy: song.requestedBy,
+        requesterId: song.requesterId,
+        fromRadio: song.fromRadio,
+        skippedBy: null,
+        playedSeconds: null,
+        at: clock.now(),
+        skipAnnounced: false,
+      })
       history.set(guildId, played.slice(-RADIO_MEMORY_SIZE))
-
-      const requester = song.fromRadio ? null : song.requestedBy
-      const stored = streaks.get(guildId)
-      const current = stored !== undefined && now - stored.at <= RADIO_MEMORY_MS ? stored : null
-
-      if (requester === null || requester === '')
-        streaks.set(guildId, { requester: null, count: 0, at: now })
-      else if (current?.requester === requester)
-        streaks.set(guildId, { requester, count: current.count + 1, at: now })
-      else
-        streaks.set(guildId, { requester, count: 1, at: now })
 
       return count
     },
@@ -102,35 +105,55 @@ export function onAirStation(deps: { clock: Clock }): Station {
     songOnAir(guildId) {
       return songs.get(guildId)?.songId ?? null
     },
-    // Old enough records are forgotten: a line after a long pause must not
-    // pretend the station kept playing.
-    recent(guildId) {
-      const now = clock.now()
-
-      return (history.get(guildId) ?? [])
-        .filter(song => now - song.at <= RADIO_MEMORY_MS)
+    // Nothing went on air since the start, a disconnect or a reset.
+    firstOfSession(guildId) {
+      return (songs.get(guildId)?.songId ?? null) === null
     },
-    // The counter is not capped by the history window: "the fifth in a row" must
-    // stay true after the eighth song. It ages out with the window, so a pause
-    // does not turn into a streak.
-    streak(guildId) {
-      const stored = streaks.get(guildId)
+    recent,
+    run(guildId) {
+      const played = recent(guildId).toReversed()
+      const last = played[0] ?? null
 
-      if (stored === undefined || clock.now() - stored.at > RADIO_MEMORY_MS)
-        return { requester: null, count: 0 }
-
-      return { requester: stored.requester, count: stored.count }
+      return {
+        lastId: last?.id ?? null,
+        last,
+        earlier: played.slice(1, 1 + MAX_EARLIER),
+        skipPending: last !== null && (last.skippedBy ?? '').trim() !== '' && !last.skipAnnounced,
+      }
     },
-    nextStreak(guildId, song) {
-      if (song.fromRadio || song.requestedBy === null || song.requestedBy === '')
-        return 0
+    // The entry is the one a run handed out: a repeat of the same song is a
+    // different play.
+    markSkipAnnounced(guildId, entry) {
+      const played = history.get(guildId) ?? []
+      const index = played.findIndex(song => song === entry)
+      const song = played[index]
 
-      const stored = streaks.get(guildId)
+      if (song)
+        played[index] = { ...song, skipAnnounced: true }
+    },
+    // The newest play of that song: a repeat must not mark the earlier one.
+    markSkipped(guildId, songId, by, playedMs) {
+      const played = history.get(guildId) ?? []
+      const index = played.findLastIndex(song => song.id === songId)
+      const song = played[index]
 
-      if (stored === undefined || clock.now() - stored.at > RADIO_MEMORY_MS)
-        return 1
+      if (song)
+        played[index] = { ...song, skippedBy: by, playedSeconds: playedMs / 1_000 }
+    },
+    // A song whose stream failed never played: it leaves the run so no line
+    // back-announces it. It keeps its cadence slot and stays the song on air
+    // until the next one, so the next line is not a welcome. A song that
+    // failed before it went on air was never recorded, and the one on air
+    // played: only the reported song is dropped.
+    forgetFailed(guildId, songId) {
+      const played = history.get(guildId) ?? []
+      const onAir = songs.get(guildId)?.songId ?? null
 
-      return stored.requester === song.requestedBy ? stored.count + 1 : 1
+      // A second error for the same song must not drop the one before it.
+      if (songId !== null && songId === onAir && !failed.has(guildId) && played.at(-1)?.id === onAir) {
+        played.pop()
+        failed.add(guildId)
+      }
     },
     // A real station opens with a proper rant and then keeps the song intros
     // short; every fifth line gets long again so it does not become background
@@ -140,6 +163,12 @@ export function onAirStation(deps: { clock: Clock }): Station {
     },
     recordLine(guildId) {
       lines.set(guildId, (lines.get(guildId) ?? 0) + 1)
+    },
+    lastAngle(guildId) {
+      return angles.get(guildId) ?? null
+    },
+    recordAngle(guildId, angle) {
+      angles.set(guildId, angle)
     },
     // Ending a session drops the audio prepared for a song that will not play
     // and forgets the song that was on air. The cadence counters live on: a
@@ -152,51 +181,29 @@ export function onAirStation(deps: { clock: Clock }): Station {
       if (counted)
         songs.set(guildId, { count: counted.count, songId: null })
 
-      return dropPrepared(guildId)
+      return prepared.drop(guildId)
     },
     // Clearing the queue is a hard stop: the next request starts fresh.
     reset(guildId) {
       lines.delete(guildId)
       songs.delete(guildId)
       history.delete(guildId)
-      streaks.delete(guildId)
+      angles.delete(guildId)
+      failed.delete(guildId)
 
-      return dropPrepared(guildId)
+      return prepared.drop(guildId)
     },
-    preparedFor(guildId, songId) {
-      return prepared.get(guildId)?.songId === songId
-    },
-    // Returns the clip it replaced; the caller deletes that file.
-    setPrepared(guildId, clip) {
-      const previous = prepared.get(guildId) ?? null
-
-      prepared.set(guildId, { songId: clip.songId, file: clip.file, at: clock.now() })
-
-      return previous
-    },
-    takePrepared(guildId, songId) {
-      const stored = prepared.get(guildId)
-
-      if (!stored)
-        return { clip: null, discarded: null }
-
-      prepared.delete(guildId)
-
-      const fresh = clock.now() - stored.at <= PREPARED_CLIP_TTL_MS
-
-      if (stored.songId !== songId || !fresh)
-        return { clip: null, discarded: stored }
-
-      return { clip: stored, discarded: null }
-    },
+    preparedFor: prepared.preparedFor,
+    setPrepared: prepared.setPrepared,
+    takePrepared: prepared.takePrepared,
     clear() {
-      const clips = [...prepared.values()]
+      const clips = prepared.clear()
 
-      prepared.clear()
       songs.clear()
       lines.clear()
       history.clear()
-      streaks.clear()
+      angles.clear()
+      failed.clear()
 
       return clips
     },
