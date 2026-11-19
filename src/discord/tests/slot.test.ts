@@ -1,45 +1,18 @@
-import type { PlaybackStatus, QueueView } from '../../ports/music.ts'
-import type { ViewMessage } from '../views.ts'
+import type { PlaybackStatus } from '../../ports/music.ts'
 import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test'
-import { ComponentType } from 'discord.js'
 import { log, track, view } from '../../commands/tests/fakes.ts'
 import { NOW_PLAYING_REPOST_MS } from '../../limits.ts'
 import { PROGRESS_REPAINT_MS } from '../progress.ts'
 import { messageSlot } from '../slot.ts'
-import { fakeChannel } from './fakes.ts'
+import { cardText, fakeChannel, queueOf } from './fakes.ts'
 
 const GUILD = '123456789012345678'
-
-function cardText(payload: ViewMessage | undefined): string {
-  const container = payload?.components[0]?.toJSON()
-
-  if (!container)
-    return ''
-
-  return container.components.flatMap((component) => {
-    if (component.type === ComponentType.TextDisplay)
-      return [component.content]
-
-    if (component.type === ComponentType.Section)
-      return component.components.map(child => child.content)
-
-    return []
-  }).join('\n')
-}
 
 // Writes are serialized through promises, so a fake timer tick still needs a
 // few microtask turns before the card is on the fake channel.
 async function settle(): Promise<void> {
   for (let index = 0; index < 40; index++)
     await Promise.resolve()
-}
-
-function queueOf(count: number): QueueView {
-  return view({
-    current: track({ title: 'Song 1' }),
-    upcoming: Array.from({ length: count - 1 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` })),
-    size: count,
-  })
 }
 
 beforeEach(() => {
@@ -55,7 +28,7 @@ describe('messageSlot', () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
 
     expect(channel.sent).toHaveLength(1)
@@ -68,10 +41,10 @@ describe('messageSlot', () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
 
-    slot.stateChanged({ guildId: GUILD, view: view({ paused: true, size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ paused: true, size: 2 }), textChannel: channel.channel })
     await settle()
 
     expect(channel.sent).toHaveLength(1)
@@ -86,15 +59,15 @@ describe('messageSlot', () => {
     const second = fakeChannel('3', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: first.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: first.channel })
     await settle()
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: second.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: second.channel })
     await settle()
 
     expect(first.sent).toHaveLength(1)
     expect(second.sent).toHaveLength(1)
 
-    slot.stateChanged({ guildId: GUILD, view: view({ paused: true, size: 2 }), textChannel: second.channel })
+    slot.update({ guildId: GUILD, view: view({ paused: true, size: 2 }), textChannel: second.channel })
     await settle()
 
     expect(second.sent[0]?.edits).toHaveLength(1)
@@ -107,7 +80,7 @@ describe('messageSlot', () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
 
     const card = channel.sent[0]
@@ -119,7 +92,7 @@ describe('messageSlot', () => {
       throw new Error('gone')
     }
 
-    slot.stateChanged({ guildId: GUILD, view: view({ paused: true, size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ paused: true, size: 2 }), textChannel: channel.channel })
     await settle()
 
     expect(channel.sent).toHaveLength(2)
@@ -131,7 +104,7 @@ describe('messageSlot', () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
 
     const first = channel.sent[0]
@@ -155,7 +128,7 @@ describe('messageSlot', () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
 
     slot.repost({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
@@ -179,7 +152,7 @@ describe('messageSlot', () => {
     const other = fakeChannel('3', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
     slot.repost({ guildId: GUILD, view: view({ size: 2 }), textChannel: other.channel })
     jest.advanceTimersByTime(NOW_PLAYING_REPOST_MS)
@@ -238,7 +211,7 @@ describe('messageSlot', () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
     await slot.showQueue(view({ size: 2 }), channel.channel)
 
@@ -272,7 +245,7 @@ describe('messageSlot', () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
     await slot.showQueue(view({ size: 2 }), channel.channel)
 
@@ -295,7 +268,7 @@ describe('messageSlot', () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
 
     slot.repost({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
@@ -310,7 +283,7 @@ describe('messageSlot', () => {
   test('a payload without a text channel is ignored', async () => {
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: null })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: null })
     await settle()
 
     slot.dispose()
@@ -326,9 +299,9 @@ describe('messageSlot queue card', () => {
 
     const queueCard = channel.sent[0]
 
-    slot.trackStarted({ guildId: GUILD, view: queueOf(3), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: queueOf(3), textChannel: channel.channel })
     await settle()
-    slot.stateChanged({ guildId: GUILD, view: queueOf(2), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: queueOf(2), textChannel: channel.channel })
     await settle()
 
     expect(channel.sent).toHaveLength(2)
@@ -364,7 +337,7 @@ describe('messageSlot queue card', () => {
     const slot = messageSlot({ logger: log })
 
     await slot.showQueue(queueOf(15), channel.channel)
-    slot.stateChanged({ guildId: GUILD, view: queueOf(14), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: queueOf(14), textChannel: channel.channel })
     await settle()
 
     expect(cardText(channel.sent[0]?.edits[0])).toContain('14 songs · 42m · Page 1 of 2')
@@ -387,9 +360,9 @@ describe('messageSlot queue card', () => {
       throw new Error('gone')
     }
 
-    slot.stateChanged({ guildId: GUILD, view: queueOf(2), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: queueOf(2), textChannel: channel.channel })
     await settle()
-    slot.stateChanged({ guildId: GUILD, view: queueOf(1), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: queueOf(1), textChannel: channel.channel })
     await settle()
 
     expect(channel.sent).toHaveLength(2)
@@ -410,7 +383,7 @@ describe('messageSlot progress', () => {
     const playback = reader({ state: 'playing', playbackDurationMs: 65_000 })
     const slot = messageSlot({ logger: log, playback: playback.read })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 1 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 1 }), textChannel: channel.channel })
     await settle()
 
     expect(cardText(channel.sent[0]?.payload)).toContain('1:05 / 3:00')
@@ -436,10 +409,10 @@ describe('messageSlot progress', () => {
     const playback = reader({ state: 'playing', playbackDurationMs: 10_000 })
     const slot = messageSlot({ logger: log, playback: playback.read })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 1 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 1 }), textChannel: channel.channel })
     await settle()
     playback.status = { state: 'paused', playbackDurationMs: 12_000 }
-    slot.stateChanged({ guildId: GUILD, view: view({ paused: true, size: 1 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ paused: true, size: 1 }), textChannel: channel.channel })
     await settle()
 
     expect(cardText(channel.sent[0]?.edits[0])).toContain('0:12 / 3:00')
@@ -457,7 +430,7 @@ describe('messageSlot progress', () => {
     const playback = reader({ state: 'playing', playbackDurationMs: 65_000 })
     const slot = messageSlot({ logger: log, playback: playback.read })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ current: track({ isLive: true }) }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ current: track({ isLive: true }) }), textChannel: channel.channel })
     await settle()
     jest.advanceTimersByTime(PROGRESS_REPAINT_MS * 2)
     await settle()
@@ -475,8 +448,8 @@ describe('messageSlot progress', () => {
     const playback = reader({ state: 'playing', playbackDurationMs: 5_000 })
     const slot = messageSlot({ logger: log, playback: playback.read })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 1 }), textChannel: first.channel })
-    slot.trackStarted({ guildId: other, view: view({ size: 1 }), textChannel: second.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 1 }), textChannel: first.channel })
+    slot.update({ guildId: other, view: view({ size: 1 }), textChannel: second.channel })
     await settle()
     slot.queueCleared({ guildId: GUILD })
     jest.advanceTimersByTime(PROGRESS_REPAINT_MS)
@@ -496,7 +469,7 @@ describe('messageSlot progress', () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log, playback: reader({ state: 'idle', playbackDurationMs: 0 }).read })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 1 }), textChannel: channel.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 1 }), textChannel: channel.channel })
     await settle()
 
     expect(cardText(channel.sent[0]?.payload)).toContain('0:00 / 3:00')
@@ -508,7 +481,7 @@ describe('messageSlot progress', () => {
     const home = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log, playback: reader({ state: 'playing', playbackDurationMs: 5_000 }).read })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 1 }), textChannel: home.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 1 }), textChannel: home.channel })
     await settle()
 
     const card = home.sent[0]
@@ -549,7 +522,7 @@ describe('messageSlot progress', () => {
     const home = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log })
 
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 2 }), textChannel: home.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: home.channel })
     await settle()
 
     const card = home.sent[0]
@@ -558,7 +531,7 @@ describe('messageSlot progress', () => {
       throw new Error('missing now-playing card')
 
     Object.assign(card.message, { createdTimestamp: Date.now() - 56 * 60_000 })
-    slot.trackStarted({ guildId: GUILD, view: view({ size: 1 }), textChannel: home.channel })
+    slot.update({ guildId: GUILD, view: view({ size: 1 }), textChannel: home.channel })
     await settle()
 
     expect(card.deletions()).toBe(1)

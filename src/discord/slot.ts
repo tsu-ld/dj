@@ -14,8 +14,7 @@ export interface SlotPayload {
 }
 
 export interface MessageSlot {
-  trackStarted: (payload: SlotPayload) => void
-  stateChanged: (payload: SlotPayload) => void
+  update: (payload: SlotPayload) => void
   queueChanged: (payload: SlotPayload) => void
   playlistQueued: (payload: SlotPayload) => void
   queueCleared: (payload: { readonly guildId: string }) => void
@@ -226,26 +225,8 @@ export function messageSlot(deps: {
       .catch(error => deps.logger.error('discord.queue_card_failed', error))
   }
 
-  function playlistQueued(payload: SlotPayload): void {
-    const { guildId, view, textChannel } = payload
-
-    if (!textChannel)
-      return
-
-    latest.set(guildId, { view, textChannel })
-
-    void writes.run(guildId, async () => {
-      await deleteQueueCard(guildId)
-
-      const sent = await textChannel.send(queueMessage(view, 1))
-
-      queueCards.set(guildId, sent)
-    }).then(() => scheduleRepost(guildId)).catch(error => deps.logger.error('discord.queue_card_failed', error))
-  }
-
-  async function showQueue(view: QueueView, textChannel: GuildTextBasedChannel): Promise<void> {
-    const guildId = textChannel.guild.id
-
+  // A fresh queue card replaces the old one, then the now-playing card moves below it.
+  async function postQueueCard(guildId: string, view: QueueView, textChannel: GuildTextBasedChannel): Promise<void> {
     latest.set(guildId, { view, textChannel })
 
     await writes.run(guildId, async () => {
@@ -257,6 +238,15 @@ export function messageSlot(deps: {
     })
 
     scheduleRepost(guildId)
+  }
+
+  function playlistQueued({ guildId, view, textChannel }: SlotPayload): void {
+    if (textChannel)
+      void postQueueCard(guildId, view, textChannel).catch(error => deps.logger.error('discord.queue_card_failed', error))
+  }
+
+  async function showQueue(view: QueueView, textChannel: GuildTextBasedChannel): Promise<void> {
+    await postQueueCard(textChannel.guild.id, view, textChannel)
   }
 
   function repost(payload: SlotPayload): void {
@@ -292,5 +282,5 @@ export function messageSlot(deps: {
     latest.clear()
   }
 
-  return { trackStarted: update, stateChanged: update, queueChanged, playlistQueued, queueCleared, showQueue, repost, dispose }
+  return { update, queueChanged, playlistQueued, queueCleared, showQueue, repost, dispose }
 }

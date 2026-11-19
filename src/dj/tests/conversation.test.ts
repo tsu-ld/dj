@@ -1,3 +1,4 @@
+import type { CommandOutcome } from '../../commands/spec.ts'
 import type { MusicPort } from '../../ports/music.ts'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
@@ -174,6 +175,54 @@ describe('djAgent', () => {
     const results = toolMessages(model.requests[1]?.messages ?? [])
 
     expect(results.at(-1)?.content).toContain('the request ran out of time')
+  })
+
+  test('a refused or failed tool is reported to the caller, a successful one is not', async () => {
+    const outcomes: Record<string, CommandOutcome> = { ok: ok(), refused: refused('no permission'), failed: failed(new Error('boom')) }
+    const problems: string[] = []
+
+    for (const name of ['ok', 'refused', 'failed']) {
+      const agent = djAgent({
+        model: scriptedModel([() => toolReply(call('call_1', name)), () => textReply('listo')]),
+        bus: testBus(() => outcomes[name] ?? ok()),
+        settings: testSettings(),
+        logger: silentLogger(),
+        clock: testClock(),
+      })
+
+      await agent.ask({ request: 'hacelo', context: testContext({ message: null }), onRefused: () => problems.push(name) })
+    }
+
+    expect(problems).toEqual(['refused', 'failed'])
+  })
+
+  test('a tool stopped by the deadline, the call cap or malformed arguments is reported to the caller', async () => {
+    const problems: string[] = []
+
+    async function ask(name: string, reply: () => ReturnType<typeof toolReply>, clock = testClock()): Promise<void> {
+      const agent = djAgent({
+        model: scriptedModel([reply, () => textReply('listo')]),
+        bus: testBus(),
+        settings: testSettings(),
+        logger: silentLogger(),
+        clock,
+      })
+
+      await agent.ask({ request: 'hacelo', context: testContext({ message: null }), onRefused: () => problems.push(name) })
+        .catch(() => null)
+    }
+
+    const clock = testClock()
+
+    await ask('deadline', () => {
+      clock.advance(60_001)
+
+      return toolReply(call('call_1', 'skip'))
+    }, clock)
+    await ask('cap', () => toolReply(...Array.from({ length: 5 }, (_, index) => call(`call_${index}`, 'skip'))))
+    await ask('malformed', () => toolReply(call('call_1', 'skip', 'not json')))
+
+    expect(problems).toEqual(['deadline', 'cap', 'malformed'])
   })
 
   test('tool outcomes keep the data, the refusal and the failure apart', async () => {

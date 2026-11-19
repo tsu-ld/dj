@@ -1,4 +1,3 @@
-import type { ConversationPort } from '../../ports/conversation.ts'
 import { describe, expect, test } from 'bun:test'
 import { djReplies } from '../replies.ts'
 import {
@@ -136,12 +135,5 @@ describe('djReplies', () => {
     expect(replies).toEqual(['Done.'])
     expect(channel.sent).toEqual(['Added "Tema" to the queue.'])
     expect(channel.typing.count).toBe(0)
-  })
-
-  test('there is no refuse alias', () => {
-    const model: ConversationPort = scriptedModel([() => textReply('listo')])
-    const port = djReplies({ model, logger: silentLogger() })
-
-    expect(Object.keys(port).sort()).toEqual(['announce', 'say'])
   })
 })

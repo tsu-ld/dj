@@ -14,7 +14,7 @@ import {
 } from 'discord.js'
 import { QUEUE_PAGE_SIZE } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
-import { linkedTitle, PAUSED_ACCENT, PLAYING_ACCENT, queueLine, statusLine, thumbnailUrl, totalDuration, upcomingText } from './card-format.ts'
+import { clock, linkedTitle, PAUSED_ACCENT, PLAYING_ACCENT, queueLine, statusLine, thumbnailUrl, totalDuration, upcomingText } from './card-format.ts'
 
 export interface ViewMessage {
   readonly components: readonly ContainerBuilder[]
@@ -41,14 +41,6 @@ function separator(): SeparatorBuilder {
 }
 
 const PROGRESS_SEGMENTS = 12
-
-function clock(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = (totalSeconds % 60).toString().padStart(2, '0')
-
-  return hours > 0 ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`
-}
 
 // Only a song with a known length gets a bar: a live stream has no end.
 function progressLine(track: Track, elapsedMs: number | null): string | null {

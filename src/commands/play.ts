@@ -1,5 +1,5 @@
 import type { GuildTextBasedChannel } from 'discord.js'
-import type { CommandData, CommandSpec } from './spec.ts'
+import type { CommandData, VoiceSpec } from './spec.ts'
 import { UserError } from '../core/errors.ts'
 import { MAX_QUEUE_SIZE, MAX_SONGS_PER_REQUEST, queueRoom } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
@@ -16,8 +16,7 @@ function keepTyping(channel: GuildTextBasedChannel): () => void {
   let deadline: ReturnType<typeof setTimeout> | null = null
 
   const send = (): void => {
-    if (typeof channel.sendTyping === 'function')
-      void channel.sendTyping().catch(() => {})
+    void channel.sendTyping().catch(() => {})
   }
 
   const stop = (): void => {
@@ -39,7 +38,7 @@ function keepTyping(channel: GuildTextBasedChannel): () => void {
   return stop
 }
 
-export const addSongs: CommandSpec = {
+export const addSongs: VoiceSpec = {
   name: 'add_songs',
   description: 'Add songs to the queue. Every entry is searched on YouTube, so write each one as "Artist - Title". When the request is a mood, a genre or an era rather than a named song, choose the songs yourself.',
   parameters: {
@@ -57,13 +56,9 @@ export const addSongs: CommandSpec = {
   requiresVoice: true,
   async run(args, context) {
     const songs = readSongs(args.songs)
-    const voiceChannel = context.voiceChannel
 
     if (!songs.length)
       throw new UserError(NO_SONGS)
-
-    if (!voiceChannel)
-      throw new UserError(MESSAGES.joinVoiceChannel)
 
     const room = queueRoom(context.queue?.size ?? 0)
 
@@ -75,9 +70,8 @@ export const addSongs: CommandSpec = {
       kind: 'tracks',
       value: wanted,
       member: context.member,
-      voiceChannel,
+      voiceChannel: context.voiceChannel,
       textChannel: context.textChannel,
-      announce: false,
     })
 
     return {
@@ -89,21 +83,16 @@ export const addSongs: CommandSpec = {
   },
 }
 
-export const query: CommandSpec = {
+export const query: VoiceSpec = {
   name: 'query',
   description: 'Play a song or playlist from a link or search text.',
   parameters: EMPTY_PARAMETERS,
   modelTool: false,
   fastRoute: false,
   requiresVoice: true,
-  ack: false,
   confirm: cappedPlaylist,
   async run(args, context) {
     const text = typeof args.query === 'string' ? args.query : ''
-    const voiceChannel = context.voiceChannel
-
-    if (!voiceChannel)
-      throw new UserError(MESSAGES.joinVoiceChannel)
 
     if (queueRoom(context.queue?.size ?? 0) === 0)
       throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
@@ -115,9 +104,8 @@ export const query: CommandSpec = {
         kind: 'text',
         value: text,
         member: context.member,
-        voiceChannel,
+        voiceChannel: context.voiceChannel,
         textChannel: context.textChannel,
-        announce: true,
       })
 
       return { added: result.added, dropped: result.dropped }

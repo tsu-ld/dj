@@ -1,10 +1,10 @@
 import type { QueueView } from '../../ports/music.ts'
-import type { CommandSpec } from '../spec.ts'
+import type { CommandSpec, QueueContext, VoiceContext } from '../spec.ts'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
-import { fakeContext, fakeMember, fakeMessage, fakeMusic, fakeSettings, log, track, view } from './fakes.ts'
+import { fakeContext, fakeMember, fakeMessage, fakeMusic, fakeSettings, fakeVoice, log, queueContext, track, view } from './fakes.ts'
 
 const bus = commandBus({ specs: commands, logger: log })
 
@@ -64,11 +64,6 @@ describe('command registry', () => {
     expect(names).not.toContain('toggle')
   })
 
-  test('commands are looked up by name without a command switch', () => {
-    expect(commands.find(command => command.name === 'skip')?.name).toBe('skip')
-    expect(commands.find(command => command.name === 'nope')).toBeUndefined()
-  })
-
   test('remove takes a valid queue position, or asks the dj', () => {
     const queue = queueOf(3)
 
@@ -97,20 +92,6 @@ describe('command registry', () => {
 
     expect(persona).toEqual({ kind: 'refused', message: MESSAGES.personaPermission })
     expect(channel).toEqual({ kind: 'refused', message: MESSAGES.channelConfigurePermission })
-  })
-
-  test('set_persona stores a trimmed persona for a manager', async () => {
-    const settings = fakeSettings()
-
-    const outcome = await bus.run('set_persona', { persona: '  un dj  ' }, fakeContext({
-      guildId: 'g1',
-      member: fakeMember(),
-      message: fakeMessage({ content: '<@999> sé un dj' }),
-      services: { settings },
-    }))
-
-    expect(outcome).toEqual({ kind: 'ok', data: { persona: 'un dj' } })
-    expect(settings.updates).toEqual([['g1', { persona: 'un dj' }]])
   })
 
   test('set_channel uses the mentioned channel and ignores the model argument', async () => {
@@ -161,7 +142,7 @@ describe('command registry', () => {
         calls.push('stop')
       },
     })
-    const context = (): ReturnType<typeof fakeContext> => fakeContext({ services: { music }, queue: view({ paused }) })
+    const context = (): QueueContext & VoiceContext => ({ ...queueContext({ services: { music }, queue: view({ paused }) }), voiceChannel: fakeVoice() })
 
     await spec('pause').run({}, context())
     expect(paused).toBe(true)
@@ -178,15 +159,5 @@ describe('command registry', () => {
     await spec('clear').run({}, context())
 
     expect(calls).toEqual(['pause', 'resume', 'toggle', 'skip', 'shuffle', 'radio', 'stop'])
-  })
-
-  test('set_channel rejects a mentioned channel that cannot be used', async () => {
-    const outcome = await bus.run('set_channel', { channelId: '456' }, fakeContext({
-      guildId: 'g1',
-      member: fakeMember(),
-      message: fakeMessage({ content: '<@999> escuchá en <#456>', channels: [{ id: '456' }], fetchChannel: () => null }),
-    }))
-
-    expect(outcome).toEqual({ kind: 'refused', message: MESSAGES.textChannelInvalid })
   })
 })

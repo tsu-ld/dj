@@ -37,16 +37,14 @@ const SHUTDOWN_TIMEOUT_MS = 5_000
 // imports a provider, and no provider imports a feature.
 export async function createApp(config: AppConfig): Promise<App> {
   const log = createLogger({ level: config.logLevel }).child({ app: 'dj' })
-  const clock = systemClock
   const settings = await settingsStore({ path: config.settingsPath, logger: log })
   const client: Client = discordClient(config, log)
   const model = config.language.enabled
     ? conversationModel({ config: config.language, logger: log })
     : null
-  const decision = intentClassifier({ config: config.decision, logger: log, clock })
-  const speech = speechSynthesizer({ config: config.speech, logger: log, clock })
+  const decision = intentClassifier({ config: config.decision, clock: systemClock })
+  const speech = speechSynthesizer({ config: config.speech, logger: log, clock: systemClock })
   const replies = djReplies({ model, logger: log })
-  const announcements = djAnnouncements({ replies, settings, clock })
 
   const hostRef: { current: OnAirHost | null } = { current: null }
 
@@ -58,21 +56,22 @@ export async function createApp(config: AppConfig): Promise<App> {
     client,
     config: config.music,
     logger: log,
-    clock,
+    clock: systemClock,
     beforeStream: async (input) => {
       await hostRef.current?.beforeStream(input)
     },
   })
 
+  const announcements = djAnnouncements({ replies, settings, clock: systemClock })
   const slot = messageSlot({ logger: log, playback: guildId => music.status(guildId) })
   const facts = songFacts({ logger: log })
-  const listeners = await listenersStore({ path: config.listenersPath, logger: log })
-  const host = onAirHost({ music, speech, model, settings, facts, listeners, logger: log, clock })
+  const listeners = await listenersStore({ path: config.listenersPath, logger: log, clock: systemClock })
+  const host = onAirHost({ music, speech, model, settings, facts, listeners, logger: log, clock: systemClock })
 
   hostRef.current = host
 
   const bus = commandBus({ specs: commands, logger: log })
-  const agent = model === null ? null : djAgent({ model, bus, settings, logger: log, clock })
+  const agent = model === null ? null : djAgent({ model, bus, settings, logger: log, clock: systemClock })
 
   const onMessage = messageHandler({
     bus,
@@ -89,26 +88,23 @@ export async function createApp(config: AppConfig): Promise<App> {
 
   const detach: Array<() => void> = [
     music.on('trackQueued', (payload) => {
-      announcements.trackQueued(payload)
       host.trackQueued(payload)
       slot.queueChanged(payload)
     }),
     music.on('playlistQueued', (payload) => {
-      announcements.playlistQueued(payload)
       host.playlistQueued(payload)
       slot.playlistQueued(payload)
     }),
     // The host records each request when the song goes on air.
     music.on('trackStarted', (payload) => {
-      slot.trackStarted(payload)
+      slot.update(payload)
       host.trackStarted(payload)
     }),
     music.on('trackSkipped', (payload) => {
-      listeners.recordSkip(payload.guildId, payload.by, { requesterId: payload.track.requesterId })
       host.trackSkipped(payload)
     }),
     music.on('stateChanged', (payload) => {
-      slot.stateChanged(payload)
+      slot.update(payload)
       host.stateChanged(payload)
     }),
     music.on('queueEnded', ({ guildId }) => slot.queueCleared({ guildId })),
@@ -147,21 +143,16 @@ export async function createApp(config: AppConfig): Promise<App> {
   client.on(Events.MessageCreate, onMessageEvent)
   client.on(Events.InteractionCreate, onInteractionEvent)
 
-  let started = false
   let stopped = false
   const stopping = new AbortController()
 
   return {
     logger: log,
     async start() {
-      if (started)
-        return
-
-      started = true
       log.info('app.starting')
 
       await waitForGateway({
-        fetch: async (url, init) => fetch(url, init),
+        fetch,
         // A stop during the wait ends the sleep, so shutdown never waits on it.
         sleep: async milliseconds => new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, milliseconds)

@@ -1,8 +1,8 @@
 import type { Logger } from '../core/logger.ts'
 import type { ToolSpec } from '../ports/conversation.ts'
 import type { DecisionOption } from '../ports/decision.ts'
-import type { CommandBus, CommandContext, CommandOutcome, CommandSpec } from './spec.ts'
-import { errorMessage, isUserError } from '../core/errors.ts'
+import type { CommandBus, CommandContext, CommandData, CommandOutcome, CommandSpec, QueueContext, VoiceContext } from './spec.ts'
+import { errorMessage, UserError } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
 
 function toTool(spec: CommandSpec): ToolSpec {
@@ -30,30 +30,20 @@ export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger
       return { kind: 'failed', error: new Error(`Unknown command: ${name}`), message: `there is no tool called ${name}` }
     }
 
-    let scoped = context
+    const prepared = prepare(spec, context)
 
-    if (spec.requiresQueue) {
-      const queue = context.services.music.view(context.guildId)
+    if ('refusal' in prepared) {
+      await context.ui.error(prepared.refusal)
 
-      if (!queue) {
-        await context.ui.error(MESSAGES.nothingPlaying)
-
-        return { kind: 'refused', message: MESSAGES.nothingPlaying }
-      }
-
-      scoped = withQueue(context, queue)
+      return { kind: 'refused', message: prepared.refusal }
     }
 
-    if (spec.requiresVoice && !scoped.voiceChannel) {
-      await scoped.ui.error(MESSAGES.joinVoiceChannel)
-
-      return { kind: 'refused', message: MESSAGES.joinVoiceChannel }
-    }
+    const { scoped, execute } = prepared
 
     try {
       spec.authorize?.(scoped)
 
-      const data = await spec.run(args, scoped)
+      const data = await execute(args)
 
       try {
         const confirmation = spec.confirm?.(data, scoped) ?? null
@@ -72,7 +62,7 @@ export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger
       return { kind: 'ok', data }
     }
     catch (error) {
-      if (isUserError(error)) {
+      if (error instanceof UserError) {
         await scoped.ui.error(error.message)
 
         return { kind: 'refused', message: error.message }
@@ -110,6 +100,34 @@ export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger
   }
 }
 
-function withQueue(context: CommandContext, queue: NonNullable<CommandContext['queue']>): CommandContext {
-  return { ...context, queue }
+type Prepared
+  = | { readonly refusal: string }
+    | { readonly scoped: CommandContext, readonly execute: (args: Record<string, unknown>) => Promise<CommandData> }
+
+// The only check of each precondition, before authorization or any side
+// effect. A queue command reads the live queue, not the context snapshot.
+function prepare(spec: CommandSpec, context: CommandContext): Prepared {
+  if (spec.requiresQueue === true) {
+    const queue = context.services.music.view(context.guildId)
+
+    if (!queue)
+      return { refusal: MESSAGES.nothingPlaying }
+
+    const scoped: QueueContext = { ...context, queue }
+
+    return { scoped, execute: async args => spec.run(args, scoped) }
+  }
+
+  if (spec.requiresVoice === true) {
+    const voiceChannel = context.voiceChannel
+
+    if (!voiceChannel)
+      return { refusal: MESSAGES.joinVoiceChannel }
+
+    const scoped: VoiceContext = { ...context, voiceChannel }
+
+    return { scoped, execute: async args => spec.run(args, scoped) }
+  }
+
+  return { scoped: context, execute: async args => spec.run(args, context) }
 }

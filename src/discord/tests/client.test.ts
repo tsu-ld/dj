@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { loadConfig } from '../../config.ts'
-import { logger } from '../../core/logger.ts'
+import { silentLog as log } from '../../tests/fixtures.ts'
 import { discordClient, GATEWAY_RETRY_DELAYS_MS, waitForGateway } from '../client.ts'
 
 const config = loadConfig({ DISCORD_TOKEN: 'test-token' })
-const log = logger({ level: 'error', sink: () => {} })
 
 describe('discordClient', () => {
   test('mentions are disabled by default for every message the bot sends', () => {

@@ -18,7 +18,7 @@ export function readMention(message: Message): Mention {
   const botId = message.client.user?.id
   const botMentioned = botId !== undefined && message.mentions.users.has(botId)
   const channelMentions = [...message.mentions.channels.values()]
-  const text = (botMentioned && botId ? stripBotMention(message.content, botId) : message.content).trim()
+  const text = (botMentioned ? stripBotMention(message.content, botId) : message.content).trim()
 
   return { botMentioned, channelMentions, text }
 }

@@ -241,7 +241,7 @@ describe('messageHandler plain queries', () => {
     await handler(message.message)
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({ kind: 'text', value: 'cumbia', announce: true })
+    expect(requests[0]).toMatchObject({ kind: 'text', value: 'cumbia' })
     expect(slot.reposts).toHaveLength(1)
     expect(slot.reposts[0]?.guildId).toBe(GUILD)
   })
@@ -276,7 +276,7 @@ describe('messageHandler plain intent', () => {
     await handler(message.message)
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({ kind: 'text', value: 'cumbia', announce: true })
+    expect(requests[0]).toMatchObject({ kind: 'text', value: 'cumbia' })
   })
 
   test('plain text the router gives to the dj reaches the agent', async () => {
@@ -553,5 +553,107 @@ describe('messageHandler failures', () => {
 
     expect(message.replies).toEqual([MESSAGES.genericError])
     expect(slot.reposts).toHaveLength(1)
+  })
+})
+
+describe('messageHandler while the bot is in voice', () => {
+  const inVoice: Pick<MusicPort, 'status'> = { status: () => ({ state: 'playing', playbackDurationMs: 0 }) }
+
+  function answeringAgent(answer: string | null): DjAgent {
+    return {
+      async ask() {
+        return answer
+      },
+    }
+  }
+
+  test('a dj answer in voice is a reaction, not a message', async () => {
+    const { handler } = setup({ decision: fakeDecision('dj'), agent: answeringAgent('Dale'), music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const message = fakeIncomingMessage({ content: 'poneme algo tranqui' })
+
+    await handler(message.message)
+
+    expect(message.replies).toEqual([])
+    expect(message.reactions).toEqual(['✅'])
+  })
+
+  test('a dj answer about a refused action stays a message in voice', async () => {
+    const agent: DjAgent = {
+      async ask(input) {
+        input.onRefused?.()
+
+        return 'No puedo saltearla desde otro canal'
+      },
+    }
+    const { handler } = setup({ decision: fakeDecision('dj'), agent, music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const message = fakeIncomingMessage({ content: 'saltéala' })
+
+    await handler(message.message)
+
+    expect(message.replies).toEqual(['No puedo saltearla desde otro canal'])
+    expect(message.reactions).toEqual([])
+  })
+
+  test('a failed reaction does not report the dj as unreachable', async () => {
+    const { handler } = setup({ decision: fakeDecision('dj'), agent: answeringAgent('Dale'), music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const message = fakeIncomingMessage({ content: 'poneme algo tranqui', failReact: true })
+
+    await handler(message.message)
+
+    expect(message.replies).toEqual([])
+  })
+
+  test('a song request in voice is acknowledged with a reaction', async () => {
+    const voice = fakeVoice()
+    const { handler, replies } = setup({ decision: fakeDecision('query'), music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: voice, botVoiceChannel: voice }) })
+
+    await handler(message.message)
+
+    expect(replies.said).toEqual([])
+    expect(message.reactions).toEqual(['✅'])
+  })
+
+  test('a silent dj in voice still says it had no answer', async () => {
+    const { handler } = setup({ decision: fakeDecision('dj'), agent: answeringAgent(null), music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const message = fakeIncomingMessage({ content: 'poneme algo tranqui' })
+
+    await handler(message.message)
+
+    expect(message.replies).toEqual([MESSAGES.djNoAnswer])
+    expect(message.reactions).toEqual([])
+  })
+
+  test('a command confirmation in voice is a reaction, not a message', async () => {
+    const { handler, replies } = setup({ decision: fakeDecision('radio'), music: fakeMusic({ ...inVoice, view: () => view(), radio: async () => true }) })
+    const voice = fakeVoice()
+    const message = fakeIncomingMessage({ content: 'prendé la radio', member: fakeMember({ voiceChannel: voice, botVoiceChannel: voice }) })
+
+    await handler(message.message)
+
+    expect(replies.said).toEqual([])
+    expect(message.replies).toEqual([])
+    expect(message.reactions).toEqual(['✅'])
+  })
+
+  test('a refusal in voice is still a message', async () => {
+    const { handler, replies } = setup({ decision: fakeDecision('radio'), music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const message = fakeIncomingMessage({ content: 'prendé la radio', member: fakeMember({ voiceChannel: null, botVoiceChannel: fakeVoice() }) })
+
+    await handler(message.message)
+
+    expect(replies.said).toEqual([MESSAGES.sameVoiceChannel])
+    expect(message.reactions).toEqual([])
+  })
+
+  test('out of voice the confirmation is still a message', async () => {
+    const { handler, replies } = setup({ decision: fakeDecision('radio'), music: fakeMusic({ view: () => view(), radio: async () => true }) })
+    const voice = fakeVoice()
+    const message = fakeIncomingMessage({ content: 'prendé la radio', member: fakeMember({ voiceChannel: voice, botVoiceChannel: voice }) })
+
+    await handler(message.message)
+
+    expect(replies.said).toEqual([MESSAGES.radioEnabled])
+    expect(message.reactions).toEqual([])
   })
 })

@@ -12,8 +12,6 @@ export const MESSAGES = {
   textChannelConfigured: (channel: string) => `All set! I am now listening in ${channel}.`,
   nothingPlaying: 'Nothing is playing right now.',
   removeOutOfRange: 'There is no song at that position.',
-  songAdded: (song: string) => `Added "${song}" to the queue.`,
-  playlistAdded: (playlist: string, count: number) => `Added playlist "${playlist}" (${count} songs) to the queue.`,
   personaPermission: 'You need the Manage Server permission to change how I talk.',
   personaUsage: 'Tell me what I should sound like, like: you are a cumbiero dj who never stops joking.',
   personaTooLong: (maxLength: number) => `Keep it shorter than ${maxLength} characters, please.`,

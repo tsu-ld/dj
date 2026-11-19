@@ -1,31 +1,15 @@
 import type { GuildMember, GuildTextBasedChannel, Message } from 'discord.js'
 import type { CommandBus, CommandContext, CommandOutcome } from '../../commands/spec.ts'
-import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { CompletionReply, CompletionRequest, ConversationPort, ToolCall, ToolSpec } from '../../ports/conversation.ts'
-import type { MusicPort, QueueView, Track } from '../../ports/music.ts'
+import type { MusicPort, PlaybackStatus, QueueView } from '../../ports/music.ts'
 import type { GuildSettings, SettingsPort } from '../../ports/settings.ts'
 import { isRecord, parseJson } from '../../core/json.ts'
 import { logger } from '../../core/logger.ts'
+import { silentLogger } from '../../tests/fixtures.ts'
 
-export interface TestClock extends Clock {
-  advance: (milliseconds: number) => void
-}
-
-export function testClock(start = 1_000_000): TestClock {
-  let current = start
-
-  return {
-    now: () => current,
-    advance(milliseconds) {
-      current += milliseconds
-    },
-  }
-}
-
-export function silentLogger(): Logger {
-  return logger({ level: 'error', sink: () => {} })
-}
+export { silentLogger, testClock, testTrack, testView } from '../../tests/fixtures.ts'
+export type { TestClock } from '../../tests/fixtures.ts'
 
 export interface CapturedLog {
   events: string[]
@@ -119,37 +103,11 @@ export function testSettings(initial: Partial<GuildSettings> = {}): TestSettings
   }
 }
 
-export function testMusic(view: QueueView | null = null): MusicPort {
+export function testMusic(view: QueueView | null = null, status: PlaybackStatus | null = null): MusicPort {
   return {
     view: () => view,
+    status: () => status,
   } as unknown as MusicPort
-}
-
-export function testTrack(title: string, overrides: Partial<Track> = {}): Track {
-  return {
-    id: title,
-    title,
-    url: 'https://example.com/watch',
-    durationSeconds: 180,
-    isLive: false,
-    thumbnail: null,
-    requestedBy: null,
-    requesterId: null,
-    artist: null,
-    fromRadio: false,
-    ...overrides,
-  }
-}
-
-export function testView(overrides: Partial<QueueView> = {}): QueueView {
-  return {
-    current: testTrack('Tema'),
-    upcoming: [],
-    paused: false,
-    radio: false,
-    size: 1,
-    ...overrides,
-  }
 }
 
 export interface TestBus extends CommandBus {

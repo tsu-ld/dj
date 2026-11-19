@@ -32,20 +32,44 @@ export interface CommandContext {
 
 export type CommandData = Record<string, unknown> | undefined
 
-export interface CommandSpec {
+// The bus checks a spec's precondition once and hands run the narrowed context.
+export interface QueueContext extends CommandContext {
+  readonly queue: QueueView
+}
+
+export interface VoiceContext extends CommandContext {
+  readonly voiceChannel: VoiceBasedChannel
+}
+
+interface SpecBase<Context extends CommandContext> {
   readonly name: string
   readonly description: string
   readonly parameters: Record<string, unknown>
-  readonly requiresQueue?: boolean
-  readonly requiresVoice?: boolean
   readonly modelTool?: boolean
   readonly fastRoute?: boolean
   readonly ack?: boolean
   readonly parse?: (text: string, context: CommandContext) => Record<string, unknown> | null
   readonly authorize?: (context: CommandContext) => void
-  readonly run: (args: Record<string, unknown>, context: CommandContext) => Promise<CommandData>
+  readonly run: (args: Record<string, unknown>, context: Context) => Promise<CommandData>
   readonly confirm?: (data: CommandData, context: CommandContext) => string | null
 }
+
+export interface PlainSpec extends SpecBase<CommandContext> {
+  readonly requiresQueue?: false
+  readonly requiresVoice?: false
+}
+
+export interface QueueSpec extends SpecBase<QueueContext> {
+  readonly requiresQueue: true
+  readonly requiresVoice?: false
+}
+
+export interface VoiceSpec extends SpecBase<VoiceContext> {
+  readonly requiresQueue?: false
+  readonly requiresVoice: true
+}
+
+export type CommandSpec = PlainSpec | QueueSpec | VoiceSpec
 
 export type CommandOutcome
   = | { readonly kind: 'ok', readonly data: CommandData }

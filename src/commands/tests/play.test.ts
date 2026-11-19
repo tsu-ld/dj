@@ -6,7 +6,7 @@ import { MAX_QUEUE_SIZE } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
 import { commandBus } from '../bus.ts'
 import { addSongs, query } from '../play.ts'
-import { fakeContext, fakeMusic, fakeTextChannel, fakeUi, log, view } from './fakes.ts'
+import { fakeContext, fakeMusic, fakeTextChannel, fakeUi, log, view, voiceContext } from './fakes.ts'
 
 function collector(requests: PlayRequest[], result: { added: number, first: string | null, dropped?: number }): ReturnType<typeof fakeMusic> {
   return fakeMusic({
@@ -20,6 +20,40 @@ function collector(requests: PlayRequest[], result: { added: number, first: stri
       }
     },
   })
+}
+
+interface TypingQuery {
+  readonly typing: () => number
+  readonly finish: (result: PlayResult) => void
+  readonly running: Promise<unknown>
+}
+
+// A query whose search never ends until the test finishes it, under fake timers.
+async function withTypingQuery(check: (query: TypingQuery) => Promise<void>): Promise<void> {
+  jest.useFakeTimers()
+
+  try {
+    let typing = 0
+    let finish: (result: PlayResult) => void = () => {}
+    const textChannel = {
+      ...fakeTextChannel(),
+      async sendTyping() {
+        typing++
+      },
+    } as unknown as GuildTextBasedChannel
+    const music = fakeMusic({
+      play: async () => new Promise<PlayResult>((resolve) => {
+        finish = resolve
+      }),
+    })
+    const bus = commandBus({ specs: [query], logger: log })
+    const running = bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music } }))
+
+    await check({ typing: () => typing, finish: result => finish(result), running })
+  }
+  finally {
+    jest.useRealTimers()
+  }
 }
 
 describe('query', () => {
@@ -40,7 +74,7 @@ describe('query', () => {
     expect(requests[0]?.value).toBe('https://example.com/song')
   })
 
-  test('a query plays the search text as an announced request', async () => {
+  test('a query plays the search text', async () => {
     const requests: PlayRequest[] = []
     const music = collector(requests, { added: 1, first: 'A' })
     const bus = commandBus({ specs: [query], logger: log })
@@ -51,7 +85,7 @@ describe('query', () => {
 
     expect(outcome.kind).toBe('ok')
     expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({ kind: 'text', value: 'cumbia', announce: true })
+    expect(requests[0]).toMatchObject({ kind: 'text', value: 'cumbia' })
     expect(requests[0]?.member).toBe(context.member)
     expect(requests[0]?.voiceChannel ?? null).toBe(context.voiceChannel)
     expect(ui.replies).toEqual([])
@@ -103,75 +137,33 @@ describe('query', () => {
   })
 
   test('a query keeps refreshing the typing indicator until it finishes', async () => {
-    jest.useFakeTimers()
-
-    try {
-      let typing = 0
-      let finish: (result: PlayResult) => void = () => {}
-      const textChannel = {
-        ...fakeTextChannel(),
-        async sendTyping() {
-          typing++
-        },
-      } as unknown as GuildTextBasedChannel
-      const music = fakeMusic({
-        play: async () => new Promise<PlayResult>((resolve) => {
-          finish = resolve
-        }),
-      })
-      const bus = commandBus({ specs: [query], logger: log })
-      const running = bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music } }))
-
-      expect(typing).toBe(1)
+    await withTypingQuery(async ({ typing, finish, running }) => {
+      expect(typing()).toBe(1)
 
       jest.advanceTimersByTime(8_000)
-      expect(typing).toBe(2)
+      expect(typing()).toBe(2)
 
       finish({ added: 1, first: 'A', dropped: 0 })
       await running
 
       jest.advanceTimersByTime(8_000)
-      expect(typing).toBe(2)
-    }
-    finally {
-      jest.useRealTimers()
-    }
+      expect(typing()).toBe(2)
+    })
   })
 
   test('a query stops refreshing the typing indicator after a minute', async () => {
-    jest.useFakeTimers()
-
-    try {
-      let typing = 0
-      let finish: (result: PlayResult) => void = () => {}
-      const textChannel = {
-        ...fakeTextChannel(),
-        async sendTyping() {
-          typing++
-        },
-      } as unknown as GuildTextBasedChannel
-      const music = fakeMusic({
-        play: async () => new Promise<PlayResult>((resolve) => {
-          finish = resolve
-        }),
-      })
-      const bus = commandBus({ specs: [query], logger: log })
-      const running = bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music } }))
-
-      expect(typing).toBe(1)
+    await withTypingQuery(async ({ typing, finish, running }) => {
+      expect(typing()).toBe(1)
 
       jest.advanceTimersByTime(60_000)
-      expect(typing).toBe(8)
+      expect(typing()).toBe(8)
 
       jest.advanceTimersByTime(8_000)
-      expect(typing).toBe(8)
+      expect(typing()).toBe(8)
 
       finish({ added: 1, first: 'A', dropped: 0 })
       await running
-    }
-    finally {
-      jest.useRealTimers()
-    }
+    })
   })
 
   test('the queue cap confirmation reports kept and total', async () => {
@@ -216,7 +208,7 @@ describe('add_songs', () => {
 
     expect(outcome).toEqual({ kind: 'ok', data: { queued: 2, missing: 1, skipped_for_room: 0, first_added: 'A' } })
     expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({ kind: 'tracks', value: ['A', 'B', 'C'], announce: false })
+    expect(requests[0]).toMatchObject({ kind: 'tracks', value: ['A', 'B', 'C'] })
   })
 
   test('never asks for more than ten songs', async () => {
@@ -224,7 +216,7 @@ describe('add_songs', () => {
     const music = collector(requests, { added: 10, first: 'A' })
     const songs = Array.from({ length: 12 }, (_, index) => `Song ${index + 1}`)
 
-    await addSongs.run({ songs }, fakeContext({ services: { music } }))
+    await addSongs.run({ songs }, voiceContext({ services: { music } }))
 
     expect(requests[0]?.value).toHaveLength(10)
   })
@@ -234,7 +226,7 @@ describe('add_songs', () => {
     const music = collector(requests, { added: 5, first: 'A' })
     const songs = Array.from({ length: 8 }, (_, index) => `Song ${index + 1}`)
 
-    await addSongs.run({ songs }, fakeContext({ queue: view({ size: MAX_QUEUE_SIZE - 5 }), services: { music } }))
+    await addSongs.run({ songs }, voiceContext({ queue: view({ size: MAX_QUEUE_SIZE - 5 }), services: { music } }))
 
     expect(requests[0]?.value).toHaveLength(5)
   })

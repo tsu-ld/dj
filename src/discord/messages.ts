@@ -1,4 +1,4 @@
-import type { GuildMember, GuildTextBasedChannel, Message } from 'discord.js'
+import type { GuildMember, Message } from 'discord.js'
 import type { CommandBus, CommandContext, CommandUi } from '../commands/spec.ts'
 import type { Logger } from '../core/logger.ts'
 import type { DecisionOption, DecisionPort } from '../ports/decision.ts'
@@ -8,12 +8,13 @@ import type { GuildSettings, SettingsPort } from '../ports/settings.ts'
 import type { MessageSlot } from './slot.ts'
 import { chooseRoute } from '../commands/route.ts'
 import { cooldown } from '../core/cooldown.ts'
+import { errorMessage } from '../core/errors.ts'
 import { UPCOMING_PREVIEW } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
 import { isChannelConfiguration, readMention } from './mentions.ts'
 
 export interface DjAgent {
-  ask: (input: { request: string, context: CommandContext }) => Promise<string | null>
+  ask: (input: { request: string, context: CommandContext, onRefused?: () => void }) => Promise<string | null>
 }
 
 export interface MessageHandlerDeps {
@@ -43,14 +44,20 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
   const djRequests = cooldown(deps.cooldowns.djRequestMs)
   const djInFlight = new Set<string>()
 
-  function uiFor(message: Message, settings: GuildSettings, channel: GuildTextBasedChannel): CommandUi {
+  // While the bot is in voice the cards and the radio voice are the feedback:
+  // chatter becomes a reaction, refusals and errors still answer in text.
+  const inVoice = (guildId: string): boolean => deps.music.status(guildId) !== null
+
+  async function ack(message: Message): Promise<void> {
+    await message.react('✅')
+  }
+
+  function uiFor(message: Message<true>, settings: GuildSettings): CommandUi {
     return {
-      reply: async text => deps.replies.say(message, settings, text),
+      reply: async text => inVoice(message.guildId) ? ack(message) : deps.replies.say(message, settings, text),
       error: async text => deps.replies.say(message, settings, text),
-      ack: async () => {
-        await message.react('✅')
-      },
-      showQueue: async view => deps.slot.showQueue(view, channel),
+      ack: async () => ack(message),
+      showQueue: async view => deps.slot.showQueue(view, message.channel),
     }
   }
 
@@ -64,7 +71,7 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
       settings,
       queue: deps.music.view(message.guildId),
       services: { music: deps.music, settings: deps.settings, logger: deps.logger },
-      ui: uiFor(message, settings, message.channel),
+      ui: uiFor(message, settings),
     }
   }
 
@@ -116,11 +123,24 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
     djInFlight.add(channelId)
 
     try {
-      const reply = await agent.ask({ request: text, context })
+      let refused = false
+      const reply = await agent.ask({
+        request: text,
+        context,
+        onRefused: () => {
+          refused = true
+        },
+      })
 
       // A null reply means the model never said anything; say so instead of
-      // leaving a bare reaction the person has to interpret.
-      await message.reply(reply ?? MESSAGES.djNoAnswer)
+      // leaving a bare reaction the person has to interpret. An answer that
+      // explains a refused action is an error, so it stays text in voice.
+      if (reply === null)
+        await message.reply(MESSAGES.djNoAnswer)
+      else if (inVoice(message.guildId) && !refused)
+        await ack(message).catch(error => deps.logger.warn('discord.reaction_failed', { error: errorMessage(error) }))
+      else
+        await message.reply(reply)
     }
     catch (error) {
       deps.logger.error('discord.dj_failed', error)
@@ -136,27 +156,24 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
     await deps.bus.run('query', { query: text }, context)
   }
 
+  // The bus refuses a queue command with nothing playing; no route falls back.
+  async function runRoute(text: string, choice: string | null, context: CommandContext, fallback: () => Promise<void>): Promise<void> {
+    const route = chooseRoute(deps.bus, text, choice, context)
+
+    if (route)
+      await deps.bus.run(route.spec.name, route.args, context)
+    else
+      await fallback()
+  }
+
   async function handleMention(message: Message<true>, member: GuildMember, settings: GuildSettings, text: string): Promise<void> {
     const choice = await decide(text, contextFor(message, member, settings), [...deps.bus.routes, DJ_OPTION])
 
     // The decision can take a few hundred milliseconds; re-read the live queue
     // so a song that ended in the meantime does not leave a stale queue behind.
     const context = contextFor(message, member, settings)
-    const route = chooseRoute(deps.bus, text, choice, context)
 
-    if (!route) {
-      await askDj(message, text, context)
-
-      return
-    }
-
-    if ('refusal' in route) {
-      await context.ui.error(route.refusal)
-
-      return
-    }
-
-    await deps.bus.run(route.spec.name, route.args, context)
+    await runRoute(text, choice, context, async () => askDj(message, text, context))
   }
 
   // A plain message in the listening channel is a request, not necessarily a
@@ -189,29 +206,9 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
       return
     }
 
-    const route = chooseRoute(deps.bus, text, choice, context)
-
-    if (!route) {
-      // A confident route with arguments the text did not carry ("sacá la
-      // tercera") is a conversation, not a search.
-      if (deps.agent) {
-        await askDj(message, text, context)
-
-        return
-      }
-
-      await playQuery(text, context)
-
-      return
-    }
-
-    if ('refusal' in route) {
-      await context.ui.error(route.refusal)
-
-      return
-    }
-
-    await deps.bus.run(route.spec.name, route.args, context)
+    // A confident route with arguments the text did not carry ("sacá la
+    // tercera") is a conversation, not a search.
+    await runRoute(text, choice, context, async () => deps.agent ? askDj(message, text, context) : playQuery(text, context))
   }
 
   return async (message) => {

@@ -7,8 +7,10 @@ import { commandBus } from '../bus.ts'
 import { EMPTY_PARAMETERS } from '../parameters.ts'
 import { fakeContext, fakeMusic, fakeUi, log, view } from './fakes.ts'
 
-function command(overrides: Partial<CommandSpec> & Pick<CommandSpec, 'name' | 'run'>): CommandSpec {
-  return { description: overrides.name, parameters: EMPTY_PARAMETERS, ...overrides }
+type Draft<Spec> = Spec extends CommandSpec ? Omit<Spec, 'description' | 'parameters'> : never
+
+function command(draft: Draft<CommandSpec>): CommandSpec {
+  return { description: draft.name, parameters: EMPTY_PARAMETERS, ...draft }
 }
 
 interface WarningRecord {

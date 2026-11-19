@@ -5,19 +5,9 @@ import { describe, expect, test } from 'bun:test'
 import { ButtonStyle, ComponentType, MessageFlags } from 'discord.js'
 import { track, view } from '../../commands/tests/fakes.ts'
 import { clearConfirmation, noticeMessage, nowPlayingMessage, queueMessage } from '../views.ts'
+import { buttonsOf, queueOf, textsOf } from './fakes.ts'
 
-type ContainerJson = ReturnType<ContainerBuilder['toJSON']>
-type ChildJson = ContainerJson['components'][number]
-
-interface ButtonInfo {
-  readonly customId: string
-  readonly label: string
-  readonly disabled: boolean
-  readonly style: number
-  readonly emoji: string | null
-}
-
-function containerOf(message: ViewMessage): ContainerJson {
+function containerOf(message: ViewMessage): ReturnType<ContainerBuilder['toJSON']> {
   const container = message.components[0]
 
   if (!container)
@@ -26,51 +16,8 @@ function containerOf(message: ViewMessage): ContainerJson {
   return container.toJSON()
 }
 
-function textsOf(message: ViewMessage): string[] {
-  return containerOf(message).components.flatMap((component: ChildJson) => {
-    if (component.type === ComponentType.TextDisplay)
-      return [component.content]
-
-    if (component.type === ComponentType.Section)
-      return component.components.map(child => child.content)
-
-    return []
-  })
-}
-
 function textMatching(message: ViewMessage, pattern: RegExp): string | undefined {
   return textsOf(message).find(value => pattern.test(value))
-}
-
-function buttonsOf(message: ViewMessage): ButtonInfo[] {
-  return containerOf(message).components.flatMap((component) => {
-    if (component.type !== ComponentType.ActionRow)
-      return []
-
-    return component.components.flatMap((child) => {
-      if (child.type !== ComponentType.Button || !('custom_id' in child))
-        return []
-
-      return [{
-        customId: child.custom_id,
-        label: child.label ?? '',
-        disabled: child.disabled ?? false,
-        style: child.style,
-        emoji: child.emoji?.name ?? null,
-      }]
-    })
-  })
-}
-
-function queueOf(count: number): QueueView {
-  if (count === 0)
-    return view({ current: null, upcoming: [], size: 0 })
-
-  return view({
-    current: track({ title: 'Song 1' }),
-    upcoming: Array.from({ length: count - 1 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` })),
-    size: count,
-  })
 }
 
 function queueLines(message: ViewMessage): string[] {
@@ -270,19 +217,19 @@ describe('nowPlayingMessage', () => {
   })
 
   test('the title links to the song and escapes markdown in its text', () => {
-    const message = card(view({ current: track({ title: '[live] *mix*' }) }))
+    const message = card(view({ current: track({ title: '[live] *mix*', requestedBy: 'tsu' }) }))
 
     expect(textMatching(message, /^## /)).toBe('## [\\[live\\] \\*mix\\*](https://youtu.be/1)\n**Playing** · 3:00 · Requested by tsu')
   })
 
   test('a parenthesized URL keeps the markdown link intact', () => {
-    const message = card(view({ current: track({ title: 'Mix', url: 'https://example.com/a(b' }) }))
+    const message = card(view({ current: track({ title: 'Mix', url: 'https://example.com/a(b', requestedBy: 'tsu' }) }))
 
     expect(textMatching(message, /^## /)).toBe('## [Mix](https://example.com/a%28b)\n**Playing** · 3:00 · Requested by tsu')
   })
 
   test('a non-http song URL is not turned into a link', () => {
-    const message = card(view({ current: track({ title: 'Mix', url: 'javascript:alert(1)' }) }))
+    const message = card(view({ current: track({ title: 'Mix', url: 'javascript:alert(1)', requestedBy: 'tsu' }) }))
 
     expect(textMatching(message, /^## /)).toBe('## Mix\n**Playing** · 3:00 · Requested by tsu')
   })
@@ -305,7 +252,7 @@ describe('nowPlayingMessage', () => {
   })
 
   test('the elapsed time and a progress bar follow the status line', () => {
-    const message = nowPlayingMessage(view({ current: track({ title: 'Mix', durationSeconds: 200 }) }), 50_000)
+    const message = nowPlayingMessage(view({ current: track({ title: 'Mix', durationSeconds: 200, requestedBy: 'tsu' }) }), 50_000)
     const header = message ? textMatching(message, /^## /) : undefined
 
     expect(header).toBe('## [Mix](https://youtu.be/1)\n**Playing** · 3:20 · Requested by tsu\n▰▰▰▱▱▱▱▱▱▱▱▱ `0:50 / 3:20`')

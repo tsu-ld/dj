@@ -10,7 +10,7 @@ import { errorMessage } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
 import { clearConfirmation, noticeMessage, queueMessage } from './views.ts'
 
-const NOW_PLAYING_ACTIONS = new Set(['toggle', 'skip', 'radio', 'shuffle', 'clear', 'queue'])
+const NOW_PLAYING_ACTIONS = new Set(['toggle', 'skip', 'radio', 'shuffle', 'queue'])
 
 export interface InteractionHandlerDeps {
   readonly bus: CommandBus
@@ -185,8 +185,10 @@ function interactionContext(
   view: QueueView,
 ): CommandContext {
   const ui: CommandUi = {
+    // In voice the card is the feedback; refusals and errors still follow up.
     reply: async (text) => {
-      await interaction.followUp({ content: text, flags: MessageFlags.Ephemeral })
+      if (deps.music.status(guildId) === null)
+        await interaction.followUp({ content: text, flags: MessageFlags.Ephemeral })
     },
     error: async (message) => {
       await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral })

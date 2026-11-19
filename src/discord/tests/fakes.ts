@@ -10,7 +10,8 @@ import type { QueueView } from '../../ports/music.ts'
 import type { RepliesPort } from '../../ports/replies.ts'
 import type { MessageSlot, SlotPayload } from '../slot.ts'
 import type { ViewMessage } from '../views.ts'
-import { fakeMember } from '../../commands/tests/fakes.ts'
+import { ComponentType } from 'discord.js'
+import { fakeMember, track, view } from '../../commands/tests/fakes.ts'
 
 export interface FakeSentMessage {
   readonly edits: ViewMessage[]
@@ -82,6 +83,7 @@ export interface IncomingOptions {
   users?: Map<string, unknown>
   channels?: Map<string, unknown>
   fetchChannel?: (id: string) => unknown
+  failReact?: boolean
 }
 
 export interface IncomingMessage {
@@ -102,7 +104,7 @@ export function fakeIncomingMessage(options: IncomingOptions = {}): IncomingMess
     channelId,
     author: { bot: options.bot ?? false, id: options.authorId ?? 'user-1' },
     client: { user: { id: botId } },
-    channel: { id: channelId, isTextBased: () => options.textBased ?? true },
+    channel: { id: channelId, isTextBased: () => options.textBased ?? true, sendTyping: async () => {} },
     member: 'member' in options ? options.member : fakeMember(),
     mentions: {
       users: options.users ?? new Map<string, unknown>(),
@@ -121,6 +123,9 @@ export function fakeIncomingMessage(options: IncomingOptions = {}): IncomingMess
       return value
     },
     async react(emoji: string) {
+      if (options.failReact)
+        throw new Error('Missing Permissions')
+
       reactions.push(emoji)
 
       return {}
@@ -202,18 +207,66 @@ export function fakeInteraction(options: InteractionOptions): InteractionRecorde
   }
 }
 
-export function optionContent(value: string | InteractionReplyOptions | undefined): string | undefined {
+export function contentOf(value: string | { readonly content?: string | null } | undefined): string | undefined {
   if (value === undefined)
     return undefined
 
   return typeof value === 'string' ? value : value.content ?? undefined
 }
 
-export function editContent(value: string | InteractionEditReplyOptions | undefined): string | undefined {
-  if (value === undefined)
-    return undefined
+export function textsOf(message: ViewMessage | undefined): string[] {
+  return (message?.components ?? []).flatMap(container => container.toJSON().components.flatMap((component) => {
+    if (component.type === ComponentType.TextDisplay)
+      return [component.content]
 
-  return typeof value === 'string' ? value : value.content ?? undefined
+    if (component.type === ComponentType.Section)
+      return component.components.map(child => child.content)
+
+    return []
+  }))
+}
+
+export function cardText(message: ViewMessage | undefined): string {
+  return textsOf(message).join('\n')
+}
+
+export interface ButtonInfo {
+  readonly customId: string
+  readonly label: string
+  readonly disabled: boolean
+  readonly style: number
+  readonly emoji: string | null
+}
+
+export function buttonsOf(message: ViewMessage): ButtonInfo[] {
+  return message.components.flatMap(container => container.toJSON().components.flatMap((component) => {
+    if (component.type !== ComponentType.ActionRow)
+      return []
+
+    return component.components.flatMap((child) => {
+      if (child.type !== ComponentType.Button || !('custom_id' in child))
+        return []
+
+      return [{
+        customId: child.custom_id,
+        label: child.label ?? '',
+        disabled: child.disabled ?? false,
+        style: child.style,
+        emoji: child.emoji?.name ?? null,
+      }]
+    })
+  }))
+}
+
+export function queueOf(count: number): QueueView {
+  if (count === 0)
+    return view({ current: null, upcoming: [], size: 0 })
+
+  return view({
+    current: track({ title: 'Song 1' }),
+    upcoming: Array.from({ length: count - 1 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` })),
+    size: count,
+  })
 }
 
 export interface RepliesRecorder extends RepliesPort {
@@ -252,8 +305,7 @@ export function fakeSlot(): SlotRecorder {
     reposts,
     shown,
     disposed: () => disposed,
-    trackStarted: () => {},
-    stateChanged: () => {},
+    update: () => {},
     queueChanged: () => {},
     playlistQueued: () => {},
     queueCleared: () => {},
