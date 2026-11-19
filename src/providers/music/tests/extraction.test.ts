@@ -4,7 +4,7 @@ import process from 'node:process'
 import { expect, test } from 'bun:test'
 import { errorMessage } from '../../../core/errors.ts'
 import { extractor, extractorProcess } from '../extraction.ts'
-import { log, rejection, shellScript, tempDir } from './helpers.ts'
+import { log, rejection, shellScript, tempDir } from './fakes.ts'
 
 async function readEventually(path: string, timeoutMs = 3_000): Promise<string> {
   const startedAt = Date.now()
