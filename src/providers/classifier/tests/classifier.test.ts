@@ -1,9 +1,8 @@
 import type { AppConfig } from '../../../config.ts'
-import type { Clock } from '../../../core/clock.ts'
 import type { DecisionOption } from '../../../ports/decision.ts'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { isRecord, parseJson } from '../../../core/json.ts'
-import { logger } from '../../../core/logger.ts'
+import { testClock } from '../../../tests/fixtures.ts'
 import { intentClassifier } from '../index.ts'
 
 const realFetch = globalThis.fetch
@@ -21,17 +20,6 @@ const config: AppConfig['decision'] = {
   timeoutMs: 5_000,
   minConfidence: 0.6,
   retryAfterMs: 60_000,
-}
-
-function fakeClock(start = 1_000_000): Clock & { advance: (milliseconds: number) => void } {
-  let now = start
-
-  return {
-    now: () => now,
-    advance(milliseconds) {
-      now += milliseconds
-    },
-  }
 }
 
 function stubFetch(answer: unknown): Record<string, unknown>[] {
@@ -56,7 +44,7 @@ afterEach(() => {
 describe('intentClassifier', () => {
   test('the decision sends the message, the state and the registered options', async () => {
     const bodies = stubFetch({ choice: 'pause', confidence: 0.9 })
-    const classifier = intentClassifier({ config, logger: logger({ level: 'error', sink: () => {} }), clock: fakeClock() })
+    const classifier = intentClassifier({ config, clock: testClock() })
 
     const choice = await classifier.choose({
       text: 'pausá',
@@ -83,7 +71,7 @@ describe('intentClassifier', () => {
 
   test('the message overrides a message already in the state', async () => {
     const bodies = stubFetch({ choice: 'pause', confidence: 0.9 })
-    const classifier = intentClassifier({ config, logger: logger({ level: 'error', sink: () => {} }), clock: fakeClock() })
+    const classifier = intentClassifier({ config, clock: testClock() })
 
     await classifier.choose({ text: 'pausá', state: { message: 'viejo' }, options: OPTIONS, sessionId: 'chan-1' })
 
@@ -93,7 +81,7 @@ describe('intentClassifier', () => {
   test('a low-confidence decision falls back to the dj', async () => {
     stubFetch({ choice: 'pause', confidence: 0.4 })
 
-    expect(await intentClassifier({ config, logger: logger({ level: 'error', sink: () => {} }), clock: fakeClock() }).choose({
+    expect(await intentClassifier({ config, clock: testClock() }).choose({
       text: 'pausá',
       state: {},
       options: OPTIONS,
@@ -104,7 +92,7 @@ describe('intentClassifier', () => {
   test('a confidence of exactly the minimum is accepted', async () => {
     stubFetch({ choice: 'pause', confidence: 0.6 })
 
-    expect(await intentClassifier({ config, logger: logger({ level: 'error', sink: () => {} }), clock: fakeClock() }).choose({
+    expect(await intentClassifier({ config, clock: testClock() }).choose({
       text: 'pausá',
       state: {},
       options: OPTIONS,
@@ -115,7 +103,7 @@ describe('intentClassifier', () => {
   test('a label outside the offered options falls back to the dj', async () => {
     stubFetch({ choice: 'set_persona', confidence: 0.9 })
 
-    expect(await intentClassifier({ config, logger: logger({ level: 'error', sink: () => {} }), clock: fakeClock() }).choose({
+    expect(await intentClassifier({ config, clock: testClock() }).choose({
       text: 'sé un dj',
       state: {},
       options: OPTIONS,
@@ -134,8 +122,7 @@ describe('intentClassifier', () => {
 
     expect(await intentClassifier({
       config: { enabled: false },
-      logger: logger({ level: 'error', sink: () => {} }),
-      clock: fakeClock(),
+      clock: testClock(),
     }).choose({ text: 'pausá', state: {}, options: OPTIONS, sessionId: 'chan-1' })).toBeNull()
     expect(called).toBe(false)
   })
@@ -149,7 +136,7 @@ describe('intentClassifier', () => {
       return Response.json({ error: 'slow down' }, { status: 429 })
     }, { preconnect: realFetch.preconnect })
 
-    const classifier = intentClassifier({ config, logger: logger({ level: 'error', sink: () => {} }), clock: fakeClock() })
+    const classifier = intentClassifier({ config, clock: testClock() })
 
     await expect(classifier.choose({ text: 'pausá', state: {}, options: OPTIONS, sessionId: 'chan-1' }))
       .rejects
@@ -159,7 +146,7 @@ describe('intentClassifier', () => {
   })
 
   test('the cooldown expires after sixty seconds', async () => {
-    const clock = fakeClock()
+    const clock = testClock()
     let calls = 0
 
     globalThis.fetch = Object.assign(async () => {
@@ -171,7 +158,7 @@ describe('intentClassifier', () => {
       return Response.json({ answers: { action: { choice: 'skip', confidence: 0.9 } } })
     }, { preconnect: realFetch.preconnect })
 
-    const classifier = intentClassifier({ config, logger: logger({ level: 'error', sink: () => {} }), clock })
+    const classifier = intentClassifier({ config, clock })
 
     await expect(classifier.choose({ text: 'skippea', state: {}, options: OPTIONS, sessionId: 'chan-1' }))
       .rejects

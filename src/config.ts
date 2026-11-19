@@ -48,7 +48,11 @@ export interface AppConfig {
   }
 }
 
-const LOG_LEVELS = new Set<LogLevel>(['debug', 'info', 'warn', 'error'])
+const LOG_LEVELS = new Set<string>(['debug', 'info', 'warn', 'error'])
+
+function isLogLevel(value: string): value is LogLevel {
+  return LOG_LEVELS.has(value)
+}
 const DEFAULT_LLM_MODEL = 'deepseek-v4-flash'
 const DEFAULT_DECISION_MODEL = 'jev-1.13-free'
 const DEFAULT_SPEECH_MODEL = 'eleven_v4'
@@ -108,9 +112,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     issues.push('DISCORD_TOKEN is required.')
 
   const logLevelRaw = text(env, 'LOG_LEVEL') ?? 'info'
-  const logLevel = LOG_LEVELS.has(logLevelRaw as LogLevel) ? logLevelRaw as LogLevel : 'info'
+  const logLevel = isLogLevel(logLevelRaw) ? logLevelRaw : 'info'
 
-  if (!LOG_LEVELS.has(logLevelRaw as LogLevel))
+  if (!isLogLevel(logLevelRaw))
     issues.push(`LOG_LEVEL must be one of ${[...LOG_LEVELS].join(', ')}.`)
 
   const languageUrl = httpUrl(env, 'LLM_BASE_URL', issues)
@@ -160,11 +164,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ? { enabled: true as const, clientId: metadataId, clientSecret: metadataSecret }
     : { enabled: false as const }
 
-  if (issues.length > 0)
+  // A missing token is already an issue; the second test only narrows it.
+  if (issues.length > 0 || token === null)
     throw new ConfigError(issues)
 
   return {
-    discord: { token: token ?? '' },
+    discord: { token },
     settingsPath: resolve(import.meta.dirname, '../data/guilds.json'),
     listenersPath: resolve(import.meta.dirname, '../data/listeners.json'),
     logLevel,

@@ -6,9 +6,9 @@ import { errorMessage } from '../../core/errors.ts'
 // and a stalled read from the stream host starves it the same way: a listener
 // hears the song speed up and slow down. These thresholds separate a normal
 // sample, a stall, and a stall worth its own line in the log.
-export const SAMPLE_MS = 40
-export const STALL_MS = 40
-export const STALL_LOG_MS = 100
+const SAMPLE_MS = 40
+const STALL_MS = 40
+const STALL_LOG_MS = 100
 const STALL_LOG_COOLDOWN_MS = 10_000
 
 export interface PingSample {
@@ -34,9 +34,9 @@ export interface AudioHealthSummary {
   readonly wsPingMaxMs: number
 }
 
-export type Timer = (run: () => void, afterMs: number) => () => void
+type Timer = (run: () => void, afterMs: number) => () => void
 
-export const systemTimer: Timer = (run, afterMs) => {
+const systemTimer: Timer = (run, afterMs) => {
   const handle = setTimeout(run, afterMs)
 
   handle.unref()
@@ -72,10 +72,9 @@ function freshest(current: number, value: number | undefined): number {
 
 // One loop serves every guild: the lag is the process's, so a timer per guild
 // would only measure the same thing twice. It runs only while a song plays.
-export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer, sampleMs?: number }): AudioHealth {
+export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer }): AudioHealth {
   const { clock, logger } = deps
   const timer = deps.timer ?? systemTimer
-  const sampleMs = deps.sampleMs ?? SAMPLE_MS
   const entries = new Map<string, Entry>()
   let cancel: (() => void) | null = null
   let dueAt = 0
@@ -106,8 +105,8 @@ export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer,
   }
 
   function schedule(): void {
-    dueAt = clock.now() + sampleMs
-    cancel = timer(tick, sampleMs)
+    dueAt = clock.now() + SAMPLE_MS
+    cancel = timer(tick, SAMPLE_MS)
   }
 
   function tick(): void {

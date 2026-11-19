@@ -4,7 +4,6 @@ import type { AppConfig } from '../../config.ts'
 import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { BeforeStreamInput, MusicPort, QueueView } from '../../ports/music.ts'
-import type { PlayCapture } from './types.ts'
 import { SpotifyPlugin } from '@distube/spotify'
 import { DisTube } from 'distube'
 import { keyedQueue } from '../../core/async.ts'
@@ -67,7 +66,6 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
   const mutations = keyedQueue()
   const { emitter, clear: clearEvents } = createEmitter()
   const health = audioHealth({ clock: deps.clock, logger })
-  const plays = new Map<string, PlayCapture>()
   let disposed = false
 
   const audio = audioOverMusic({
@@ -112,7 +110,6 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
     catalog,
     cache,
     emitter,
-    plays,
     beforeStream: deps.beforeStream,
     forgetStream: songId => stream.forget(songId),
     leave,
@@ -123,7 +120,7 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
 
   beforeStreamFor = events.beforeStreamFor
 
-  const play = musicPlay({ player, catalog, audio, mutations, plays, logger })
+  const play = musicPlay({ player, catalog, audio, mutations, logger })
   const controls = musicControls({ player, catalog, mutations, emitter, viewOf })
 
   return {
@@ -140,7 +137,6 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
       for (const off of events.detach) off()
 
       health.dispose()
-      plays.clear()
       await audio.dispose()
 
       for (const queue of [...player.queues.collection.values()]) {

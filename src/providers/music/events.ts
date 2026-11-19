@@ -5,11 +5,11 @@ import type { BeforeStreamInput, QueueView } from '../../ports/music.ts'
 import type { AudioEndReason, AudioHealth } from './audio-health.ts'
 import type { AudioCache } from './cache.ts'
 import type { MusicCatalog } from './catalog.ts'
-import type { MusicEmitter, PlayCapture } from './types.ts'
+import type { MusicEmitter } from './types.ts'
 import { Events as DiscordEvents } from 'discord.js'
 import { Events, isVoiceChannelEmpty } from 'distube'
 import { errorMessage } from '../../core/errors.ts'
-import { announcesAdd, leavesEmptyChannel, shouldCleanupAfterError } from './queue.ts'
+import { leavesEmptyChannel, shouldCleanupAfterError } from './queue.ts'
 import { voiceGuard } from './voice-guard.ts'
 
 // A Spotify song resolves its YouTube stream first; the line belongs to the
@@ -39,7 +39,6 @@ export function musicEvents(deps: {
   catalog: MusicCatalog
   cache: AudioCache
   emitter: MusicEmitter
-  plays: Map<string, PlayCapture>
   beforeStream: (input: BeforeStreamInput) => Promise<void>
   forgetStream: (songId: string) => void
   leave: (guildId: string) => void
@@ -47,7 +46,7 @@ export function musicEvents(deps: {
   health: AudioHealth
   logger: Logger
 }): { detach: Array<() => void>, beforeStreamFor: (song: Song) => Promise<void> } {
-  const { player, client, catalog, cache, emitter, plays, beforeStream, forgetStream, leave, viewOf, health, logger } = deps
+  const { player, client, catalog, cache, emitter, beforeStream, forgetStream, leave, viewOf, health, logger } = deps
   const lastSong = new Map<string, string>()
   const detach: Array<() => void> = []
   // The streams this process has listened to. The listener closes over nothing
@@ -151,14 +150,12 @@ export function musicEvents(deps: {
       track,
       view: viewOf(queue),
       textChannel: queue.textChannel ?? null,
-      announce: announcesAdd(plays.get(queue.id), track),
     })
   }
 
   function onAddList(queue: Queue, playlist: Playlist): void {
     const name = playlist.name ?? playlist.url ?? 'Playlist'
     const count = playlist.songs.length
-    const capture = plays.get(queue.id)
 
     logger.info('music.playlist_added', { guildId: queue.id, name, count })
 
@@ -168,7 +165,6 @@ export function musicEvents(deps: {
       count,
       view: viewOf(queue),
       textChannel: queue.textChannel ?? null,
-      announce: capture?.announce === true,
     })
   }
 

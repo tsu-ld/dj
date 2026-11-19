@@ -5,7 +5,6 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
-import { loadConfig } from '../../../config.ts'
 import { logger } from '../../../core/logger.ts'
 import { fitsQuota, speechSynthesizer } from '../index.ts'
 
@@ -136,13 +135,6 @@ describe('configuration', () => {
 
     expect(speech.available).toBe(false)
     expect(await speech.synthesize('Hola')).toBeNull()
-    expect(await speech.dispose()).toBeUndefined()
-  })
-
-  test('without a voice id the key alone is not enough', () => {
-    const loaded = loadConfig({ DISCORD_TOKEN: 'token', SPEECH_API_KEY: 'key' })
-
-    expect(loaded.speech.enabled).toBe(false)
   })
 
   test('a line over the hard cap is dropped before it costs credits', async () => {

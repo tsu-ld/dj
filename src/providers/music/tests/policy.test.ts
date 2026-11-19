@@ -81,5 +81,4 @@ test('a live stream carries its own failure code', () => {
 
   expect(error.message).toBe(MESSAGES.liveUnsupported)
   expect(error.code).toBe('LIVE_UNSUPPORTED')
-  expect(error.errorCode).toBe('LIVE_UNSUPPORTED')
 })

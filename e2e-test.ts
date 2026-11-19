@@ -8,7 +8,7 @@ import { commandBus } from './src/commands/bus.ts'
 import { commands } from './src/commands/index.ts'
 import { loadConfig } from './src/config.ts'
 import { systemClock } from './src/core/clock.ts'
-import { UserError } from './src/core/errors.ts'
+import { errorMessage, UserError } from './src/core/errors.ts'
 import { logger } from './src/core/logger.ts'
 import { discordClient } from './src/discord/client.ts'
 import { djAgent } from './src/dj/conversation.ts'
@@ -86,6 +86,9 @@ if (!textChannel?.isTextBased() || !('guild' in textChannel)) {
   process.exit(1)
 }
 
+const voice: VoiceBasedChannel = voiceChannel
+const text: GuildTextBasedChannel = textChannel
+
 function audioMs(): number {
   return music.status(GUILD)?.playbackDurationMs ?? 0
 }
@@ -94,15 +97,12 @@ function currentSong(): string {
   return music.view(GUILD)?.current?.title ?? '(none)'
 }
 
+async function play(input: string): Promise<void> {
+  await music.play({ kind: 'text', value: input, member: me, voiceChannel: voice, textChannel: text })
+}
+
 async function playAndProbe(label: string, input: string, ms = 18_000): Promise<void> {
-  await music.play({
-    kind: 'text',
-    value: input,
-    member: me,
-    voiceChannel: voiceChannel as VoiceBasedChannel,
-    textChannel: textChannel as GuildTextBasedChannel,
-    announce: false,
-  })
+  await play(input)
   const before = audioMs()
 
   await wait(ms)
@@ -115,6 +115,18 @@ async function playAndProbe(label: string, input: string, ms = 18_000): Promise<
     : fail(label, `audio=${duration}ms status=${playing} song=${currentSong()}`)
 }
 
+// The steps that test stop must see its failure, not swallow it.
+async function stopError(): Promise<string | null> {
+  try {
+    await music.stop(GUILD, { resetStation: true })
+
+    return null
+  }
+  catch (error) {
+    return errorMessage(error)
+  }
+}
+
 async function cleanup(): Promise<void> {
   await music.stop(GUILD).catch(() => {})
   await wait(2_000)
@@ -124,8 +136,8 @@ async function fakeContext() {
   return {
     guildId: GUILD,
     member: me,
-    voiceChannel: voiceChannel as VoiceBasedChannel,
-    textChannel: textChannel as GuildTextBasedChannel,
+    voiceChannel: voice,
+    textChannel: text,
     message: null,
     settings: settings.get(GUILD),
     queue: music.view(GUILD),
@@ -162,14 +174,7 @@ await playAndProbe('spotify link plays audio', 'https://open.spotify.com/track/4
 await cleanup()
 
 console.log('== 4. Pause / resume ==')
-await music.play({
-  kind: 'text',
-  value: 'hipercandombe maquina de hacer pajaros',
-  member: me,
-  voiceChannel,
-  textChannel,
-  announce: false,
-})
+await play('hipercandombe maquina de hacer pajaros')
 await wait(10_000)
 
 await music.pause(GUILD)
@@ -199,23 +204,9 @@ resumeEnd - resumeStart > 2_000
 await cleanup()
 
 console.log('== 5. Queue accumulates ==')
-await music.play({
-  kind: 'text',
-  value: 'never gonna give you up rick astley',
-  member: me,
-  voiceChannel,
-  textChannel,
-  announce: false,
-})
+await play('never gonna give you up rick astley')
 await wait(8_000)
-await music.play({
-  kind: 'text',
-  value: 'hipercandombe maquina de hacer pajaros',
-  member: me,
-  voiceChannel,
-  textChannel,
-  announce: false,
-})
+await play('hipercandombe maquina de hacer pajaros')
 await wait(8_000)
 
 const size = music.view(GUILD)?.size ?? 0
@@ -234,37 +225,27 @@ before !== after ? pass(`skip moved from "${before}" to "${after}"`) : fail('ski
 await cleanup()
 
 console.log('== 7. Clear empties queue ==')
-await music.play({
-  kind: 'text',
-  value: 'hipercandombe maquina de hacer pajaros',
-  member: me,
-  voiceChannel,
-  textChannel,
-  announce: false,
-})
+await play('hipercandombe maquina de hacer pajaros')
 await wait(8_000)
-await music.stop(GUILD, { resetStation: true }).catch(() => {})
+const clearError = await stopError()
 await wait(2_000)
 
-music.view(GUILD) === null ? pass('clear empties the queue') : fail('clear empties the queue', 'queue still present')
+clearError === null && music.view(GUILD) === null
+  ? pass('clear empties the queue')
+  : fail('clear empties the queue', clearError ?? 'queue still present')
 await cleanup()
 
 console.log('== 8. Leave is clean ==')
-await music.play({
-  kind: 'text',
-  value: 'hipercandombe maquina de hacer pajaros',
-  member: me,
-  voiceChannel,
-  textChannel,
-  announce: false,
-})
+await play('hipercandombe maquina de hacer pajaros')
 await wait(10_000)
-await music.stop(GUILD, { resetStation: true }).catch(() => {})
+const leaveError = await stopError()
 await wait(4_000)
 
 const stillIn = (await guild.members.fetch(client.user?.id ?? '')).voice.channelId
 
-stillIn === null ? pass('bot leaves voice cleanly') : fail('bot leaves voice cleanly', `still in channel ${stillIn}`)
+leaveError === null && stillIn === null
+  ? pass('bot leaves voice cleanly')
+  : fail('bot leaves voice cleanly', leaveError ?? `still in channel ${stillIn}`)
 console.log('  (manual: a human leaving the channel also drops the bot)')
 
 console.log('== 9. DJ request queues and speaks ==')

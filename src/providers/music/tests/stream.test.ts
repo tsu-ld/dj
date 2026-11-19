@@ -64,8 +64,8 @@ test('the expiry is read from the url in seconds and kept in milliseconds', () =
   const now = Math.floor(Date.now() / 1000)
 
   expect(urlExpiresAt(`https://x/videoplayback?expire=${now + 3600}`)).toBe((now + 3600) * 1000)
-  expect(isUrlFresh({ url: 'https://x', expiresAt: urlExpiresAt(`https://x?expire=${now + 3600}`) })).toBe(true)
-  expect(isUrlFresh({ url: 'https://x', expiresAt: urlExpiresAt(`https://x?expire=${now - 3600}`) })).toBe(false)
+  expect(isUrlFresh({ url: 'https://x', expiresAt: urlExpiresAt(`https://x?expire=${now + 3600}`) }, Date.now())).toBe(true)
+  expect(isUrlFresh({ url: 'https://x', expiresAt: urlExpiresAt(`https://x?expire=${now - 3600}`) }, Date.now())).toBe(false)
   expect(urlExpiresAt('https://x/videoplayback')).toBe(Number.POSITIVE_INFINITY)
 })
 

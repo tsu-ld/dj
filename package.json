@@ -19,7 +19,6 @@
     "@discordjs/opus": "npm:mediaplex@1.0.0",
     "@discordjs/voice": "^0.19.2",
     "@distube/spotify": "^2.0.2",
-    "@snazzah/davey": "^0.1.12",
     "discord.js": "^14.27.0",
     "distube": "^5.2.3"
   },

@@ -1,15 +1,12 @@
 import type { GuildMember } from 'discord.js'
-import type { Logger } from '../../../core/logger.ts'
-import type { Track } from '../../../ports/music.ts'
 import type { Extractor } from '../extraction.ts'
 import type { StreamResolver } from '../stream.ts'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { errorMessage } from '../../../core/errors.ts'
-import { logger } from '../../../core/logger.ts'
 
-export const log: Logger = logger({ level: 'error', sink: () => {} })
+export { silentLog as log, testTrack as track } from '../../../tests/fixtures.ts'
 
 // Bun types the rejection matcher as a plain assertion, but a test that does not
 // await it can pass before the promise settles. This keeps the await real.
@@ -22,22 +19,6 @@ export async function rejection(run: () => Promise<unknown>): Promise<string> {
   }
 
   throw new Error('Expected the operation to reject.')
-}
-
-export function track(overrides: Partial<Track> = {}): Track {
-  return {
-    id: 'song-1',
-    title: 'Song 1',
-    url: 'https://www.youtube.com/watch?v=song-1',
-    durationSeconds: 180,
-    isLive: false,
-    thumbnail: null,
-    requestedBy: null,
-    requesterId: null,
-    artist: null,
-    fromRadio: false,
-    ...overrides,
-  }
 }
 
 // the SDK only keeps a member whose ids look like snowflakes

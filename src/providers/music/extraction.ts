@@ -33,7 +33,7 @@ export interface ExtractorProcess {
 export interface Extractor {
   // The extractor's own wrapper merges stderr into its JSON parse, so this reads
   // stdout only and suppresses warnings.
-  json: (url: string, extraFlags?: readonly string[]) => Promise<unknown>
+  json: (url: string, extraFlags: readonly string[]) => Promise<unknown>
   streamUrl: (url: string, format: string) => Promise<string | null>
   download: (url: string, outputTemplate: string) => Promise<void>
   dispose: () => Promise<void>
@@ -61,13 +61,6 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
       const child = spawn(deps.command, [...args], { stdio: ['ignore', 'pipe', 'pipe'], detached })
       const stdout = child.stdout
       const stderr = child.stderr
-
-      if (stdout === null || stderr === null) {
-        child.kill('SIGKILL')
-        reject(new Error('The extractor did not expose its output streams.'))
-
-        return
-      }
 
       let out = ''
       let err = ''
@@ -189,7 +182,7 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
 export function extractor(deps: { command: string, logger: Logger }): Extractor {
   const process = extractorProcess(deps)
 
-  async function json(url: string, extraFlags: readonly string[] = []): Promise<unknown> {
+  async function json(url: string, extraFlags: readonly string[]): Promise<unknown> {
     const { code, stdout, stderr } = await process.run(
       [...BASE_ARGS, '--dump-single-json', '--skip-download', ...extraFlags, url],
       METADATA_TIMEOUT_MS,

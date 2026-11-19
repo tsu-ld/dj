@@ -1,7 +1,7 @@
 import type { MusicEventMap, QueueView, Track } from '../../ports/music.ts'
 import type { MutableTrackQueue, QueueState, SkippableQueue, StoppableQueue, TrackQueue } from './types.ts'
 import { isRecord } from '../../core/json.ts'
-import { isPositionInQueue as atPosition, MAX_QUEUE_SIZE, queueRoom as roomFor } from '../../limits.ts'
+import { MAX_QUEUE_SIZE } from '../../limits.ts'
 
 export function errorCodeOf(error: unknown): string | null {
   if (!isRecord(error))
@@ -10,14 +10,6 @@ export function errorCodeOf(error: unknown): string | null {
   const code = error.errorCode ?? error.code
 
   return typeof code === 'string' ? code : null
-}
-
-export function isPositionInQueue(queue: TrackQueue, position: number): boolean {
-  return atPosition(queue.songs.length, position)
-}
-
-export function queueRoom(queue: TrackQueue | null | undefined, max = MAX_QUEUE_SIZE): number {
-  return roomFor(queue?.songs.length ?? 0, max)
 }
 
 export function capQueue(queue: MutableTrackQueue, max = MAX_QUEUE_SIZE): number {
@@ -44,12 +36,6 @@ export function queueView<TSong>(
     radio: queue.autoplay,
     size: queue.songs.length,
   }
-}
-
-// Autoplay additions arrive after the request that started them: they are radio
-// songs and nothing asked for them in the channel.
-export function announcesAdd(capture: { readonly announce: boolean } | undefined, track: Track): boolean {
-  return capture?.announce === true && !track.fromRadio
 }
 
 export async function skipSong(queue: SkippableQueue, clear: () => Promise<void>): Promise<void> {

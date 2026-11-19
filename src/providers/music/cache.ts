@@ -17,14 +17,18 @@ export interface AudioCache {
   // song on the queue reads from disk. One prefetch per guild at a time; a
   // Spotify song resolves to YouTube only when it starts, so it cannot be
   // prefetched from its own URL.
-  prefetch: (candidate: PrefetchCandidate | null | undefined, guildId: string, download?: (url: string, id: string) => Promise<unknown>) => void
+  prefetch: (candidate: PrefetchCandidate | null | undefined, guildId: string) => void
   dispose: () => void
 }
 
 // yt-dlp leaves <id>.<ext>.part (and .ytdl) files behind mid-download;
 // only a finished file may be played.
+function isPartial(file: string): boolean {
+  return file.endsWith('.part') || file.endsWith('.ytdl')
+}
+
 export function finishedAudioFile(files: readonly string[], id: string): string | undefined {
-  return files.find(file => file.startsWith(`${id}.`) && !file.endsWith('.part') && !file.endsWith('.ytdl'))
+  return files.find(file => file.startsWith(`${id}.`) && !isPartial(file))
 }
 
 // The id comes from an external service and ends up in a path; keep only word
@@ -74,7 +78,7 @@ export function audioCache(deps: {
       }
 
       // Partial downloads belong to a process that may still be writing them.
-      if (!file.endsWith('.part') && !file.endsWith('.ytdl'))
+      if (!isPartial(file))
         kept.push({ path, size: info.size, mtimeMs: info.mtimeMs })
     }
 
@@ -129,7 +133,6 @@ export function audioCache(deps: {
   function prefetch(
     candidate: PrefetchCandidate | null | undefined,
     guildId: string,
-    downloadAudio: (url: string, id: string) => Promise<unknown> = download,
   ): void {
     if (!candidate || disposed || prefetching.has(guildId))
       return
@@ -141,7 +144,7 @@ export function audioCache(deps: {
 
     prefetching.add(guildId)
 
-    void downloadAudio(url, candidate.id)
+    void download(url, candidate.id)
       .catch((error: unknown) => logger.error('music.prefetch_failed', error, { guildId }))
       .finally(() => prefetching.delete(guildId))
   }

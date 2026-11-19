@@ -21,15 +21,11 @@ export type PolicyCode = 'UNSUPPORTED_URL' | 'LIVE_UNSUPPORTED'
 
 export class PolicyError extends Error {
   readonly code: PolicyCode
-  // The extractor library reads errorCode; the code field is what the tests and
-  // our own play path inspect. Both carry the same value.
-  readonly errorCode: PolicyCode
 
   constructor(code: PolicyCode, message: string) {
     super(message)
     this.name = 'PolicyError'
     this.code = code
-    this.errorCode = code
   }
 }
 

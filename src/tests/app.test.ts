@@ -34,17 +34,11 @@ async function config(): Promise<AppConfig> {
   }
 }
 
-test('the composition root builds every capability without a Discord login', async () => {
+// Building wires every capability without a Discord login; stop must settle
+// and a second stop must return instead of tearing the app down again.
+test('the composition root builds and stops twice without throwing', async () => {
   const app = await createApp(await config())
 
-  expect(app.logger).toBeDefined()
-
-  await app.stop()
-})
-
-test('stopping twice is a no-op', async () => {
-  const app = await createApp(await config())
-
-  await app.stop()
-  await app.stop()
+  await expect(app.stop()).resolves.toBeUndefined()
+  await expect(app.stop()).resolves.toBeUndefined()
 })

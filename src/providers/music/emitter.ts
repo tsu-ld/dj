@@ -1,11 +1,13 @@
 import type { MusicEventMap } from '../../ports/music.ts'
 import type { MusicEmitter } from './types.ts'
 
-function channel<T>(): {
+interface Channel<T> {
   on: (listener: (payload: T) => void) => () => void
   emit: (payload: T) => void
   clear: () => void
-} {
+}
+
+function channel<T>(): Channel<T> {
   const listeners = new Set<(payload: T) => void>()
 
   return {
@@ -28,7 +30,7 @@ function channel<T>(): {
 // The SDK's events are translated once, here, into the small event map the app
 // consumes. Features never import the SDK.
 export function createEmitter(): { emitter: MusicEmitter, clear: () => void } {
-  const channels = {
+  const channels: { readonly [K in keyof MusicEventMap]: Channel<MusicEventMap[K]> } = {
     trackQueued: channel<MusicEventMap['trackQueued']>(),
     playlistQueued: channel<MusicEventMap['playlistQueued']>(),
     trackStarted: channel<MusicEventMap['trackStarted']>(),
@@ -40,22 +42,8 @@ export function createEmitter(): { emitter: MusicEmitter, clear: () => void } {
     disconnected: channel<MusicEventMap['disconnected']>(),
   }
 
-  const subscriptions: {
-    readonly [K in keyof MusicEventMap]: (listener: (payload: MusicEventMap[K]) => void) => () => void
-  } = {
-    trackQueued: listener => channels.trackQueued.on(listener),
-    playlistQueued: listener => channels.playlistQueued.on(listener),
-    trackStarted: listener => channels.trackStarted.on(listener),
-    stateChanged: listener => channels.stateChanged.on(listener),
-    trackSkipped: listener => channels.trackSkipped.on(listener),
-    queueEnded: listener => channels.queueEnded.on(listener),
-    queueCleared: listener => channels.queueCleared.on(listener),
-    playbackError: listener => channels.playbackError.on(listener),
-    disconnected: listener => channels.disconnected.on(listener),
-  }
-
   function on<K extends keyof MusicEventMap>(event: K, listener: (payload: MusicEventMap[K]) => void): () => void {
-    return subscriptions[event](listener)
+    return channels[event].on(listener)
   }
 
   const emitter: MusicEmitter = {

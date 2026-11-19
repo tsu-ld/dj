@@ -1,30 +1,18 @@
 import type { AppConfig } from '../../config.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { ChatMessage, CompletionReply, CompletionRequest, ToolCall, ToolSpec } from '../../ports/conversation.ts'
-import { errorMessage, ProviderError } from '../../core/errors.ts'
+import { ProviderError } from '../../core/errors.ts'
 import { isRecord, parseJson } from '../../core/json.ts'
+import { isRetryableStatus, mapFailure, MAX_ERROR_BODY } from '../http-failure.ts'
 
 type LanguageConfig = Extract<AppConfig['language'], { enabled: true }>
 
-const DEFAULT_MAX_OUTPUT_TOKENS = 800
-const MAX_ERROR_BODY = 300
 const MAX_OUTPUT_PREVIEW = 200
 const RETRY_JITTER_MIN_MS = 250
 const RETRY_JITTER_MS = 500
 
-function isRetryableStatus(status: number): boolean {
-  return status === 429 || status >= 500
-}
-
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')
-}
-
-function mapFailure(error: unknown): ProviderError {
-  if (error instanceof ProviderError)
-    return error
-
-  return new ProviderError('language', errorMessage(error), { failure: 'retryable', cause: error })
 }
 
 function toInputItems(message: ChatMessage): readonly Record<string, unknown>[] {
@@ -61,7 +49,7 @@ function buildBody(config: LanguageConfig, request: CompletionRequest): Record<s
   const body: Record<string, unknown> = {
     model: config.model,
     store: false,
-    max_output_tokens: request.maxOutputTokens ?? config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+    max_output_tokens: request.maxOutputTokens ?? config.maxOutputTokens,
     input: request.messages.flatMap(toInputItems),
   }
 
@@ -175,7 +163,6 @@ export async function completeConversation(options: {
     const detail = await response.text().catch(() => '')
 
     throw new ProviderError(
-      'language',
       `LLM endpoint responded ${response.status}: ${detail.slice(0, MAX_ERROR_BODY)}`,
       { failure: isRetryableStatus(response.status) ? 'retryable' : 'fatal', status: response.status },
     )
@@ -194,7 +181,6 @@ export async function completeConversation(options: {
 
   if (!isRecord(payload) || !Array.isArray(payload.output)) {
     throw new ProviderError(
-      'language',
       `LLM endpoint returned no output: ${raw.slice(0, MAX_OUTPUT_PREVIEW)}`,
       { failure: 'fatal', status: response.status },
     )

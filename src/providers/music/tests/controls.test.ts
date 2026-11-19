@@ -4,16 +4,14 @@ import { AudioPlayerStatus } from '@discordjs/voice'
 import { expect, test } from 'bun:test'
 import { ChannelType } from 'discord.js'
 import { keyedQueue } from '../../../core/async.ts'
+import { isPositionInQueue, queueRoom } from '../../../limits.ts'
 import { MESSAGES } from '../../../messages.ts'
 import { MusicCatalog } from '../catalog.ts'
 import { musicControls } from '../controls.ts'
 import { createEmitter } from '../emitter.ts'
 import {
-  announcesAdd,
   capQueue,
   clearStation,
-  isPositionInQueue,
-  queueRoom,
   queueView,
   removeSongAt,
   shouldCleanupAfterError,
@@ -23,19 +21,17 @@ import { voiceChannelProblem } from '../voice.ts'
 import { extractionStub, log, memberOf, rejection, streamStub, track } from './helpers.ts'
 
 test('queue positions are one-based and bounded by the queue', () => {
-  const queue = { songs: [{ name: 'a' }, { name: 'b' }] }
-
-  expect(isPositionInQueue(queue, 1)).toBe(true)
-  expect(isPositionInQueue(queue, 2)).toBe(true)
-  expect(isPositionInQueue(queue, 0)).toBe(false)
-  expect(isPositionInQueue(queue, 3)).toBe(false)
+  expect(isPositionInQueue(2, 1)).toBe(true)
+  expect(isPositionInQueue(2, 2)).toBe(true)
+  expect(isPositionInQueue(2, 0)).toBe(false)
+  expect(isPositionInQueue(2, 3)).toBe(false)
 })
 
 test('queue room is what remains under the cap', () => {
-  expect(queueRoom(null)).toBe(200)
-  expect(queueRoom({ songs: [] })).toBe(200)
-  expect(queueRoom({ songs: [{}, {}, {}] }, 5)).toBe(2)
-  expect(queueRoom({ songs: [{}, {}] }, 1)).toBe(0)
+  expect(queueRoom(0)).toBe(200)
+  expect(queueRoom(197)).toBe(3)
+  expect(queueRoom(200)).toBe(0)
+  expect(queueRoom(250)).toBe(0)
 })
 
 test('the queue is capped after the current song and reports what it dropped', () => {
@@ -163,15 +159,6 @@ test('an empty queue has no current song', () => {
   expect(view).toEqual({ current: null, upcoming: [], paused: false, radio: false, size: 0 })
 })
 
-test('autoplay additions never announce, even during an announced request', () => {
-  const request = { announce: true }
-
-  expect(announcesAdd(request, track())).toBe(true)
-  expect(announcesAdd(request, track({ fromRadio: true }))).toBe(false)
-  expect(announcesAdd({ announce: false }, track())).toBe(false)
-  expect(announcesAdd(undefined, track())).toBe(false)
-})
-
 test('an explicit stop reports whether the station resets', async () => {
   const seen: Array<MusicEventMap['queueCleared']> = []
   const order: string[] = []
@@ -247,7 +234,7 @@ function skipStation(): {
 
 const listener = { id: '200000000000000008', name: 'ana' }
 
-test('a skip reports who skipped the playing song and how long it played, before skipping', async () => {
+test('a skip reports who skipped the playing song, before skipping', async () => {
   const { controls, order, skipped } = skipStation()
 
   await controls.skip('guild-1', listener)
@@ -256,7 +243,6 @@ test('a skip reports who skipped the playing song and how long it played, before
   expect(skipped).toHaveLength(1)
   expect(skipped[0]?.guildId).toBe('guild-1')
   expect(skipped[0]?.by).toEqual(listener)
-  expect(skipped[0]?.playedMs).toBe(42_000)
   expect(skipped[0]?.track.id).toBe('a')
   expect(skipped[0]?.track.artist).toBe('Soda Stereo')
   expect(skipped[0]?.track.requesterId).toBe('200000000000000007')
@@ -270,7 +256,7 @@ test('removing the playing song reports a skip; removing a waiting song does not
 
   expect(await controls.remove('guild-1', 1, listener)).toBe('A')
   expect(order).toEqual(['trackSkipped', 'skip'])
-  expect(skipped.map(event => [event.track.id, event.by.name, event.playedMs])).toEqual([['a', 'ana', 42_000]])
+  expect(skipped.map(event => [event.track.id, event.by.name])).toEqual([['a', 'ana']])
 })
 
 const guild = { members: { me: { id: 'bot' } } }

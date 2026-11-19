@@ -136,25 +136,16 @@ function network(routes: Routes = {}): FakeNet {
   })
 }
 
-function testLogger(): { logger: Logger, events: string[] } {
-  const events: string[] = []
-  const base: Logger = {
-    debug: (event) => {
-      events.push(event)
-    },
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-    child: () => base,
-  }
-
-  return { logger: base, events }
+const silent: Logger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  child: () => silent,
 }
 
 function portFor(net: FakeNet, options: { deadlineMs?: number } = {}): ReturnType<typeof songFacts> {
-  const { logger } = testLogger()
-
-  return songFacts({ logger, fetch: net.fetch, now: () => NOW, deadlineMs: options.deadlineMs })
+  return songFacts({ logger: silent, fetch: net.fetch, now: () => NOW, deadlineMs: options.deadlineMs })
 }
 
 const FRESH_NEWS = { title: 'Daft Punk announce a new album', source: 'BBC', publishedAt: Date.parse('Tue, 17 Nov 2026 08:00:00 GMT') }
@@ -425,9 +416,8 @@ describe('review regressions', () => {
 
   test('a partial answer is cached for an hour, not a day', async () => {
     let clock = NOW
-    const { logger } = testLogger()
     const net = network({ news: () => new Response('', { status: 429 }) })
-    const port = songFacts({ logger, fetch: net.fetch, now: () => clock })
+    const port = songFacts({ logger: silent, fetch: net.fetch, now: () => clock })
     const facts = await port.lookup({ title: TITLE, artist: null })
 
     expect(facts?.album).toBe('Discovery')
@@ -438,9 +428,8 @@ describe('review regressions', () => {
 
   test('a complete answer survives the same two hours', async () => {
     let clock = NOW
-    const { logger } = testLogger()
     const net = network()
-    const port = songFacts({ logger, fetch: net.fetch, now: () => clock })
+    const port = songFacts({ logger: silent, fetch: net.fetch, now: () => clock })
 
     await port.lookup({ title: TITLE, artist: null })
 
