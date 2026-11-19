@@ -8,7 +8,8 @@ A Discord bot that plays music in your voice channel. Drop a song name or a link
 
 - **No tag needed**: in the listening channel, the fast router reads the intent of every message. "pausá" pauses, "mostrame la cola" shows the queue, "cumbia" plays a search, and a mood like "poneme algo tranqui" goes to the DJ.
 - **Talk to it like a DJ**: tag the bot with a plain request ("poneme algo tranqui de rock nacional") and it chooses the songs, queues them and answers in character.
-- **Radio voice**: with a voice configured, the DJ speaks in the gap before a song starts and never over it. One song in three runs without a line and autoplay songs talk less. Short lines keep the run moving (who asked, what just played, what comes next); every second line is longer and gets one fact about the song or artist, only when the model is sure of it.
+- **Radio voice**: with a voice configured, the DJ speaks in the gap before a song starts and never over it. One song in three runs without a line and autoplay songs talk less. Short lines keep the run moving (who asked, what just played, what comes next); every second line is longer and gets one fact about the song or artist, only when the model is sure of it. The DJ is the radio: a song nobody asked for is his own pick, and a skip is something he knows, not something he announces.
+- **Quiet in text while on air**: while the bot is in a voice channel, DJ answers and confirmations become a ✅ reaction and song requests get a ✅; refusals and errors still come as text.
 - **Personality per server**: ask it to talk a certain way (`@DJ sé un dj cumbiero`) and the setting lives with the server.
 - **Play anything**: YouTube links and search terms, and `open.spotify.com` links (track, album, playlist, artist). Other pasted links are rejected before they reach the extractor.
 - **Full control surface**: pause, resume, skip, shuffle, radio, clear (the button asks for confirmation) and a paginated queue view, as buttons on the now-playing message or by asking `@DJ` in plain language.
@@ -34,7 +35,7 @@ The internals are described in [docs/architecture.md](docs/architecture.md): cap
 - **Bun 1.4+**
 - **FFmpeg** on `PATH`
 - **yt-dlp** on `PATH`
-- **A Discord bot**: create one in the [Discord developer portal](https://discord.com/developers/applications) and invite it with Send Messages, Embed Links, Attach Files, Add Reactions, Read Message History, Connect and Speak. Enable the **Message Content** privileged intent.
+- **A Discord bot**: create one in the [Discord developer portal](https://discord.com/developers/applications) and invite it with Send Messages, Embed Links, Add Reactions, Read Message History, Connect and Speak. Enable the **Message Content** privileged intent.
 
 ## Setup
 
@@ -157,7 +158,7 @@ src/
   config.ts              the only environment reader
   core/                  clock, errors, logger, async, text, TTL map
   ports/                 capability interfaces
-  providers/             music, speech, language-model, classifier, settings
+  providers/             music, speech, language-model, classifier, settings, listeners, song-facts
   dj/                    persona, prompts, conversation, replies, announcements
   on-air/                station state machine, script, host
   commands/              command specs, bus, fast router

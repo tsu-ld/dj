@@ -1,7 +1,7 @@
 # Architecture
 
 The bot is a modular monolith: one Bun process, one Discord client, one voice
-connection per guild. The design is organized around six capabilities and one
+connection per guild. The design is organized around eight capabilities and one
 composition root, not around the libraries that implement them.
 
 ```mermaid
@@ -16,7 +16,7 @@ flowchart TD
   App --> Commands
   App --> DJ
   App --> OnAir
-  Providers[Providers: music, speech, language-model, classifier, settings] --> Ports
+  Providers[Providers: music, speech, language-model, classifier, settings, listeners, song-facts] --> Ports
   App --> Providers
 ```
 
@@ -26,7 +26,7 @@ flowchart TD
 and import `core`, `ports`, the `config` types, `limits`/`messages` and their own
 SDK. A feature never imports a provider; a provider never imports a feature.
 `src/tests/architecture.test.ts` fails on a cycle, a missing import, an upward
-dependency, a leaked technology name, an environment read outside `config.ts`, a
+dependency, a technology name in a file path, an environment read outside `config.ts`, a
 `console` call, or a non-test source file over 300 lines.
 
 ## Capabilities
@@ -39,9 +39,15 @@ dependency, a leaked technology name, an environment read outside `config.ts`, a
 | `DecisionPort` | `providers/classifier` | fast typed choice, confidence, breaker | DJ tool routing |
 | `SettingsPort` | `providers/settings` | flat JSON, atomic writes, partial entries defaulted | empty settings |
 | `RepliesPort` | `dj/replies` | in-character rewrite with plain fallback | plain text |
+| `ListenersPort` | `providers/listeners` | per-member requests, top songs and artists, debounced JSON writes | no listener angle |
+| `SongFactsPort` | `providers/song-facts` | verified album, year, genre, summaries and news, with a deadline and a cache | no fact angles |
 
-The five vendor names (`distube`, `yt-dlp`, `elevenlabs`, `openai`, `jev`) never
-appear in file, folder, type or function names outside `src/providers/**`.
+The settings and listeners stores share `providers/json-file.ts` (read,
+quarantine, atomic write); the HTTP providers share `providers/http-failure.ts`.
+
+The vendor names listed in `src/tests/architecture.test.ts` (`distube`, `yt-dlp`,
+`elevenlabs`, `openai`, `jev`, `spotify`, `deezer`, `wikipedia` and others) never
+appear in a source file or folder path.
 `discord.js` is the platform boundary, so its types appear in ports and handlers.
 The capability modules are named for what they do: `music`, `speech`,
 `language-model`, `classifier`, `on-air`, `commands`.
@@ -87,6 +93,15 @@ searched. A mention with no confident choice goes to the DJ instead.
 The conversation has a 60s deadline, three tool rounds, eight tool calls and a
 final tool-free answer; history is capped and trimmed to whole exchanges.
 
+## Text while in voice
+
+While the bot has a voice connection in the guild (`music.status(guildId) !== null`)
+it does not chat in text: a DJ answer or a command confirmation becomes a ✅
+reaction on the request, a song request is acknowledged with ✅, and a button
+confirmation sends nothing (the card is the feedback). Refusals, errors and a DJ
+answer that explains a refused or failed tool always post as text. The bot joins
+voice before a song is queued, so there is no "Added" message. `CommandUi.reply` is the chatter path, `CommandUi.error` the refusal path.
+
 ## Music and the now-playing card
 
 `musicEngine` wraps the playback SDK once. It translates SDK events into a small
@@ -96,11 +111,14 @@ operations. It never knows about Discord views, announcements or the DJ.
 
 `app.ts` subscribes:
 
-- `trackStarted` / `stateChanged` -> `messageSlot` (the now-playing card);
-- `playlistQueued` -> the queue card and the announcements;
-- `queueEnded` / `queueCleared` -> card cleanup and station transitions;
-- `trackQueued` / `playlistQueued` -> the on-air host prepares the next line;
-- `playbackError` -> the throttled playback announcement.
+- `trackQueued` / `playlistQueued` -> the queue card and the on-air host, which
+  prepares the next line;
+- `trackStarted` / `stateChanged` -> the now-playing card and the host;
+- `trackSkipped` -> the host, which keeps who skipped as context for the next line;
+- `queueEnded` / `queueCleared` / `disconnected` -> card cleanup and station
+  transitions;
+- `playbackError` -> the throttled playback announcement, the host and, when the
+  failed queue is empty, card cleanup.
 
 The `beforeStream` hook carries the guild, the track on the card and a queue
 snapshot. The music provider awaits it before returning the audio URL, so a spoken
@@ -113,7 +131,12 @@ explicit state enum: two in-flight sets (generating, airing) and the station's
 counters decide what happens next.
 
 - cadence: one requested song in three is silent, autoplay speaks one in three,
-  every second line is long, the first line is long;
+  every second line is long, the first line of a session is a short welcome;
+- the host is the radio: an autoplay song is his own pick and is introduced like
+  any other song, never credited to "the radio";
+- a skip is context: the next prompt says who skipped the last song (never after
+  how long), the host does not back-announce it, and a skip never makes a silent
+  slot speak;
 - the station keeps the last eight songs for half an hour; the prompt carries the
   song number, the last four, the next two or three, who asked, and the request
   streak on long lines. A short line names the run (who asked, what just played,
@@ -142,7 +165,8 @@ it is sure of.
 ## Failure model
 
 - `UserError`: safe to show, mapped by the bus.
-- `ProviderError`: capability, retryable/fatal/quota; adapters map wire errors once.
+- `ProviderError`: retryable/fatal/quota and the HTTP status; adapters map wire
+  errors once.
 - Unknown errors: logged with context and answered with a generic message.
 - Every external call we own has a timeout. Retries are bounded and never retry
   a cancelled request. Discord REST calls rely on the SDK's own timeout. A broken
@@ -171,19 +195,3 @@ it is sure of.
 | wiring | `createApp` smoke test without a Discord login |
 | architecture | graph and naming contract |
 | e2e | real guild, playback duration and queue state, manual run |
-
-## Changes from the prototype
-
-The port preserves the hard-won behavior: the extractor strategy and cache,
-the stream/line gap, the SDK cleanup quirks, the URL allowlist, the queue caps,
-prompt-injection defenses and the persona. The deliberate fixes are:
-
-- a failed audio clip or welcome audio settles on the player's error/destroyed
-  event instead of waiting out a 30s timeout;
-- shutdown kills extractor children, deletes temp clips and flushes settings;
-- conversation history is capped (1000 conversations) instead of growing forever;
-- mention detection uses the mentioned users collection, not only cached members;
-- unexpected handler failures answer with a generic message instead of silence;
-- clear-confirmation failures close the prompt instead of leaving a dead button;
-- autoplay/radio additions can never be announced, even if an SDK version starts
-  emitting an add event for them.
