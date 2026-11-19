@@ -18,6 +18,7 @@ async function config(): Promise<AppConfig> {
   return {
     discord: { token: 'test-token' },
     settingsPath: join(directory, 'guilds.json'),
+    listenersPath: join(directory, 'listeners.json'),
     logLevel: 'error',
     music: {
       cacheDir: join(directory, 'audio'),
