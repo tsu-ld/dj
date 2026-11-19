@@ -1,7 +1,7 @@
 import type { GuildTextBasedChannel, VoiceBasedChannel } from 'discord.js'
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdtemp } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { commandBus } from './src/commands/bus.ts'
@@ -16,7 +16,7 @@ import { conversationModel } from './src/providers/language-model/index.ts'
 import { musicEngine } from './src/providers/music/index.ts'
 import { settingsStore } from './src/providers/settings/index.ts'
 
-const ENV_FILE = process.env.E2E_ENV_FILE ?? '/home/tsu/.config/dj/discord.env'
+const ENV_FILE = process.env.E2E_ENV_FILE ?? join(homedir(), '.config/dj/discord.env')
 
 for (const line of readFileSync(ENV_FILE, 'utf8').split('\n')) {
   const [key, ...rest] = line.trim().split('=')
