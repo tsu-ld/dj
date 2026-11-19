@@ -6,10 +6,11 @@ import type { BeforeStreamInput, MusicEventMap, MusicPort, QueueView, Track } fr
 import type { SettingsPort } from '../ports/settings.ts'
 import type { SongFactsPort } from '../ports/song-facts.ts'
 import type { SpeechPort } from '../ports/speech.ts'
-import { factsReader } from './facts.ts'
-import { clipRemover, queueReader } from './io.ts'
+import { clipRemover } from './io.ts'
 import { clipKey, lineWriter, requesterOf } from './line.ts'
 import { onAirStation, shouldSpeak } from './station.ts'
+
+const PREFETCH = 3
 
 export interface OnAirHost {
   beforeStream: (input: BeforeStreamInput) => Promise<void>
@@ -34,14 +35,12 @@ export function onAirHost(deps: {
   logger: Logger
   clock: Clock
 }): OnAirHost {
-  const { music, speech, listeners, logger } = deps
-  const facts = factsReader(deps.facts, logger)
+  const { music, speech, facts, listeners, logger } = deps
   const station = onAirStation({ clock: deps.clock })
   const writer = lineWriter(deps)
   const linesInFlight = new Set<string>()
   const preparing = new Set<string>()
   const remove = clipRemover(speech, logger)
-  const liveView = queueReader(music, logger)
   let disposed = false
 
   // The next line is written while the current song plays, so the only silence
@@ -84,7 +83,7 @@ export function onAirHost(deps: {
       if (disposed || station.songOnAir(guildId) !== onAir)
         return true
 
-      const live = liveView(guildId) ?? view
+      const live = music.view(guildId) ?? view
       const next = live.upcoming[0]
 
       rewrite = next === undefined || clipKey(next, { upcoming: live.upcoming.slice(1), radio: live.radio }, station.run(guildId)) !== key
@@ -106,7 +105,7 @@ export function onAirHost(deps: {
         long: station.shouldUseLongLine(guildId),
         run,
         facts: songFacts,
-        listener: requesterOf(listeners, guildId, track, deps.clock.now()),
+        listener: requesterOf(listeners, guildId, track),
         lastAngle: station.lastAngle(guildId),
       })
 
@@ -149,7 +148,7 @@ export function onAirHost(deps: {
 
     // The old hook read the queue again in its finally block: a song removed
     // while the line was airing must not be the one prepared next.
-    const live = liveView(guildId) ?? view
+    const live = music.view(guildId) ?? view
     const next = live?.upcoming[0]
 
     if (live && next)
@@ -173,13 +172,11 @@ export function onAirHost(deps: {
     // Captured before the song is recorded: the run is what played before it,
     // and the profile counts the requests before this one. The request is
     // recorded here, not when the song starts, because the next song's line is
-    // prepared right after this hook. An unnamed skip wins over a silent slot;
-    // a line still airing defers it while the skipped song is still the last.
+    // prepared right after this hook.
     const first = station.firstOfSession(guildId)
     const run = station.run(guildId)
-    const listener = first ? null : requesterOf(listeners, guildId, song, deps.clock.now())
-    const index = station.recordSong(guildId, song)
-    const speaks = shouldSpeak(index, song.fromRadio) || (!first && run.skipPending)
+    const listener = first ? null : requesterOf(listeners, guildId, song)
+    const speaks = shouldSpeak(station.recordSong(guildId, song), song.fromRadio)
 
     if (!song.fromRadio && song.requesterId !== null)
       listeners.recordRequest(guildId, { id: song.requesterId, name: song.requestedBy ?? '' }, { title: song.title, artist: song.artist })
@@ -230,9 +227,6 @@ export function onAirHost(deps: {
         logger.info('on-air.on_air', { guildId, track: song.title, angle: written.angle, line: written.line })
         station.recordLine(guildId)
         station.recordAngle(guildId, written.angle)
-
-        if (written.angle === 'skip' && run.last !== null)
-          station.markSkipAnnounced(guildId, run.last)
       }
       else {
         logger.info('on-air.clip_skipped', { guildId, track: song.title })
@@ -262,9 +256,14 @@ export function onAirHost(deps: {
     playlistQueued({ guildId, view }) {
       prepareNext(guildId, view)
     },
+    // Facts for the next songs are fetched while this one plays, so a line
+    // written live after a skip or a shuffle finds them in the cache.
     trackStarted({ view }) {
-      if (!disposed)
-        facts.prefetch(view)
+      if (disposed)
+        return
+
+      for (const track of view.upcoming.slice(0, PREFETCH))
+        void facts.lookup(track).catch(() => {})
     },
     // A shuffle, a removal or an addition changes what the line may say; the
     // prepare is skipped when the key still matches.
@@ -272,8 +271,8 @@ export function onAirHost(deps: {
       prepareNext(guildId, view)
     },
     // The next song starts right away: a prepare would only race its live line.
-    trackSkipped({ guildId, track, by, playedMs }) {
-      station.markSkipped(guildId, track.id, by.name, playedMs)
+    trackSkipped({ guildId, track, by }) {
+      station.markSkipped(guildId, track.id, by.name)
     },
     playbackError({ guildId, songId }) {
       station.forgetFailed(guildId, songId)

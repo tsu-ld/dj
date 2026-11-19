@@ -1,8 +1,7 @@
-import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { CompletionReply, CompletionRequest, ConversationPort } from '../../ports/conversation.ts'
 import type { ListenerProfile, ListenersPort } from '../../ports/listeners.ts'
-import type { MusicPort, QueueView, Track } from '../../ports/music.ts'
+import type { MusicPort, QueueView } from '../../ports/music.ts'
 import type { SettingsPort } from '../../ports/settings.ts'
 import type { SongFacts, SongFactsPort } from '../../ports/song-facts.ts'
 import type { SpeechPort } from '../../ports/speech.ts'
@@ -14,17 +13,13 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { ProviderError } from '../../core/errors.ts'
 import { logger } from '../../core/logger.ts'
+import { silentLog as log, testClock, testTrack as track, testView as view } from '../../tests/fixtures.ts'
 import { onAirHost } from '../host.ts'
 import { lineTarget } from '../script.ts'
-
-interface TestClock extends Clock {
-  advance: (milliseconds: number) => void
-}
 
 interface MusicFake {
   port: MusicPort
   clips: string[]
-  subscriptions: string[]
   setView: (guildId: string, view: QueueView | null) => void
 }
 
@@ -49,8 +44,6 @@ const settings: SettingsPort = {
   flush: async () => {},
 }
 
-const log = logger({ level: 'error', sink: () => {} })
-
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'dj-on-air-'))
 })
@@ -59,49 +52,8 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true })
 })
 
-function track(title: string, extra: Partial<Track> = {}): Track {
-  return {
-    id: title,
-    title,
-    url: `https://example.test/${encodeURIComponent(title)}`,
-    durationSeconds: 200,
-    isLive: false,
-    thumbnail: null,
-    requestedBy: null,
-    requesterId: null,
-    artist: null,
-    fromRadio: false,
-    ...extra,
-  }
-}
-
-function view(input: { current?: Track | null, upcoming?: readonly Track[], paused?: boolean, radio?: boolean } = {}): QueueView {
-  const current = input.current ?? null
-  const upcoming = input.upcoming ?? []
-
-  return {
-    current,
-    upcoming,
-    paused: input.paused ?? false,
-    radio: input.radio ?? false,
-    size: (current ? 1 : 0) + upcoming.length,
-  }
-}
-
-function fakeClock(): TestClock {
-  let now = 1_000_000
-
-  return {
-    now: () => now,
-    advance: (milliseconds) => {
-      now += milliseconds
-    },
-  }
-}
-
 function fakeMusic(playClip: (guildId: string, file: string) => Promise<boolean> = async () => true): MusicFake {
   const clips: string[] = []
-  const subscriptions: string[] = []
   const views = new Map<string, QueueView | null>()
   const port: MusicPort = {
     play: async () => ({ added: 0, first: null, playlist: null, dropped: 0, total: 0 }),
@@ -121,20 +73,14 @@ function fakeMusic(playClip: (guildId: string, file: string) => Promise<boolean>
 
         return playClip(guildId, file)
       },
-      async playWelcome() {},
     },
-    on: (event) => {
-      subscriptions.push(event)
-
-      return () => {}
-    },
+    on: () => () => {},
     dispose: async () => {},
   }
 
   return {
     port,
     clips,
-    subscriptions,
     setView(guildId, next) {
       views.set(guildId, next)
     },
@@ -257,14 +203,13 @@ function fakeFacts(options: {
 function fakeListeners(profiles: Readonly<Record<string, ListenerProfile>> = {}): ListenersPort {
   return {
     recordRequest() {},
-    recordSkip() {},
     profile: (_guildId, listenerId) => profiles[listenerId] ?? null,
     flush: async () => {},
   }
 }
 
 function profile(name: string, extra: Partial<ListenerProfile> = {}): ListenerProfile {
-  return { name, requests: 4, topSong: { title: 'Matador', count: 3 }, topArtists: ['Band'], skipsGiven: 1, skippedByOthers: 2, firstSeen: 0, ...extra }
+  return { name, requests: 4, topSong: { title: 'Matador', count: 3 }, topArtists: ['Band'], ...extra }
 }
 
 // A store that counts like the real one: recordRequest bumps the profile.
@@ -278,7 +223,6 @@ function countingListeners(requests: number): ListenersPort & { recorded: string
       recorded.push(`${listener.id}:${song.title}`)
       count++
     },
-    recordSkip() {},
     profile: (_guildId, listenerId) => listenerId === 'u1' ? profile('Ana', { requests: count, topSong: null, topArtists: [] }) : null,
     flush: async () => {},
   }
@@ -300,9 +244,9 @@ function createHost(input: {
   facts?: SongFactsPort
   listeners?: ListenersPort
   logger?: Logger
-}): { host: OnAirHost, music: MusicFake, clock: TestClock } {
+}): { host: OnAirHost, music: MusicFake, clock: ReturnType<typeof testClock> } {
   const music = fakeMusic(input.playClip)
-  const clock = fakeClock()
+  const clock = testClock()
   const host = onAirHost({
     music: music.port,
     speech: input.speech,
@@ -453,7 +397,7 @@ describe('beforeStream', () => {
     expect(model.requests[0]?.instructions).toContain('Playing now: Card')
     expect(music.clips).toHaveLength(1)
 
-    await host.beforeStream({ guildId: 'g1', view: view({}) })
+    await host.beforeStream({ guildId: 'g1', view: view({ current: null }) })
 
     expect(model.requests).toHaveLength(1)
     expect(music.clips).toHaveLength(1)
@@ -843,7 +787,7 @@ describe('true facts', () => {
     expect(music.clips[1]).toBe(speech.files[2])
   })
 
-  test('a skip spends nothing until the next song, whose live line names who skipped and when', async () => {
+  test('a skip spends nothing until the next song, whose live line knows who skipped as context', async () => {
     const model = fakeModel([line('A'), line('B'), line('B after the skip')])
     const speech = fakeSpeech()
     const { host, music } = createHost({ model: model.port, speech: speech.port })
@@ -857,7 +801,7 @@ describe('true facts', () => {
     expect(model.requests[1]?.instructions).toContain('Last song: A, requested by tsu, played through')
 
     music.setView('g1', view({ current: a, upcoming: [b] }))
-    host.trackSkipped({ guildId: 'g1', track: a, by: { id: 'u2', name: 'Ana' }, playedMs: 42_400 })
+    host.trackSkipped({ guildId: 'g1', track: a, by: { id: 'u2', name: 'Ana' } })
     await Bun.sleep(10)
 
     expect(model.requests).toHaveLength(2)
@@ -868,9 +812,9 @@ describe('true facts', () => {
     const request = model.requests[2]
 
     expect(existsSync(stale)).toBe(false)
-    expect(request?.instructions).toContain('Last song: A, requested by tsu, skipped by Ana after 42 s')
-    expect(request?.instructions).toContain('Angle for this line: skip')
-    expect(request?.messages[0]?.content).toContain('with the skip angle')
+    expect(request?.instructions).toContain('Last song: A, requested by tsu, skipped by Ana\n')
+    expect(request?.instructions).not.toMatch(/skipped by Ana after|Angle for this line: skip/)
+    expect(request?.messages[0]?.content).not.toContain('skip angle')
     expect(music.clips[1]).toBe(speech.files[2])
   })
 
@@ -940,34 +884,34 @@ describe('true facts', () => {
     await host.beforeStream({ guildId: 'g1', view: view({ current: b, radio: true }) })
 
     expect(model.requests).toHaveLength(3)
-    expect(model.requests[2]?.instructions).toContain('When the queue runs out the radio keeps going')
+    expect(model.requests[2]?.instructions).toContain('When the queue runs out you keep picking the songs yourself')
     expect(model.requests[2]?.instructions).not.toContain('the queue ends')
     expect(music.clips[1]).toBe(speech.files[2])
   })
 
-  test('a skip makes a silent slot speak, and the cadence carries on after it', async () => {
+  test('a skip never makes a silent slot speak', async () => {
     const model = fakeModel(['A', 'B', 'C', 'D', 'E', 'F'].map(text => line(text)))
     const { host } = createHost({ model: model.port, speech: fakeSpeech().port })
     const [a, b, c, d, e, f] = [track('A'), track('B'), track('C'), track('D'), track('E'), track('F')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
     await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
-    host.trackSkipped({ guildId: 'g1', track: b, by: { id: 'u2', name: 'Ana' }, playedMs: 5_000 })
+    host.trackSkipped({ guildId: 'g1', track: b, by: { id: 'u2', name: 'Ana' } })
+    // C is the silent third song: the skip does not change that.
     await host.beforeStream({ guildId: 'g1', view: view({ current: c }) })
 
-    expect(model.requests).toHaveLength(3)
-    expect(model.requests[2]?.instructions).toContain('skipped by Ana after 5 s')
-    expect(model.requests[2]?.instructions).toContain('Angle for this line: skip')
+    expect(model.requests).toHaveLength(2)
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: d }) })
     await host.beforeStream({ guildId: 'g1', view: view({ current: e }) })
     await host.beforeStream({ guildId: 'g1', view: view({ current: f }) })
 
     // D and E speak, F is the silent sixth.
-    expect(model.requests).toHaveLength(5)
+    expect(model.requests).toHaveLength(4)
+    expect(model.requests[2]?.instructions).toContain('Last song: C, played through')
   })
 
-  test('a skip during a line stays pending while it is still the last song', async () => {
+  test('a skip during a line leaves the cadence alone', async () => {
     let open: (aired: boolean) => void = () => {}
     const gate = {
       promise: new Promise<boolean>((done) => {
@@ -995,7 +939,7 @@ describe('true facts', () => {
     const airing = host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
 
     await waitFor(() => plays === 3)
-    host.trackSkipped({ guildId: 'g1', track: b, by: { id: 'u2', name: 'Ana' }, playedMs: 1_000 })
+    host.trackSkipped({ guildId: 'g1', track: b, by: { id: 'u2', name: 'Ana' } })
     // C starts while B's line still airs: no overlap, and then C fails.
     await host.beforeStream({ guildId: 'g1', view: view({ current: c }) })
     host.playbackError({ guildId: 'g1', songId: 'C' })
@@ -1004,11 +948,10 @@ describe('true facts', () => {
 
     expect(model.requests).toHaveLength(3)
 
-    // D, a radio pick in the fifth slot, is silent by cadence but B's skip is still unsaid.
+    // D, an own pick in the fifth slot, stays silent although B's skip was never said.
     await host.beforeStream({ guildId: 'g1', view: view({ current: d }) })
 
-    expect(model.requests).toHaveLength(4)
-    expect(model.requests[3]?.instructions).toContain('Last song: B, radio pick, skipped by Ana after 1 s')
+    expect(model.requests).toHaveLength(3)
   })
 
   test('a member with no profile yet gets the first-request milestone', async () => {
@@ -1068,7 +1011,7 @@ describe('true facts', () => {
         requests.push(request)
 
         if (requests.length === 1)
-          throw new ProviderError('language-model', 'content filter', { failure: 'fatal', status: 400 })
+          throw new ProviderError('content filter', { failure: 'fatal', status: 400 })
 
         return line('Next')
       },
@@ -1091,7 +1034,7 @@ describe('true facts', () => {
       async complete(request) {
         requests.push(request)
 
-        throw new ProviderError('language-model', 'no credits', { failure: 'quota', status: 402 })
+        throw new ProviderError('no credits', { failure: 'quota', status: 402 })
       },
     }
     const { host } = createHost({ model, speech: fakeSpeech().port })
@@ -1110,7 +1053,7 @@ describe('true facts', () => {
         requests.push(request)
 
         if (failing)
-          throw new ProviderError('language-model', 'unauthorized', { failure: 'fatal', status: 401 })
+          throw new ProviderError('unauthorized', { failure: 'fatal', status: 401 })
 
         return line('Back on air')
       },

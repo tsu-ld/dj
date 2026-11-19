@@ -1,32 +1,17 @@
 import type { ListenerProfile } from '../../ports/listeners.ts'
-import type { Track } from '../../ports/music.ts'
 import type { SongFacts } from '../../ports/song-facts.ts'
-import type { OnAirInput, PlayedEntry } from '../script.ts'
+import type { OnAirInput } from '../script.ts'
+import type { PlayedEntry } from '../station.ts'
 import { describe, expect, test } from 'bun:test'
 import { RADIO_LONG_CHARS, RADIO_SHORT_CHARS } from '../../limits.ts'
+import { testTrack as track } from '../../tests/fixtures.ts'
 import { buildOnAirPrompt, lineLimit, lineRequest, lineTarget, sanitizeLine } from '../script.ts'
 
 const NOW = Date.UTC(2026, 10, 18, 12)
 const DAY = 86_400_000
 
-function track(title: string, extra: Partial<Track> = {}): Track {
-  return {
-    id: title,
-    title,
-    url: `https://example.test/${encodeURIComponent(title)}`,
-    durationSeconds: 200,
-    isLive: false,
-    thumbnail: null,
-    requestedBy: null,
-    requesterId: null,
-    artist: null,
-    fromRadio: false,
-    ...extra,
-  }
-}
-
 function played(title: string, extra: Partial<PlayedEntry> = {}): PlayedEntry {
-  return { title, artist: null, requestedBy: null, fromRadio: false, skippedBy: null, playedSeconds: null, ...extra }
+  return { title, artist: null, requestedBy: null, fromRadio: false, skippedBy: null, ...extra }
 }
 
 const FACTS: SongFacts = {
@@ -49,9 +34,6 @@ const LISTENER: ListenerProfile = {
   requests: 12,
   topSong: { title: 'Matador', count: 4 },
   topArtists: ['Soda Stereo', 'Los Fabulosos Cadillacs'],
-  skipsGiven: 2,
-  skippedByOthers: 1,
-  firstSeen: 0,
 }
 
 function prompt(extra: Partial<OnAirInput> & { persona?: string | null } = {}): string {
@@ -59,7 +41,6 @@ function prompt(extra: Partial<OnAirInput> & { persona?: string | null } = {}): 
     settings: { textChannelId: null, persona: extra.persona === undefined ? 'un dj' : extra.persona },
     track: track('Tema'),
     long: false,
-    first: false,
     last: null,
     earlier: [],
     upcoming: [],
@@ -89,24 +70,37 @@ describe('the run block', () => {
     expect(text).toContain('Playing now: La mano de Dios by Rodrigo')
     expect(text).toContain('Who asked: requested by tsu')
     expect(text).toContain('Last song: Matador, requested by ana, played through')
-    expect(text).toContain('Next up, in order: Seminare, requested by ana | La Luna, radio pick')
+    expect(text).toContain('Next up, in order: Seminare, requested by ana | La Luna, your own pick')
     expect(text).toContain('one sentence')
     expect(text).toContain(String(lineTarget(false)))
     expect(text).not.toContain('of this session')
   })
 
-  test('a skipped last song says who skipped it and when', () => {
-    const text = prompt({ last: played('Matador', { requestedBy: 'tsu', skippedBy: 'ana', playedSeconds: 41.6 }), angle: 'skip' })
+  test('a skipped last song is context: who skipped it, never when', () => {
+    const text = prompt({ last: played('Matador', { requestedBy: 'tsu', skippedBy: 'ana' }) })
 
-    expect(block(text, 'on-air')).toContain('Last song: Matador, requested by tsu, skipped by ana after 42 s')
-    expect(text).toContain('Angle for this line: skip.')
+    expect(block(text, 'on-air').split('\n')).toContain('Last song: Matador, requested by tsu, skipped by ana')
+    expect(text).not.toMatch(/after \d+ s|NaN/)
   })
 
-  test('earlier songs are listed newest first, at most three', () => {
-    const text = prompt({ earlier: [played('C'), played('B', { fromRadio: true }), played('A'), played('Z')] })
+  test('the host is the radio: a song nobody asked for is his own pick', () => {
+    const text = prompt({
+      track: track('Tema', { fromRadio: true }),
+      last: played('Antes', { fromRadio: true }),
+      earlier: [played('Viejo', { fromRadio: true })],
+      upcoming: [track('Luego', { fromRadio: true })],
+      radio: true,
+    })
 
-    expect(text).toContain('Earlier, newest first: C | B, radio pick | A')
-    expect(text).not.toContain('| Z')
+    expect(text).not.toMatch(/radio pick|picked by the radio|the radio picked|radio keeps going/i)
+    expect(block(text, 'on-air')).toContain('Last song: Antes, your own pick, played through')
+    expect(block(text, 'on-air')).toContain('Next up, in order: Luego, your own pick')
+  })
+
+  test('earlier songs are listed newest first', () => {
+    const text = prompt({ earlier: [played('C'), played('B', { fromRadio: true }), played('A')] })
+
+    expect(text).toContain('Earlier, newest first: C | B, your own pick | A')
   })
 
   test('next up shows at most three songs in order', () => {
@@ -119,17 +113,17 @@ describe('the run block', () => {
   })
 
   test('the radio keeps going only when it is on and the queue is short', () => {
-    expect(prompt({ radio: true })).toContain('When the queue runs out the radio keeps going')
-    expect(prompt({ radio: true, upcoming: [track('One')] })).toContain('When the queue runs out the radio keeps going')
-    expect(prompt({ radio: true, upcoming: ['1', '2', '3'].map(title => track(title)) })).not.toContain('radio keeps going')
+    expect(prompt({ radio: true })).toContain('When the queue runs out you keep picking the songs yourself')
+    expect(prompt({ radio: true, upcoming: [track('One')] })).toContain('When the queue runs out you keep picking the songs yourself')
+    expect(prompt({ radio: true, upcoming: ['1', '2', '3'].map(title => track(title)) })).not.toContain('keep picking the songs')
     expect(prompt({ radio: false })).toContain('Next up: nothing, the queue ends with this song')
-    expect(prompt({ radio: false })).not.toContain('radio keeps going')
+    expect(prompt({ radio: false })).not.toContain('keep picking the songs')
   })
 
   test('a radio pick with a member attached is still nobody\'s request', () => {
     const text = prompt({ track: track('Tema', { requestedBy: 'tsu', fromRadio: true }), listener: LISTENER })
 
-    expect(text).toContain('Who asked: nobody, picked by the radio')
+    expect(text).toContain('Who asked: nobody, it is your own pick')
     expect(text).not.toContain('requested by')
     expect(text).not.toContain('About tsu')
   })
@@ -144,8 +138,7 @@ describe('the listener block', () => {
     expect(text).not.toContain('before this one')
     expect(text).toContain('Most requested song so far: Matador (4 times)')
     expect(text).toContain('Top artists: Soda Stereo, Los Fabulosos Cadillacs')
-    expect(text).toContain('Songs they skipped: 2')
-    expect(text).toContain('Their songs skipped by others: 1')
+    expect(text).not.toContain('skipped')
   })
 
   test('a first request is request number 1, never a zero', () => {
@@ -184,8 +177,8 @@ describe('the verified facts block', () => {
     expect(text).not.toContain('ONLY facts')
   })
 
-  test('a welcome carries no facts and stays short', () => {
-    const text = prompt({ facts: FACTS, first: true, long: true, angle: 'welcome' })
+  test('a welcome carries no facts', () => {
+    const text = prompt({ facts: FACTS, long: false, angle: 'welcome' })
 
     expect(text).not.toContain('verified-facts>')
     expect(text).toContain('one sentence')
@@ -207,7 +200,9 @@ describe('the rules', () => {
     expect(text).toContain('One direction per line')
     expect(text).toContain('Talk to one listener')
     expect(text).toContain('back-announce it by name, then hand off')
-    expect(text).toContain('When the angle is skip, name who skipped the last song: playful, never mean.')
+    expect(text).toContain('You are the radio: a song nobody asked for is your own pick. Introduce it like any other song; the listener already knows who runs the station, so it needs no credit.')
+    expect(text).toContain('A skipped last song is context for you, not news for the listener: do not back-announce it or dwell on who skipped it, hand off to the song playing now.')
+    expect(text).not.toContain('When the angle is skip')
     expect(text).toContain('only from the verified-facts block, translated into your language')
     expect(text).toContain('Never invent a request, a count, a date')
     expect(text).toContain('Vary your openings')
@@ -227,7 +222,8 @@ describe('the rules', () => {
     expect(prompt({ angle: 'news' })).toContain('Angle for this line: news. Share one recent headline')
     expect(prompt({ angle: 'fact' })).toContain('Angle for this line: fact. Give one fact')
     expect(lineRequest({ long: true, angle: 'story' })).toContain('with the story angle')
-    expect(lineRequest({ long: false, angle: 'skip' })).toContain('one short line with the skip angle')
+    expect(lineRequest({ long: false, angle: 'listener' })).toContain('one short line with the listener angle')
+    expect(prompt({ angle: 'run' })).toContain('Angle for this line: run. Say who asked for this song when someone did, otherwise just introduce it,')
     expect(lineRequest({ long: true, angle: 'welcome' })).toBe('Open the show: a short hello and the first song.')
   })
 

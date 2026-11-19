@@ -1,24 +1,13 @@
 import type { ListenerProfile } from '../ports/listeners.ts'
 import type { Track } from '../ports/music.ts'
 import type { SongFacts, SongNews } from '../ports/song-facts.ts'
+import { normalizeTitle } from '../core/text.ts'
 
-// Lives here rather than in script.ts so the angle can read the last song
-// without an import cycle; script.ts re-exports it.
-export interface PlayedEntry {
-  readonly title: string
-  readonly artist: string | null
-  readonly requestedBy: string | null
-  readonly fromRadio: boolean
-  readonly skippedBy: string | null
-  readonly playedSeconds: number | null
-}
-
-export type Angle = 'welcome' | 'skip' | 'listener' | 'anniversary' | 'story' | 'news' | 'fact' | 'run'
+export type Angle = 'welcome' | 'listener' | 'anniversary' | 'story' | 'news' | 'fact' | 'run'
 
 export interface AngleInput {
   readonly long: boolean
   readonly first: boolean
-  readonly last: PlayedEntry | null
   readonly track: Track
   readonly facts: SongFacts | null
   readonly listener: ListenerProfile | null
@@ -26,21 +15,16 @@ export interface AngleInput {
   readonly now: number
 }
 
-const DAY_MS = 86_400_000
+export const DAY_MS = 86_400_000
 const ANNIVERSARY_WINDOW_DAYS = 3
 const NEWS_MAX_AGE_DAYS = 14
 // the request number including this song
 const REQUEST_MILESTONES = new Set([1, 5, 10, 25, 50, 100])
 const RELEASE_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
-const BRACKETED = /\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g
 
-// Priority order after the welcome; run is always possible.
-const ORDER: readonly Angle[] = ['skip', 'listener', 'anniversary', 'story', 'news', 'fact', 'run']
-
-// "Song (Official Video) [HD]" and "song" are the same request.
-export function normalizeTitle(title: string): string {
-  return title.toLowerCase().replace(BRACKETED, ' ').replace(/\s+/g, ' ').trim()
-}
+// Priority order after the welcome; run is always possible. A skip is context
+// in the run, never an angle of its own.
+const ORDER: readonly Angle[] = ['listener', 'anniversary', 'story', 'news', 'fact', 'run']
 
 export interface Anniversary {
   // the exact age on the release day the window holds
@@ -97,8 +81,6 @@ function fits(angle: Angle, input: AngleInput): boolean {
   const { facts } = input
 
   switch (angle) {
-    case 'skip':
-      return (input.last?.skippedBy ?? '').trim() !== ''
     case 'listener':
       return isListenerMilestone(input.track, input.listener)
     case 'anniversary':
@@ -120,6 +102,5 @@ export function pickAngle(input: AngleInput): Angle {
   if (input.first)
     return 'welcome'
 
-  // Every skip is attributed, so skip is the one angle that may repeat.
-  return ORDER.find(angle => (angle === 'skip' || angle !== input.lastAngle) && fits(angle, input)) ?? 'run'
+  return ORDER.find(angle => angle !== input.lastAngle && fits(angle, input)) ?? 'run'
 }

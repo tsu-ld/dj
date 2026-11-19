@@ -1,5 +1,5 @@
 import type { Clock } from '../core/clock.ts'
-import type { Angle, PlayedEntry } from './angle.ts'
+import type { Angle } from './angle.ts'
 import type { PreparedClip, PreparedClips } from './clips.ts'
 import { RADIO_LONG_EVERY, RADIO_MEMORY_MS, RADIO_MEMORY_SIZE, RADIO_SILENT_EVERY, RADIO_SPEAK_EVERY } from '../limits.ts'
 import { preparedClips } from './clips.ts'
@@ -13,18 +13,25 @@ export interface StationSong {
   readonly fromRadio: boolean
 }
 
-export interface PlayedSong extends StationSong, PlayedEntry {
+// A song in the run, as the line talks about it.
+export interface PlayedEntry {
+  readonly title: string
+  readonly artist: string | null
+  readonly requestedBy: string | null
+  readonly fromRadio: boolean
+  readonly skippedBy: string | null
+}
+
+interface PlayedSong extends StationSong, PlayedEntry {
   readonly at: number
-  readonly skipAnnounced: boolean
 }
 
 // What played before the song about to go on air, newest first.
 export interface StationRun {
   readonly lastId: string | null
   readonly last: PlayedEntry | null
+  // at most MAX_EARLIER songs
   readonly earlier: readonly PlayedEntry[]
-  // the last song was skipped and no line has said so yet
-  readonly skipPending: boolean
 }
 
 const MAX_EARLIER = 3
@@ -34,10 +41,8 @@ export interface Station extends Pick<PreparedClips, 'preparedFor' | 'setPrepare
   nextSongIndex: (guildId: string) => number
   songOnAir: (guildId: string) => string | null
   firstOfSession: (guildId: string) => boolean
-  recent: (guildId: string) => readonly PlayedSong[]
   run: (guildId: string) => StationRun
-  markSkipped: (guildId: string, songId: string, by: string, playedMs: number) => void
-  markSkipAnnounced: (guildId: string, entry: PlayedEntry) => void
+  markSkipped: (guildId: string, songId: string, by: string) => void
   forgetFailed: (guildId: string, songId: string | null) => void
   shouldUseLongLine: (guildId: string) => boolean
   recordLine: (guildId: string) => void
@@ -91,9 +96,7 @@ export function onAirStation(deps: { clock: Clock }): Station {
         requesterId: song.requesterId,
         fromRadio: song.fromRadio,
         skippedBy: null,
-        playedSeconds: null,
         at: clock.now(),
-        skipAnnounced: false,
       })
       history.set(guildId, played.slice(-RADIO_MEMORY_SIZE))
 
@@ -109,7 +112,6 @@ export function onAirStation(deps: { clock: Clock }): Station {
     firstOfSession(guildId) {
       return (songs.get(guildId)?.songId ?? null) === null
     },
-    recent,
     run(guildId) {
       const played = recent(guildId).toReversed()
       const last = played[0] ?? null
@@ -118,27 +120,16 @@ export function onAirStation(deps: { clock: Clock }): Station {
         lastId: last?.id ?? null,
         last,
         earlier: played.slice(1, 1 + MAX_EARLIER),
-        skipPending: last !== null && (last.skippedBy ?? '').trim() !== '' && !last.skipAnnounced,
       }
     },
-    // The entry is the one a run handed out: a repeat of the same song is a
-    // different play.
-    markSkipAnnounced(guildId, entry) {
-      const played = history.get(guildId) ?? []
-      const index = played.findIndex(song => song === entry)
-      const song = played[index]
-
-      if (song)
-        played[index] = { ...song, skipAnnounced: true }
-    },
     // The newest play of that song: a repeat must not mark the earlier one.
-    markSkipped(guildId, songId, by, playedMs) {
+    markSkipped(guildId, songId, by) {
       const played = history.get(guildId) ?? []
       const index = played.findLastIndex(song => song.id === songId)
       const song = played[index]
 
       if (song)
-        played[index] = { ...song, skippedBy: by, playedSeconds: playedMs / 1_000 }
+        played[index] = { ...song, skippedBy: by }
     },
     // A song whose stream failed never played: it leaves the run so no line
     // back-announces it. It keeps its cadence slot and stays the song on air

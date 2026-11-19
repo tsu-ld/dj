@@ -1,5 +1,4 @@
 import type { Logger } from '../core/logger.ts'
-import type { MusicPort, QueueView } from '../ports/music.ts'
 import type { SpeechPort } from '../ports/speech.ts'
 import { rm } from 'node:fs/promises'
 import { errorMessage } from '../core/errors.ts'
@@ -17,19 +16,6 @@ export function clipRemover(speech: SpeechPort, logger: Logger): (file: string |
     }
     catch (error) {
       logger.warn('on-air.clip_delete_failed', { file, error: errorMessage(error) })
-    }
-  }
-}
-
-export function queueReader(music: MusicPort, logger: Logger): (guildId: string) => QueueView | null {
-  return (guildId) => {
-    try {
-      return music.view(guildId)
-    }
-    catch (error) {
-      logger.warn('on-air.view_failed', { guildId, error: errorMessage(error) })
-
-      return null
     }
   }
 }

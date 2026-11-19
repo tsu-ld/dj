@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
-import { logger } from '../../../core/logger.ts'
+import { silentLog as log } from '../../../tests/fixtures.ts'
 import { settingsStore } from '../index.ts'
 
 const directories: string[] = []
@@ -17,8 +17,6 @@ async function tempFile(name = 'guilds.json'): Promise<string> {
 afterEach(async () => {
   await Promise.all(directories.splice(0).map(async directory => rm(directory, { recursive: true, force: true })))
 })
-
-const log = logger({ level: 'error', sink: () => {} })
 
 describe('settingsStore', () => {
   test('a missing file starts empty and returns defaults', async () => {

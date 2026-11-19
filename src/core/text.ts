@@ -2,28 +2,35 @@ const DISCORD_MESSAGE_LIMIT = 2000
 const DEFAULT_LINE_LENGTH = 120
 const MAX_BLOCK_LINE_LENGTH = 500
 const TAG_NAME = /^[a-z][a-z-]*$/
+const BRACKETED = /\([^)]*\)|\[[^\]]*\]/g
+
+// Slicing can split a surrogate pair at the cut; a trailing lone high surrogate
+// is dropped rather than kept as half an emoji.
+function wholeChars(text: string): string {
+  const last = text.charCodeAt(text.length - 1)
+
+  return last >= 0xD800 && last <= 0xDBFF ? text.slice(0, -1) : text
+}
 
 // Song titles, display names and personas arrive from outside: they are prompt
 // data, so they lose markup, line breaks and their length.
 export function oneLine(value: unknown, maxLength = DEFAULT_LINE_LENGTH): string {
-  const line = String(value ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maxLength)
-  const last = line.charCodeAt(line.length - 1)
-
-  return last >= 0xD800 && last <= 0xDBFF ? line.slice(0, -1) : line
+  return wholeChars(String(value ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maxLength))
 }
 
-// Discord rejects messages over 2000 UTF-16 units, and slicing can split a
-// surrogate pair at the boundary; drop a trailing lone high surrogate rather
-// than send half an emoji. Empty input speaks nothing, so it comes back null.
-export function clampMessage(text: string | null | undefined, limit = DISCORD_MESSAGE_LIMIT): string | null {
+// Discord rejects messages over 2000 UTF-16 units. Empty input speaks nothing,
+// so it comes back null.
+export function clampMessage(text: string | null | undefined): string | null {
   if (text === null || text === undefined || text === '')
     return null
 
-  const clamped = text.trim().slice(0, limit)
-  const last = clamped.charCodeAt(clamped.length - 1)
-  const whole = last >= 0xD800 && last <= 0xDBFF ? clamped.slice(0, -1) : clamped
+  return wholeChars(text.trim().slice(0, DISCORD_MESSAGE_LIMIT)) || null
+}
 
-  return whole || null
+// The same song arrives with different decorations: the request text, a link
+// title or an autoplay title. "Song (Official Video) [HD]" and "song" are one.
+export function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(BRACKETED, ' ').replace(/\s+/g, ' ').trim()
 }
 
 // A data block is the only place untrusted text is allowed in a prompt. Every
