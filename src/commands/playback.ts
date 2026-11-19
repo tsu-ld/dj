@@ -53,7 +53,7 @@ export const skip: CommandSpec = {
   async run(_args, context) {
     const skipped = context.queue?.current?.title ?? null
 
-    await context.services.music.skip(context.guildId)
+    await context.services.music.skip(context.guildId, { id: context.member.id, name: context.member.displayName })
 
     return { skipped }
   },

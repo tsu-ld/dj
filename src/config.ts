@@ -7,6 +7,7 @@ import { ConfigError } from './core/errors.ts'
 export interface AppConfig {
   readonly discord: { readonly token: string }
   readonly settingsPath: string
+  readonly listenersPath: string
   readonly logLevel: LogLevel
   readonly music: {
     readonly cacheDir: string
@@ -165,6 +166,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     discord: { token: token ?? '' },
     settingsPath: resolve(import.meta.dirname, '../data/guilds.json'),
+    listenersPath: resolve(import.meta.dirname, '../data/listeners.json'),
     logLevel,
     music: {
       cacheDir: join(tmpdir(), 'dj-audio'),

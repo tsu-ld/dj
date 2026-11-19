@@ -6,7 +6,10 @@ const TAG_NAME = /^[a-z][a-z-]*$/
 // Song titles, display names and personas arrive from outside: they are prompt
 // data, so they lose markup, line breaks and their length.
 export function oneLine(value: unknown, maxLength = DEFAULT_LINE_LENGTH): string {
-  return String(value ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maxLength)
+  const line = String(value ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maxLength)
+  const last = line.charCodeAt(line.length - 1)
+
+  return last >= 0xD800 && last <= 0xDBFF ? line.slice(0, -1) : line
 }
 
 // Discord rejects messages over 2000 UTF-16 units, and slicing can split a

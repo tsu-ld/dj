@@ -1,13 +1,14 @@
-import type { ButtonInteraction, GuildMember, GuildTextBasedChannel, Interaction, InteractionReplyOptions } from 'discord.js'
+import type { ButtonInteraction, GuildMember, GuildTextBasedChannel, Interaction, InteractionReplyOptions, Message } from 'discord.js'
 import type { CommandBus, CommandContext, CommandUi } from '../commands/spec.ts'
 import type { Logger } from '../core/logger.ts'
 import type { MusicPort, QueueView } from '../ports/music.ts'
 import type { SettingsPort } from '../ports/settings.ts'
 import type { MessageSlot } from './slot.ts'
+import type { ViewMessage } from './views.ts'
 import { MessageFlags } from 'discord.js'
 import { errorMessage } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
-import { clearConfirmation, queueMessage } from './views.ts'
+import { clearConfirmation, noticeMessage, queueMessage } from './views.ts'
 
 const NOW_PLAYING_ACTIONS = new Set(['toggle', 'skip', 'radio', 'shuffle', 'clear', 'queue'])
 
@@ -145,6 +146,13 @@ async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction
   }
 }
 
+async function editCard(message: Message, payload: ViewMessage): Promise<void> {
+  // The flag can only be set, and Discord rejects the edit unless the legacy
+  // content and embeds are explicitly cleared; this also upgrades cards left
+  // over from the embed build so their buttons keep working.
+  await message.edit({ components: payload.components, flags: payload.flags, allowedMentions: payload.allowedMentions, content: null, embeds: [] })
+}
+
 async function handleQueuePage(deps: InteractionHandlerDeps, interaction: ButtonInteraction): Promise<void> {
   const guildId = interaction.guildId
   const [direction, rawPage] = interaction.customId.slice('nq:'.length).split(':')
@@ -161,14 +169,14 @@ async function handleQueuePage(deps: InteractionHandlerDeps, interaction: Button
   const view = deps.music.view(guildId)
 
   if (!view) {
-    await interaction.message.edit({ content: MESSAGES.nothingPlaying, embeds: [], components: [] })
+    await editCard(interaction.message, noticeMessage(MESSAGES.nothingPlaying))
 
     return
   }
 
   const targetPage = direction === 'prev' ? page - 1 : page + 1
 
-  await interaction.message.edit(queueMessage(view, targetPage))
+  await editCard(interaction.message, queueMessage(view, targetPage))
 }
 
 function interactionContext(

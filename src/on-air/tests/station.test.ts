@@ -5,7 +5,11 @@ import { PREPARED_CLIP_TTL_MS, RADIO_MEMORY_MS, RADIO_MEMORY_SIZE } from '../../
 import { onAirStation, shouldSpeak } from '../station.ts'
 
 function song(id: string, extra: Partial<StationSong> = {}): StationSong {
-  return { id, title: id.toUpperCase(), requestedBy: null, fromRadio: false, ...extra }
+  return { id, title: id.toUpperCase(), artist: null, requestedBy: null, requesterId: null, fromRadio: false, ...extra }
+}
+
+function clip(songId: string, key = 'k'): { songId: string, key: string, file: string, angle: 'run', line: string } {
+  return { songId, key, file: `/tmp/${songId}.mp3`, angle: 'run', line: `line ${songId}` }
 }
 
 interface TestClock extends Clock {
@@ -100,23 +104,37 @@ describe('prepared clips', () => {
   test('a fresh clip belongs to exactly one song', () => {
     const station = onAirStation({ clock: fakeClock() })
 
-    expect(station.setPrepared('g1', { songId: 'a', file: '/tmp/a.mp3' })).toBeNull()
-    expect(station.preparedFor('g1', 'a')).toBe(true)
-    expect(station.preparedFor('g1', 'b')).toBe(false)
+    expect(station.setPrepared('g1', clip('a'))).toBeNull()
+    expect(station.preparedFor('g1', 'a', 'k')).toBe(true)
+    expect(station.preparedFor('g1', 'b', 'k')).toBe(false)
 
-    const taken = station.takePrepared('g1', 'a')
+    const taken = station.takePrepared('g1', 'a', 'k')
 
     expect(taken.clip?.file).toBe('/tmp/a.mp3')
+    expect(taken.clip?.line).toBe('line a')
     expect(taken.discarded).toBeNull()
-    expect(station.preparedFor('g1', 'a')).toBe(false)
+    expect(station.preparedFor('g1', 'a', 'k')).toBe(false)
   })
 
   test('a clip for another song is discarded, file and all', () => {
     const station = onAirStation({ clock: fakeClock() })
 
-    station.setPrepared('g1', { songId: 'b', file: '/tmp/b.mp3' })
+    station.setPrepared('g1', clip('b'))
 
-    const taken = station.takePrepared('g1', 'c')
+    const taken = station.takePrepared('g1', 'c', 'k')
+
+    expect(taken.clip).toBeNull()
+    expect(taken.discarded?.file).toBe('/tmp/b.mp3')
+  })
+
+  test('a clip written from other facts is not prepared and is discarded', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    station.setPrepared('g1', clip('b', 'before shuffle'))
+
+    expect(station.preparedFor('g1', 'b', 'after shuffle')).toBe(false)
+
+    const taken = station.takePrepared('g1', 'b', 'after shuffle')
 
     expect(taken.clip).toBeNull()
     expect(taken.discarded?.file).toBe('/tmp/b.mp3')
@@ -126,15 +144,15 @@ describe('prepared clips', () => {
     const clock = fakeClock()
     const station = onAirStation({ clock })
 
-    station.setPrepared('g1', { songId: 'a', file: '/tmp/a.mp3' })
+    station.setPrepared('g1', clip('a'))
     clock.advance(PREPARED_CLIP_TTL_MS)
 
-    expect(station.takePrepared('g1', 'a').clip?.file).toBe('/tmp/a.mp3')
+    expect(station.takePrepared('g1', 'a', 'k').clip?.file).toBe('/tmp/a.mp3')
 
-    station.setPrepared('g1', { songId: 'a', file: '/tmp/a.mp3' })
+    station.setPrepared('g1', clip('a'))
     clock.advance(PREPARED_CLIP_TTL_MS + 1)
 
-    const expired = station.takePrepared('g1', 'a')
+    const expired = station.takePrepared('g1', 'a', 'k')
 
     expect(expired.clip).toBeNull()
     expect(expired.discarded?.file).toBe('/tmp/a.mp3')
@@ -143,24 +161,24 @@ describe('prepared clips', () => {
   test('replacing a clip hands back the old one for deletion', () => {
     const station = onAirStation({ clock: fakeClock() })
 
-    station.setPrepared('g1', { songId: 'a', file: '/tmp/a.mp3' })
+    station.setPrepared('g1', clip('a'))
 
-    const previous = station.setPrepared('g1', { songId: 'b', file: '/tmp/b.mp3' })
+    const previous = station.setPrepared('g1', clip('b'))
 
     expect(previous?.file).toBe('/tmp/a.mp3')
-    expect(station.preparedFor('g1', 'b')).toBe(true)
+    expect(station.preparedFor('g1', 'b', 'k')).toBe(true)
   })
 
   test('ending a session drops the clip without touching the cadence', () => {
     const station = onAirStation({ clock: fakeClock() })
 
     station.recordSong('g1', song('a'))
-    station.setPrepared('g1', { songId: 'b', file: '/tmp/b.mp3' })
+    station.setPrepared('g1', clip('b'))
 
-    const clip = station.endSession('g1')
+    const dropped = station.endSession('g1')
 
-    expect(clip?.file).toBe('/tmp/b.mp3')
-    expect(station.preparedFor('g1', 'b')).toBe(false)
+    expect(dropped?.file).toBe('/tmp/b.mp3')
+    expect(station.preparedFor('g1', 'b', 'k')).toBe(false)
     expect(station.nextSongIndex('g1')).toBe(2)
   })
 
@@ -169,11 +187,11 @@ describe('prepared clips', () => {
 
     station.recordSong('g1', song('a'))
     station.recordLine('g1')
-    station.setPrepared('g1', { songId: 'b', file: '/tmp/b.mp3' })
+    station.setPrepared('g1', clip('b'))
 
-    const clip = station.reset('g1')
+    const dropped = station.reset('g1')
 
-    expect(clip?.file).toBe('/tmp/b.mp3')
+    expect(dropped?.file).toBe('/tmp/b.mp3')
     expect(station.nextSongIndex('g1')).toBe(1)
     expect(station.shouldUseLongLine('g1')).toBe(true)
   })
@@ -181,13 +199,89 @@ describe('prepared clips', () => {
   test('clearing hands every clip back for deletion', () => {
     const station = onAirStation({ clock: fakeClock() })
 
-    station.setPrepared('g1', { songId: 'a', file: '/tmp/a.mp3' })
-    station.setPrepared('g2', { songId: 'b', file: '/tmp/b.mp3' })
+    station.setPrepared('g1', clip('a'))
+    station.setPrepared('g2', clip('b'))
 
-    const clips = station.clear().map(clip => clip.file)
+    const clips = station.clear().map(cleared => cleared.file)
 
     expect(clips.toSorted()).toEqual(['/tmp/a.mp3', '/tmp/b.mp3'])
-    expect(station.preparedFor('g1', 'a')).toBe(false)
+    expect(station.preparedFor('g1', 'a', 'k')).toBe(false)
+  })
+})
+
+describe('run and session', () => {
+  test('the run is newest first, holds at most three earlier songs and carries who skipped', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    expect(station.run('g1')).toEqual({ lastId: null, last: null, earlier: [], skipPending: false })
+
+    for (const id of ['a', 'b', 'c', 'd'])
+      station.recordSong('g1', song(id, { requestedBy: 'tsu', requesterId: 'u1', artist: 'Band' }))
+
+    station.recordSong('g1', song('e', { fromRadio: true }))
+    station.markSkipped('g1', 'e', 'Ana', 42_500)
+
+    const run = station.run('g1')
+
+    expect(run.lastId).toBe('e')
+    expect(run.last).toMatchObject({ title: 'E', fromRadio: true, skippedBy: 'Ana', playedSeconds: 42.5 })
+    expect(run.skipPending).toBe(true)
+
+    if (run.last)
+      station.markSkipAnnounced('g1', run.last)
+
+    expect(station.run('g1').skipPending).toBe(false)
+    expect(run.earlier.map(entry => [entry.title, entry.artist, entry.requestedBy, entry.skippedBy, entry.playedSeconds])).toEqual([
+      ['D', 'Band', 'tsu', null, null],
+      ['C', 'Band', 'tsu', null, null],
+      ['B', 'Band', 'tsu', null, null],
+    ])
+  })
+
+  test('a skip marks only the newest play of a repeated song', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    station.recordSong('g1', song('a'))
+    station.recordSong('g1', song('b'))
+    station.recordSong('g1', song('a'))
+    station.markSkipped('g1', 'a', 'Ana', 10_000)
+
+    expect(station.recent('g1').map(played => played.skippedBy)).toEqual([null, null, 'Ana'])
+  })
+
+  test('the first line of a session follows the start, a disconnect and a reset', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    expect(station.firstOfSession('g1')).toBe(true)
+
+    station.recordSong('g1', song('a'))
+
+    expect(station.firstOfSession('g1')).toBe(false)
+
+    station.endSession('g1')
+
+    expect(station.firstOfSession('g1')).toBe(true)
+
+    station.recordSong('g1', song('b'))
+    station.reset('g1')
+
+    expect(station.firstOfSession('g1')).toBe(true)
+  })
+
+  test('the last angle survives a disconnect and a reset forgets it', () => {
+    const station = onAirStation({ clock: fakeClock() })
+
+    expect(station.lastAngle('g1')).toBeNull()
+
+    station.recordAngle('g1', 'news')
+    station.endSession('g1')
+
+    expect(station.lastAngle('g1')).toBe('news')
+    expect(station.lastAngle('g2')).toBeNull()
+
+    station.reset('g1')
+
+    expect(station.lastAngle('g1')).toBeNull()
   })
 })
 
@@ -242,53 +336,5 @@ describe('recent songs', () => {
     station.reset('g1')
 
     expect(station.recent('g1')).toHaveLength(0)
-  })
-})
-
-describe('request streaks', () => {
-  test('counts past the history window and predicts the next song', () => {
-    const station = onAirStation({ clock: fakeClock() })
-
-    for (let index = 0; index < RADIO_MEMORY_SIZE + 4; index++)
-      station.recordSong('g1', song(String(index), { requestedBy: 'tsu' }))
-
-    expect(station.streak('g1')).toEqual({ requester: 'tsu', count: RADIO_MEMORY_SIZE + 4 })
-    expect(station.nextStreak('g1', song('next', { requestedBy: 'tsu' }))).toBe(RADIO_MEMORY_SIZE + 5)
-    expect(station.nextStreak('g1', song('other', { requestedBy: 'ana' }))).toBe(1)
-    expect(station.nextStreak('g1', song('radio', { fromRadio: true }))).toBe(0)
-  })
-
-  test('a radio song breaks the streak', () => {
-    const station = onAirStation({ clock: fakeClock() })
-
-    station.recordSong('g1', song('a', { requestedBy: 'tsu' }))
-    station.recordSong('g1', song('b', { fromRadio: true }))
-    station.recordSong('g1', song('c', { requestedBy: 'tsu' }))
-
-    expect(station.streak('g1')).toEqual({ requester: 'tsu', count: 1 })
-  })
-
-  test('a reset forgets the streak and a disconnect keeps it', () => {
-    const station = onAirStation({ clock: fakeClock() })
-
-    station.recordSong('g1', song('a', { requestedBy: 'tsu' }))
-    station.endSession('g1')
-
-    expect(station.streak('g1').count).toBe(1)
-
-    station.reset('g1')
-
-    expect(station.streak('g1')).toEqual({ requester: null, count: 0 })
-  })
-
-  test('a streak ages out with the recent window', () => {
-    const clock = fakeClock()
-    const station = onAirStation({ clock })
-
-    station.recordSong('g1', song('a', { requestedBy: 'tsu' }))
-    clock.advance(RADIO_MEMORY_MS + 1)
-
-    expect(station.streak('g1')).toEqual({ requester: null, count: 0 })
-    expect(station.nextStreak('g1', song('b', { requestedBy: 'tsu' }))).toBe(1)
   })
 })

@@ -19,8 +19,10 @@ import { djReplies } from './dj/replies.ts'
 import { onAirHost } from './on-air/host.ts'
 import { intentClassifier } from './providers/classifier/index.ts'
 import { conversationModel } from './providers/language-model/index.ts'
+import { listenersStore } from './providers/listeners/index.ts'
 import { musicEngine } from './providers/music/index.ts'
 import { settingsStore } from './providers/settings/index.ts'
+import { songFacts } from './providers/song-facts/index.ts'
 import { speechSynthesizer } from './providers/speech/index.ts'
 
 export interface App {
@@ -63,7 +65,9 @@ export async function createApp(config: AppConfig): Promise<App> {
     },
   })
 
-  const host = onAirHost({ music, speech, model, settings, logger: log, clock })
+  const facts = songFacts({ logger: log })
+  const listeners = await listenersStore({ path: config.listenersPath, logger: log })
+  const host = onAirHost({ music, speech, model, settings, facts, listeners, logger: log, clock })
 
   hostRef.current = host
 
@@ -93,8 +97,19 @@ export async function createApp(config: AppConfig): Promise<App> {
       host.playlistQueued(payload)
       slot.playlistQueued(payload)
     }),
-    music.on('trackStarted', payload => slot.trackStarted(payload)),
-    music.on('stateChanged', payload => slot.stateChanged(payload)),
+    // The host records each request when the song goes on air.
+    music.on('trackStarted', (payload) => {
+      slot.trackStarted(payload)
+      host.trackStarted(payload)
+    }),
+    music.on('trackSkipped', (payload) => {
+      listeners.recordSkip(payload.guildId, payload.by, { requesterId: payload.track.requesterId })
+      host.trackSkipped(payload)
+    }),
+    music.on('stateChanged', (payload) => {
+      slot.stateChanged(payload)
+      host.stateChanged(payload)
+    }),
     music.on('queueEnded', ({ guildId }) => slot.queueCleared({ guildId })),
     music.on('queueCleared', (payload) => {
       slot.queueCleared(payload)
@@ -106,6 +121,7 @@ export async function createApp(config: AppConfig): Promise<App> {
     }),
     music.on('playbackError', (payload) => {
       announcements.playbackError(payload)
+      host.playbackError(payload)
 
       // Only the queue that actually failed and is now empty loses its cards;
       // a replacement queue must keep them.
@@ -172,6 +188,7 @@ export async function createApp(config: AppConfig): Promise<App> {
         ['on-air', async () => host.dispose()],
         ['speech', async () => speech.dispose()],
         ['settings', async () => settings.flush()],
+        ['listeners', async () => listeners.flush()],
         ['discord', async () => client.destroy()],
       ]
 

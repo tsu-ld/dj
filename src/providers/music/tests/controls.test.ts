@@ -1,7 +1,13 @@
+import type { DisTube } from 'distube'
 import type { MusicEventMap } from '../../../ports/music.ts'
+import { AudioPlayerStatus } from '@discordjs/voice'
 import { expect, test } from 'bun:test'
 import { ChannelType } from 'discord.js'
+import { keyedQueue } from '../../../core/async.ts'
 import { MESSAGES } from '../../../messages.ts'
+import { MusicCatalog } from '../catalog.ts'
+import { musicControls } from '../controls.ts'
+import { createEmitter } from '../emitter.ts'
 import {
   announcesAdd,
   capQueue,
@@ -14,7 +20,7 @@ import {
   skipSong,
 } from '../queue.ts'
 import { voiceChannelProblem } from '../voice.ts'
-import { rejection, track } from './helpers.ts'
+import { extractionStub, log, memberOf, rejection, streamStub, track } from './helpers.ts'
 
 test('queue positions are one-based and bounded by the queue', () => {
   const queue = { songs: [{ name: 'a' }, { name: 'b' }] }
@@ -193,6 +199,78 @@ test('cleanup only runs when the failed song left the live queue empty', () => {
   expect(shouldCleanupAfterError({ songs: [{ name: 'next' }] }, queue)).toBe(false)
   expect(shouldCleanupAfterError(queue, { songs: [] })).toBe(false)
   expect(shouldCleanupAfterError(queue, undefined)).toBe(false)
+})
+
+function skipStation(): {
+  controls: ReturnType<typeof musicControls>
+  order: string[]
+  skipped: Array<MusicEventMap['trackSkipped']>
+} {
+  const catalog = new MusicCatalog({ extraction: extractionStub(), stream: streamStub(), logger: log })
+  const songs = [
+    catalog.buildSong({ id: 'a', title: 'A', artist: 'Soda Stereo' }, { member: memberOf('200000000000000007', 'tsu') }),
+    catalog.buildSong({ id: 'b', title: 'B' }, {}),
+    catalog.buildSong({ id: 'c', title: 'C' }, {}),
+  ]
+  const order: string[] = []
+  const skipped: Array<MusicEventMap['trackSkipped']> = []
+  const queue = {
+    id: 'guild-1',
+    songs,
+    autoplay: false,
+    paused: false,
+    textChannel: undefined,
+    async skip() {
+      order.push('skip')
+      songs.shift()
+    },
+  }
+  const voice = { audioPlayer: { state: { status: AudioPlayerStatus.Playing, playbackDuration: 42_000 } }, leave() {} }
+  const player = { getQueue: () => queue, voices: { get: () => voice } } as unknown as DisTube
+  const { emitter } = createEmitter()
+
+  emitter.on('trackSkipped', (payload) => {
+    order.push('trackSkipped')
+    skipped.push(payload)
+  })
+
+  const controls = musicControls({
+    player,
+    catalog,
+    mutations: keyedQueue(),
+    emitter,
+    viewOf: current => queueView(current, song => catalog.trackOf(song)),
+  })
+
+  return { controls, order, skipped }
+}
+
+const listener = { id: '200000000000000008', name: 'ana' }
+
+test('a skip reports who skipped the playing song and how long it played, before skipping', async () => {
+  const { controls, order, skipped } = skipStation()
+
+  await controls.skip('guild-1', listener)
+
+  expect(order).toEqual(['trackSkipped', 'skip'])
+  expect(skipped).toHaveLength(1)
+  expect(skipped[0]?.guildId).toBe('guild-1')
+  expect(skipped[0]?.by).toEqual(listener)
+  expect(skipped[0]?.playedMs).toBe(42_000)
+  expect(skipped[0]?.track.id).toBe('a')
+  expect(skipped[0]?.track.artist).toBe('Soda Stereo')
+  expect(skipped[0]?.track.requesterId).toBe('200000000000000007')
+})
+
+test('removing the playing song reports a skip; removing a waiting song does not', async () => {
+  const { controls, order, skipped } = skipStation()
+
+  expect(await controls.remove('guild-1', 2, listener)).toBe('B')
+  expect(skipped).toHaveLength(0)
+
+  expect(await controls.remove('guild-1', 1, listener)).toBe('A')
+  expect(order).toEqual(['trackSkipped', 'skip'])
+  expect(skipped.map(event => [event.track.id, event.by.name, event.playedMs])).toEqual([['a', 'ana', 42_000]])
 })
 
 const guild = { members: { me: { id: 'bot' } } }

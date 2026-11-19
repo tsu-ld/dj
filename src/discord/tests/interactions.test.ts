@@ -38,12 +38,29 @@ interface ButtonInfo {
 }
 
 function buttonsOf(message: ViewMessage): ButtonInfo[] {
-  return message.components.flatMap(row => row.toJSON().components.flatMap((component) => {
-    if (component.type !== ComponentType.Button || !('custom_id' in component))
+  return message.components.flatMap(container => container.toJSON().components.flatMap((component) => {
+    if (component.type !== ComponentType.ActionRow)
       return []
 
-    return [{ customId: component.custom_id, disabled: component.disabled ?? false }]
+    return component.components.flatMap((child) => {
+      if (child.type !== ComponentType.Button || !('custom_id' in child))
+        return []
+
+      return [{ customId: child.custom_id, disabled: child.disabled ?? false }]
+    })
   }))
+}
+
+function textOf(message: ViewMessage | undefined): string {
+  if (!message)
+    return ''
+
+  return message.components.flatMap(container => container.toJSON().components.flatMap((component) => {
+    if (component.type === ComponentType.TextDisplay)
+      return [component.content]
+
+    return []
+  })).join('\n')
 }
 
 describe('now-playing buttons', () => {
@@ -248,7 +265,10 @@ describe('queue pagination', () => {
     const message = recorder.edits[0]
 
     expect(recorder.deferredUpdates()).toBe(1)
-    expect(message?.embeds[0]?.toJSON().footer?.text).toBe('Page 2 of 2')
+    expect(textOf(message)).toContain('Page 2 of 2')
+    expect(message?.content).toBeNull()
+    expect(message?.embeds).toEqual([])
+    expect(message?.allowedMentions).toEqual({ parse: [] })
 
     const buttons = message ? buttonsOf(message) : []
 
@@ -263,7 +283,7 @@ describe('queue pagination', () => {
 
     await handler(recorder.interaction)
 
-    expect(recorder.edits[0]?.embeds[0]?.toJSON().footer?.text).toBe('Page 1 of 2')
+    expect(textOf(recorder.edits[0])).toContain('Page 1 of 2')
   })
 
   test('pagination with nothing playing replaces the card with the reason', async () => {
@@ -274,8 +294,11 @@ describe('queue pagination', () => {
 
     const edit = recorder.edits[0]
 
+    expect(textOf(edit)).toBe(MESSAGES.nothingPlaying)
+    expect(edit?.flags).toBe(MessageFlags.IsComponentsV2)
+    expect(edit?.content).toBeNull()
     expect(edit?.embeds).toEqual([])
-    expect(edit?.components).toEqual([])
+    expect(edit?.allowedMentions).toEqual({ parse: [] })
   })
 
   test('a page that is not a number only acknowledges', async () => {

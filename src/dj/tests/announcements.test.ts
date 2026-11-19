@@ -132,7 +132,7 @@ describe('djAnnouncements', () => {
       settings: testSettings(),
       clock,
     })
-    const payload = { guildId: 'g1', cleanupAfterError: true, textChannel: channel.channel }
+    const payload = { guildId: 'g1', songId: 'song-1', cleanupAfterError: true, textChannel: channel.channel }
 
     announcements.playbackError(payload)
     await settle()
@@ -157,11 +157,11 @@ describe('djAnnouncements', () => {
       clock,
     })
 
-    announcements.playbackError({ guildId: 'g1', cleanupAfterError: true, textChannel: null })
+    announcements.playbackError({ guildId: 'g1', songId: null, cleanupAfterError: true, textChannel: null })
     await settle()
 
     clock.advance(1)
-    announcements.playbackError({ guildId: 'g1', cleanupAfterError: true, textChannel: channel.channel })
+    announcements.playbackError({ guildId: 'g1', songId: null, cleanupAfterError: true, textChannel: channel.channel })
     await settle()
 
     expect(channel.sent).toEqual([])
@@ -176,8 +176,8 @@ describe('djAnnouncements', () => {
       clock: testClock(1_000_000),
     })
 
-    announcements.playbackError({ guildId: 'g1', cleanupAfterError: true, textChannel: first.channel })
-    announcements.playbackError({ guildId: 'g2', cleanupAfterError: true, textChannel: second.channel })
+    announcements.playbackError({ guildId: 'g1', songId: null, cleanupAfterError: true, textChannel: first.channel })
+    announcements.playbackError({ guildId: 'g2', songId: null, cleanupAfterError: true, textChannel: second.channel })
     await settle()
 
     expect(first.sent).toEqual([MESSAGES.playbackError])

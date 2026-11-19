@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { Playlist, Song } from 'distube'
 import { MESSAGES } from '../../../messages.ts'
 import { MusicCatalog } from '../catalog.ts'
-import { extractionStub, log, rejection, streamStub } from './helpers.ts'
+import { extractionStub, log, memberOf, rejection, streamStub } from './helpers.ts'
 
 function catalogWith(
   json: (url: string, flags?: readonly string[]) => Promise<unknown> = async () => ({}),
@@ -51,8 +51,60 @@ test('a song maps to the queue track', () => {
     isLive: false,
     thumbnail: 'https://img.test/cover.jpg',
     requestedBy: null,
+    requesterId: null,
+    artist: null,
     fromRadio: false,
   })
+})
+
+test('a track names its artist, from the credit or the topic channel', () => {
+  const catalog = catalogWith()
+  const artistOf = (info: Record<string, unknown>): string | null => catalog.trackOf(catalog.buildSong({ id: 'a', ...info }, {})).artist
+
+  expect(artistOf({ artist: 'Soda Stereo', uploader: 'Soda Stereo - Topic' })).toBe('Soda Stereo')
+  expect(artistOf({ creator: 'Charly García', uploader: 'Some Channel' })).toBe('Charly García')
+  expect(artistOf({ uploader: 'Los Redondos - Topic' })).toBe('Los Redondos')
+  expect(artistOf({ channel: 'Babasónicos - Topic' })).toBe('Babasónicos')
+  expect(artistOf({ uploader: 'VEVO Uploads' })).toBeNull()
+  expect(artistOf({})).toBeNull()
+})
+
+test('a channel that is not a topic channel never becomes the artist', async () => {
+  const catalog = catalogWith(async () => ({
+    entries: [
+      { _type: 'url', id: 'lyric', title: 'Song (Lyrics)', channel: '7clouds', uploader: '7clouds' },
+      { _type: 'url', id: 'vevo', title: 'Creep', channel: 'RadioheadVEVO' },
+    ],
+  }))
+  const related = await catalog.getRelatedSongs({ id: 'a' })
+
+  expect(related.map(song => catalog.trackOf(song).artist)).toEqual([null, null])
+  // the card still shows who uploaded it
+  expect(related.map(song => song.uploader.name)).toEqual(['7clouds', undefined])
+})
+
+test('a spotify song keeps the artists its plugin puts in the uploader', () => {
+  const catalog = catalogWith()
+  const song = new Song({ plugin: null, source: 'spotify', playFromSource: false, id: 'sp', name: 'One More Time', uploader: { name: 'Daft Punk' } }, {})
+
+  expect(catalog.trackOf(song).artist).toBe('Daft Punk')
+})
+
+test('a track keeps who asked for it, and a radio pick has no requester', async () => {
+  const catalog = catalogWith(async () => ({ entries: [{ id: 'other', title: 'Other' }] }))
+  const requested = catalog.trackOf(catalog.buildSong({ id: 'a', title: 'A' }, { member: memberOf('200000000000000007', 'tsu') }))
+  const [related] = await catalog.getRelatedSongs({ id: 'a' })
+
+  if (!related)
+    throw new Error('expected a related song')
+
+  // autoplay hands the bot in as the radio pick's member
+  related.member = memberOf('300000000000000009', 'DJ')
+
+  expect(related.member?.id).toBe('300000000000000009')
+  expect(requested.requesterId).toBe('200000000000000007')
+  expect(requested.requestedBy).toBe('tsu')
+  expect(catalog.trackOf(related).requesterId).toBeNull()
 })
 
 test('a song without a title or url gets a safe display name', () => {

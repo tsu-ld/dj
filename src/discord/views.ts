@@ -1,38 +1,43 @@
-import type { MessageActionRowComponentBuilder } from 'discord.js'
+import type { MessageActionRowComponentBuilder, MessageMentionOptions } from 'discord.js'
 import type { QueueView, Track } from '../ports/music.ts'
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js'
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ContainerBuilder,
+  MessageFlags,
+  SectionBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+} from 'discord.js'
 import { QUEUE_PAGE_SIZE } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
+import { linkedTitle, PAUSED_ACCENT, PLAYING_ACCENT, queueLine, statusLine, thumbnailUrl, totalDuration, upcomingText } from './card-format.ts'
 
 export interface ViewMessage {
-  readonly embeds: readonly EmbedBuilder[]
-  readonly components: readonly ActionRowBuilder<MessageActionRowComponentBuilder>[]
+  readonly components: readonly ContainerBuilder[]
+  readonly flags: typeof MessageFlags.IsComponentsV2
+  readonly allowedMentions: MessageMentionOptions
 }
+
+const NO_MENTIONS: MessageMentionOptions = { parse: [] }
 
 function row(...buttons: ButtonBuilder[]): ActionRowBuilder<MessageActionRowComponentBuilder> {
   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(...buttons)
 }
 
-function displayName(track: Track): string {
-  return track.title.trim() || track.url || 'Unknown song'
+function button(label: string, customId: string, emoji: string, style = ButtonStyle.Secondary): ButtonBuilder {
+  return new ButtonBuilder().setCustomId(customId).setLabel(label).setEmoji(emoji).setStyle(style)
 }
 
-export function formatDuration(track: Track): string {
-  if (track.isLive)
-    return 'Live'
+function text(content: string): TextDisplayBuilder {
+  return new TextDisplayBuilder().setContent(content)
+}
 
-  if (!Number.isFinite(track.durationSeconds) || track.durationSeconds <= 0)
-    return 'Unknown'
-
-  const total = Math.floor(track.durationSeconds)
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const seconds = total % 60
-
-  if (hours > 0)
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+function separator(): SeparatorBuilder {
+  return new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
 }
 
 export function nowPlayingMessage(view: QueueView): ViewMessage | null {
@@ -41,34 +46,47 @@ export function nowPlayingMessage(view: QueueView): ViewMessage | null {
   if (!track)
     return null
 
-  const requester = track.requestedBy?.trim()
+  const container = new ContainerBuilder().setAccentColor(view.paused ? PAUSED_ACCENT : PLAYING_ACCENT)
+  const header = `## ${linkedTitle(track)}\n${statusLine(track, view)}`
+  const thumbnail = thumbnailUrl(track)
 
-  const embed = new EmbedBuilder()
-    .setTitle(displayName(track))
-    .setURL(track.url || null)
-    .setThumbnail(track.thumbnail)
-    .addFields(
-      { name: 'Duration', value: formatDuration(track), inline: true },
-      { name: 'Requested by', value: track.fromRadio ? 'Radio' : (requester !== undefined && requester !== '' ? requester : 'Unknown'), inline: true },
-      { name: 'Status', value: view.paused ? 'Paused' : 'Playing', inline: true },
-    )
-    .setFooter({ text: `${Math.max(view.size - 1, 0)} in queue` })
-
-  return {
-    embeds: [embed],
-    components: [
-      row(
-        new ButtonBuilder().setCustomId('np:toggle').setLabel(view.paused ? 'Resume' : 'Pause').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('np:skip').setLabel('Skip').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('np:radio').setLabel('Radio').setStyle(view.radio ? ButtonStyle.Success : ButtonStyle.Secondary),
-      ),
-      row(
-        new ButtonBuilder().setCustomId('np:shuffle').setLabel('Shuffle').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('np:clear').setLabel('Clear').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('np:queue').setLabel('Queue').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
+  if (thumbnail === null) {
+    container.addTextDisplayComponents(text(header))
   }
+  else {
+    container.addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents(text(header))
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnail).setDescription('Album art')),
+    )
+  }
+
+  const upcoming = upcomingText(view)
+
+  if (upcoming !== null) {
+    container
+      .addSeparatorComponents(separator())
+      .addTextDisplayComponents(text(upcoming))
+  }
+
+  container
+    .addSeparatorComponents(separator())
+    .addActionRowComponents(
+      row(
+        button(view.paused ? 'Resume' : 'Pause', 'np:toggle', view.paused ? '▶️' : '⏸️'),
+        button('Skip', 'np:skip', '⏭️'),
+        button('Shuffle', 'np:shuffle', '🔀'),
+      ),
+    )
+    .addActionRowComponents(
+      row(
+        button('Radio', 'np:radio', '📻', view.radio ? ButtonStyle.Success : ButtonStyle.Secondary),
+        button('Queue', 'np:queue', '📋'),
+        button('Leave', 'np:clear', '🚪', ButtonStyle.Danger),
+      ),
+    )
+
+  return { components: [container], flags: MessageFlags.IsComponentsV2, allowedMentions: NO_MENTIONS }
 }
 
 function songsOf(view: QueueView): Track[] {
@@ -83,29 +101,53 @@ export function queueMessage(view: QueueView, requestedPage: number): ViewMessag
   const start = (page - 1) * QUEUE_PAGE_SIZE
   const lines = songs
     .slice(start, start + QUEUE_PAGE_SIZE)
-    .map((track, index) => `${start + index + 1}. ${displayName(track)}`)
+    .map((track, index) => {
+      const position = start + index + 1
+      const current = start + index === 0 && view.current !== null
+      const marker = current ? `${view.paused ? '⏸' : '▶'} ` : ''
 
-  const embed = new EmbedBuilder()
-    .setTitle(`Queue (${total} songs)`)
-    .setDescription(lines.join('\n') || 'Empty')
-    .setFooter({ text: `Page ${page} of ${pageCount}` })
+      return queueLine(track, position, marker)
+    })
+  const duration = totalDuration(songs)
+  const meta = total === 0
+    ? 'Nothing queued yet.\n-# Ask me for a song to get started.'
+    : `-# ${total} song${total === 1 ? '' : 's'}${duration === null ? '' : ` · ${duration}`}${pageCount > 1 ? ` · Page ${page} of ${pageCount}` : ''}`
+  const container = new ContainerBuilder()
+    .setAccentColor(view.paused ? PAUSED_ACCENT : PLAYING_ACCENT)
+    .addTextDisplayComponents(text(`## Queue\n${meta}`))
 
+  if (total > 0)
+    container.addSeparatorComponents(separator()).addTextDisplayComponents(text(lines.join('\n')))
+
+  if (pageCount > 1) {
+    container
+      .addSeparatorComponents(separator())
+      .addActionRowComponents(
+        row(
+          new ButtonBuilder()
+            .setCustomId(`nq:prev:${page}`)
+            .setLabel('Previous')
+            .setEmoji('⬅️')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page <= 1),
+          new ButtonBuilder()
+            .setCustomId(`nq:next:${page}`)
+            .setLabel('Next')
+            .setEmoji('➡️')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page >= pageCount),
+        ),
+      )
+  }
+
+  return { components: [container], flags: MessageFlags.IsComponentsV2, allowedMentions: NO_MENTIONS }
+}
+
+export function noticeMessage(content: string): ViewMessage {
   return {
-    embeds: [embed],
-    components: [
-      row(
-        new ButtonBuilder()
-          .setCustomId(`nq:prev:${page}`)
-          .setLabel('Previous')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(page <= 1),
-        new ButtonBuilder()
-          .setCustomId(`nq:next:${page}`)
-          .setLabel('Next')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(page >= pageCount),
-      ),
-    ],
+    components: [new ContainerBuilder().addTextDisplayComponents(text(content))],
+    flags: MessageFlags.IsComponentsV2,
+    allowedMentions: NO_MENTIONS,
   }
 }
 
@@ -120,7 +162,7 @@ export function clearConfirmation(): ClearConfirmation {
     content: MESSAGES.clearConfirm,
     components: [
       row(
-        new ButtonBuilder().setCustomId('nc:clear:yes').setLabel('Clear').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('nc:clear:yes').setLabel('Leave').setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId('nc:clear:no').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
       ),
     ],

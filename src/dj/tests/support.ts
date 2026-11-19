@@ -134,6 +134,8 @@ export function testTrack(title: string, overrides: Partial<Track> = {}): Track 
     isLive: false,
     thumbnail: null,
     requestedBy: null,
+    requesterId: null,
+    artist: null,
     fromRadio: false,
     ...overrides,
   }

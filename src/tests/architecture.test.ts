@@ -134,7 +134,7 @@ test('no area imports a layer above it', () => {
 // The provider folder is the only place a technology may be named. Keeping the
 // check on paths means a folder cannot quietly become the architecture.
 test('a provider technology name never leaks into a path', () => {
-  const names = ['distube', 'yt-dlp', 'ytdlp', 'elevenlabs', 'openai', 'jev', 'systemone', 'spotify', 'ffmpeg', 'deepseek', 'typesafe', 'opencode', 'mediaplex', 'davey']
+  const names = ['distube', 'yt-dlp', 'ytdlp', 'elevenlabs', 'openai', 'jev', 'systemone', 'spotify', 'ffmpeg', 'deepseek', 'typesafe', 'opencode', 'mediaplex', 'davey', 'deezer', 'wikipedia']
   const leaked = files
     .map(file => relative(SRC, file).toLowerCase())
     .filter(path => names.some(name => path.includes(name)))

@@ -1,6 +1,6 @@
 import type { DisTube, Queue } from 'distube'
 import type { KeyedQueue } from '../../core/async.ts'
-import type { MusicPort, QueueView } from '../../ports/music.ts'
+import type { Listener, MusicPort, PlaybackStatus, QueueView } from '../../ports/music.ts'
 import type { MusicCatalog } from './catalog.ts'
 import type { MusicEmitter } from './types.ts'
 import { AudioPlayerStatus } from '@discordjs/voice'
@@ -33,6 +33,37 @@ export function musicControls(deps: {
       guildId: queue.id,
       view: viewOf(queue),
       textChannel: queue.textChannel ?? null,
+    })
+  }
+
+  function status(guildId: string): PlaybackStatus | null {
+    const voice = player.voices.get(guildId)
+
+    if (!voice)
+      return null
+
+    const state = voice.audioPlayer.state
+    const playing = state.status === AudioPlayerStatus.Playing
+    const paused = state.status === AudioPlayerStatus.Paused || state.status === AudioPlayerStatus.AutoPaused
+
+    return {
+      state: playing ? 'playing' : paused ? 'paused' : 'idle',
+      playbackDurationMs: playing || paused ? state.playbackDuration : 0,
+    }
+  }
+
+  // Reported before the skip, while the song and its elapsed time still exist.
+  function emitSkipped(queue: Queue, by: Listener): void {
+    const current = queue.songs[0]
+
+    if (!current)
+      return
+
+    emitter.trackSkipped({
+      guildId: queue.id,
+      track: catalog.trackOf(current),
+      by,
+      playedMs: status(queue.id)?.playbackDurationMs ?? 0,
     })
   }
 
@@ -76,10 +107,11 @@ export function musicControls(deps: {
         return queue.paused
       })
     },
-    async skip(guildId) {
+    async skip(guildId, by) {
       await mutations.run(guildId, async () => {
         const queue = requireQueue(guildId)
 
+        emitSkipped(queue, by)
         await skipSong(queue, async () => clear(queue, false))
       })
     },
@@ -98,7 +130,7 @@ export function musicControls(deps: {
         emitState(queue)
       })
     },
-    async remove(guildId, position) {
+    async remove(guildId, position, by) {
       return mutations.run(guildId, async () => {
         const queue = requireQueue(guildId)
 
@@ -112,7 +144,10 @@ export function musicControls(deps: {
 
         const removed = catalog.trackOf(song).title
 
-        await removeSongAt(queue, position, async () => skipSong(queue, async () => clear(queue, false)))
+        await removeSongAt(queue, position, async () => {
+          emitSkipped(queue, by)
+          await skipSong(queue, async () => clear(queue, false))
+        })
 
         if (player.getQueue(guildId) === queue)
           emitState(queue)
@@ -139,20 +174,6 @@ export function musicControls(deps: {
 
       return queue ? viewOf(queue) : null
     },
-    status(guildId) {
-      const voice = player.voices.get(guildId)
-
-      if (!voice)
-        return null
-
-      const state = voice.audioPlayer.state
-      const playing = state.status === AudioPlayerStatus.Playing
-      const paused = state.status === AudioPlayerStatus.Paused || state.status === AudioPlayerStatus.AutoPaused
-
-      return {
-        state: playing ? 'playing' : paused ? 'paused' : 'idle',
-        playbackDurationMs: playing || paused ? state.playbackDuration : 0,
-      }
-    },
+    status,
   }
 }

@@ -1,3 +1,4 @@
+import type { GuildMember } from 'discord.js'
 import type { Logger } from '../../../core/logger.ts'
 import type { Track } from '../../../ports/music.ts'
 import type { Extractor } from '../extraction.ts'
@@ -32,9 +33,16 @@ export function track(overrides: Partial<Track> = {}): Track {
     isLive: false,
     thumbnail: null,
     requestedBy: null,
+    requesterId: null,
+    artist: null,
     fromRadio: false,
     ...overrides,
   }
+}
+
+// the SDK only keeps a member whose ids look like snowflakes
+export function memberOf(id: string, displayName: string): GuildMember {
+  return { id, displayName, user: { id }, guild: { id: '100000000000000001' } } as unknown as GuildMember
 }
 
 export async function tempDir(): Promise<{ dir: string, cleanup: () => Promise<void> }> {

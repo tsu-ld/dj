@@ -36,6 +36,7 @@ async function speakInCharacter(
       messages: [{ role: 'user', content: text }],
       timeoutMs: REWRITE_TIMEOUT_MS,
       maxOutputTokens: REWRITE_MAX_OUTPUT_TOKENS,
+      reasoning: 'none',
       sessionId: channel.id,
     })
 

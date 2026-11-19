@@ -61,6 +61,20 @@ function songUrlOf(info: Record<string, unknown>): string | undefined {
   return info._type === 'url' ? stringOf(info, 'url') ?? undefined : undefined
 }
 
+// Only a credit or YouTube Music's auto-generated "<artist> - Topic" channel
+// names the artist; any other channel (a VEVO, a lyric channel) is a guess.
+function artistOf(info: Record<string, unknown>): string | null {
+  const credited = stringOf(info, 'artist') ?? stringOf(info, 'creator')
+
+  if (credited !== null)
+    return credited
+
+  const topic = [stringOf(info, 'uploader'), stringOf(info, 'channel')].find(name => name?.endsWith(' - Topic'))
+  const name = topic?.slice(0, -' - Topic'.length).trim()
+
+  return name === undefined || name === '' ? null : name
+}
+
 function infoRecord(value: unknown): Record<string, unknown> {
   if (!isRecord(value))
     throw new Error('The extractor returned an unexpected metadata payload.')
@@ -73,6 +87,9 @@ export class MusicCatalog extends ExtractorPlugin {
   readonly #stream: StreamResolver
   readonly #logger: Logger
   readonly #radioSongs = new WeakSet<object>()
+  // The artist of the songs this catalog built; a Spotify song carries its own
+  // artists in the uploader instead.
+  readonly #artists = new WeakMap<object, string | null>()
 
   constructor(deps: { extraction: Extractor, stream: StreamResolver, logger: Logger }) {
     super()
@@ -201,10 +218,15 @@ export class MusicCatalog extends ExtractorPlugin {
     if (fromRadio)
       this.#radioSongs.add(song)
 
+    this.#artists.set(song, artistOf(info))
+
     return song
   }
 
   trackOf(song: Song): Track {
+    const fromRadio = this.#radioSongs.has(song)
+    const artist = this.#artists.has(song) ? this.#artists.get(song) : song.uploader.name
+
     return {
       id: song.id,
       title: song.name ?? song.url ?? 'Unknown song',
@@ -213,7 +235,10 @@ export class MusicCatalog extends ExtractorPlugin {
       isLive: Boolean(song.isLive),
       thumbnail: song.thumbnail ?? null,
       requestedBy: song.member?.displayName ?? null,
-      fromRadio: this.#radioSongs.has(song),
+      // a radio pick carries the bot as its member; nobody asked for it
+      requesterId: fromRadio ? null : song.member?.id ?? null,
+      artist: artist === undefined || artist === null || artist === '' ? null : artist,
+      fromRadio,
     }
   }
 }

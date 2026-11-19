@@ -25,6 +25,10 @@ describe('oneLine', () => {
     expect(oneLine('x'.repeat(200))).toHaveLength(120)
     expect(oneLine(undefined)).toBe('')
   })
+
+  test('does not leave half an emoji at the cut', () => {
+    expect(oneLine('ab😀', 3)).toBe('ab')
+  })
 })
 
 describe('dataBlock', () => {

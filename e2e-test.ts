@@ -225,7 +225,7 @@ size >= 2 ? pass(`queue holds ${size} songs`) : fail('queue holds 2 songs', `got
 console.log('== 6. Skip changes song ==')
 const before = currentSong()
 
-await music.skip(GUILD).catch(() => {})
+await music.skip(GUILD, { id: 'e2e', name: 'e2e' }).catch(() => {})
 await wait(6_000)
 
 const after = currentSong()
