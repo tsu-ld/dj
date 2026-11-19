@@ -39,6 +39,14 @@ export function thumbnailUrl(track: Track): string | null {
   return httpUrl(track.thumbnail)
 }
 
+export function clock(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0')
+
+  return hours > 0 ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`
+}
+
 function formatDuration(track: Track): string {
   if (track.isLive)
     return 'Live'
@@ -46,15 +54,7 @@ function formatDuration(track: Track): string {
   if (!Number.isFinite(track.durationSeconds) || track.durationSeconds <= 0)
     return 'Unknown'
 
-  const total = Math.floor(track.durationSeconds)
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const seconds = total % 60
-
-  if (hours > 0)
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  return clock(Math.floor(track.durationSeconds))
 }
 
 function durationSuffix(track: Track): string {

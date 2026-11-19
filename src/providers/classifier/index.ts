@@ -1,40 +1,25 @@
 import type { AppConfig } from '../../config.ts'
 import type { Clock } from '../../core/clock.ts'
-import type { Logger } from '../../core/logger.ts'
 import type { DecisionInput, DecisionPort } from '../../ports/decision.ts'
 import { circuitBreaker } from '../../core/async.ts'
-import { errorMessage, ProviderError } from '../../core/errors.ts'
+import { ProviderError } from '../../core/errors.ts'
 import { isRecord, parseJson } from '../../core/json.ts'
+import { isRetryableStatus, mapFailure } from '../http-failure.ts'
 
 type DecisionConfig = Extract<AppConfig['decision'], { enabled: true }>
 
 const INSTRUCTIONS = 'What does the user want the bot to do? Pick the single option that fits best.'
 
-function isRetryableStatus(status: number): boolean {
-  return status === 429 || status >= 500
-}
-
-function mapFailure(error: unknown): ProviderError {
-  if (error instanceof ProviderError)
-    return error
-
-  return new ProviderError('decision', errorMessage(error), { failure: 'retryable', cause: error })
-}
-
 async function decide(config: DecisionConfig, input: DecisionInput): Promise<string | null> {
   const criteria = Object.fromEntries(input.options.map(option => [option.name, option.description]))
 
-  const headers: Record<string, string> = {
-    'Authorization': `Bearer ${config.apiKey}`,
-    'Content-Type': 'application/json',
-  }
-
-  if (input.sessionId)
-    headers['x-opencode-session'] = input.sessionId
-
   const response = await fetch(config.baseUrl, {
     method: 'POST',
-    headers,
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+      'x-opencode-session': input.sessionId,
+    },
     body: JSON.stringify({
       model: config.model,
       state: { ...input.state, message: input.text },
@@ -49,7 +34,6 @@ async function decide(config: DecisionConfig, input: DecisionInput): Promise<str
     const detail = await response.text().catch(() => '')
 
     throw new ProviderError(
-      'decision',
       `Decision endpoint responded ${response.status}: ${detail}`,
       { failure: isRetryableStatus(response.status) ? 'retryable' : 'fatal', status: response.status },
     )
@@ -59,7 +43,6 @@ async function decide(config: DecisionConfig, input: DecisionInput): Promise<str
 
   if (!isRecord(payload)) {
     throw new ProviderError(
-      'decision',
       'Decision endpoint returned an invalid payload',
       { failure: 'retryable', status: response.status },
     )
@@ -84,10 +67,9 @@ async function decide(config: DecisionConfig, input: DecisionInput): Promise<str
 
 export function intentClassifier(deps: {
   config: AppConfig['decision']
-  logger: Logger
   clock: Clock
 }): DecisionPort {
-  const { config, logger, clock } = deps
+  const { config, clock } = deps
 
   if (!config.enabled)
     return { choose: async () => null }
@@ -114,7 +96,6 @@ export function intentClassifier(deps: {
       }
       catch (error) {
         breaker.failure()
-        logger.error('classifier.failed', error)
 
         throw mapFailure(error)
       }

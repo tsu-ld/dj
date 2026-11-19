@@ -8,12 +8,11 @@ export const NOW_PLAYING_REPOST_MS = 2_000
 export const ERROR_ANNOUNCE_MS = 30_000
 export const HISTORY_MAX_MESSAGES = 16
 export const HISTORY_IDLE_MS = 600_000
-export const SPEECH_MAX_CHARS = 300
 export const RADIO_SHORT_CHARS = 120
 export const RADIO_LONG_CHARS = 230
 export const RADIO_MEMORY_MS = 30 * 60_000
 export const RADIO_MEMORY_SIZE = 8
-export const RADIO_LONG_EVERY = 5
+export const RADIO_LONG_EVERY = 2
 export const RADIO_SILENT_EVERY = 3
 export const RADIO_SPEAK_EVERY = 3
 export const PREPARED_CLIP_TTL_MS = 20 * 60_000
@@ -21,8 +20,8 @@ export const PREPARED_CLIP_TTL_MS = 20 * 60_000
 // The queue cap and the one-based position check are the same rule for every
 // caller: the command layer reserves room before playing, the engine enforces
 // it after adding, and the remove command validates the position.
-export function queueRoom(occupied: number, max = MAX_QUEUE_SIZE): number {
-  return Math.max(max - occupied, 0)
+export function queueRoom(occupied: number): number {
+  return Math.max(MAX_QUEUE_SIZE - occupied, 0)
 }
 
 export function isPositionInQueue(size: number, position: number): boolean {

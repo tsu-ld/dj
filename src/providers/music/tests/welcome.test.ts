@@ -1,5 +1,5 @@
 import type { VoiceBasedChannel } from 'discord.js'
-import type { AudioPlayerLike, VoiceAccess, VoiceConnectionLike, VoiceSession } from '../welcome.ts'
+import type { AudioPlayerLike, VoiceAccess, VoiceConnectionLike, VoiceSession } from '../audio-types.ts'
 import { EventEmitter } from 'node:events'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -129,6 +129,10 @@ function accessOf(
   }
 }
 
+function audioWith(deps: Omit<Parameters<typeof audioOverMusic>[0], 'logger' | 'createResource'>): ReturnType<typeof audioOverMusic> {
+  return audioOverMusic({ logger: log, createResource: () => ({}), ...deps })
+}
+
 function fakeChannel(id = 'guild-1'): VoiceBasedChannel {
   // Test double for the SDK's channel handle: the audio code only reads the
   // guild id before it hands the channel back to the voice access seam.
@@ -148,10 +152,8 @@ test('the line takes the connection and hands it back to the music', async () =>
   const { file, cleanup } = await tempAudio()
   const session = fakeConnection()
   const speech = fakePlayer({ onPlay: player => queueMicrotask(() => player.emit('idle')) })
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
-    logger: log,
-    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -170,7 +172,7 @@ test('the line takes the connection and hands it back to the music', async () =>
 
 test('without a voice connection nothing is spoken', async () => {
   const { file, cleanup } = await tempAudio()
-  const audio = audioOverMusic({ access: accessOf(null), logger: log })
+  const audio = audioWith({ access: accessOf(null) })
 
   try {
     expect(await audio.playClip('g2', file)).toBe(false)
@@ -184,10 +186,8 @@ test('without a voice connection nothing is spoken', async () => {
 test('an empty queue never gets a line', async () => {
   const { file, cleanup } = await tempAudio()
   const session = fakeConnection()
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, { songs: [], paused: false }),
-    logger: log,
-    createResource: () => ({}),
   })
 
   try {
@@ -202,10 +202,8 @@ test('an empty queue never gets a line', async () => {
 
 test('a missing clip is skipped without taking the process down', async () => {
   const session = fakeConnection()
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
-    logger: log,
-    createResource: () => ({}),
     createPlayer: () => fakePlayer(),
   })
 
@@ -221,10 +219,8 @@ test('a missing clip is skipped without taking the process down', async () => {
 test('a paused queue is left alone', async () => {
   const { file, cleanup } = await tempAudio()
   const session = fakeConnection()
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, { songs: [{ name: 'Tema' }], paused: true }),
-    logger: log,
-    createResource: () => ({}),
   })
 
   try {
@@ -241,10 +237,8 @@ test('a connection that dies mid-line is not given back to the music', async () 
   const { file, cleanup } = await tempAudio()
   const session = fakeConnection()
   const speech = fakePlayer({ onStop: player => player.emit('idle') })
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
-    logger: log,
-    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -273,10 +267,8 @@ test('a pause pressed during the line is applied when the music is back', async 
       release = () => player.emit('idle')
     },
   })
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, queue),
-    logger: log,
-    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -309,10 +301,8 @@ test('resuming during the line keeps the pause from coming back', async () => {
       release = () => player.emit('idle')
     },
   })
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, queue),
-    logger: log,
-    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -343,10 +333,8 @@ test('a second line does not cut the one already on air', async () => {
       release = () => player.emit('idle')
     },
   })
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
-    logger: log,
-    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -370,10 +358,8 @@ test('a failed clip settles on the player error instead of waiting for idle', as
   const { file, cleanup } = await tempAudio()
   const session = fakeConnection()
   const speech = fakePlayer({ onPlay: player => player.emit('error', new Error('boom')) })
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
-    logger: log,
-    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -391,10 +377,8 @@ test('dispose settles a clip that never reaches idle', async () => {
   const { file, cleanup } = await tempAudio()
   const session = fakeConnection()
   const speech = fakePlayer()
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
-    logger: log,
-    createResource: () => ({}),
     createPlayer: () => speech,
   })
 
@@ -416,14 +400,12 @@ test('the welcome intro plays once per guild and hands the connection back', asy
   const session = fakeConnection()
   const intro = fakePlayer({ onPlay: player => queueMicrotask(() => player.emit('idle')) })
   let joins = 0
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf(null, undefined, async () => {
       joins++
 
       return { connection: session.connection, audioPlayer: session.audioPlayer }
     }),
-    logger: log,
-    createResource: () => ({}),
     welcomeFile: file,
     createPlayer: () => intro,
   })
@@ -444,14 +426,12 @@ test('the welcome intro plays once per guild and hands the connection back', asy
 test('without a welcome file the bot joins nothing', async () => {
   const { dir, cleanup } = await tempDir()
   let joins = 0
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf(null, undefined, async () => {
       joins++
 
       return fakeConnection()
     }),
-    logger: log,
-    createResource: () => ({}),
     welcomeFile: join(dir, 'missing.mp3'),
   })
 
@@ -470,10 +450,8 @@ test('a destroyed connection during the intro is not given to the music', async 
   const { file, cleanup } = await tempAudio()
   const session = fakeConnection()
   const intro = fakePlayer()
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf(null, undefined, async () => ({ connection: session.connection, audioPlayer: session.audioPlayer })),
-    logger: log,
-    createResource: () => ({}),
     welcomeFile: file,
     createPlayer: () => intro,
   })
@@ -497,7 +475,7 @@ test('a failed join does not use up the greeting', async () => {
   const { file, cleanup } = await tempAudio()
   const session = fakeConnection()
   let joins = 0
-  const audio = audioOverMusic({
+  const audio = audioWith({
     access: accessOf(null, undefined, async () => {
       joins++
 
@@ -506,8 +484,6 @@ test('a failed join does not use up the greeting', async () => {
 
       return { connection: session.connection, audioPlayer: session.audioPlayer }
     }),
-    logger: log,
-    createResource: () => ({}),
     welcomeFile: file,
     createPlayer: () => fakePlayer({ onPlay: player => queueMicrotask(() => player.emit('idle')) }),
   })

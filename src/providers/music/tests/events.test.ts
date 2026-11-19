@@ -135,7 +135,6 @@ function wiring(queue: FakeQueue, player: ReturnType<typeof fakePlayer>, realHea
     catalog: { trackOf: (value: { id: string, name?: string }) => track({ id: value.id, title: value.name ?? value.id }) } as never,
     cache: { prefetch: () => {} } as never,
     emitter,
-    plays: new Map(),
     beforeStream: async () => {},
     forgetStream: () => {},
     leave: () => {},
@@ -304,19 +303,19 @@ test('a finished, cleared or disconnected queue prunes its streams but keeps lis
   expect(harness.failures).toEqual([])
 
   // The listener outlives the map: it holds nothing the map could grow with.
-  expect(stream.listenerCount('error')).toBeGreaterThanOrEqual(1)
+  expect(stream.listenerCount('error')).toBe(1)
 
   play(queue, player)
   harness.emitter.queueCleared({ guildId: 'g1', resetStation: false })
   expect(() => stream.emit('error', ffmpegExited())).not.toThrow()
   expect(harness.orphans()).toBe(2)
-  expect(stream.listenerCount('error')).toBeGreaterThanOrEqual(1)
+  expect(stream.listenerCount('error')).toBe(1)
 
   play(queue, player)
   player.emit(Events.DISCONNECT, queue)
   expect(() => stream.emit('error', ffmpegExited())).not.toThrow()
   expect(harness.orphans()).toBe(3)
-  expect(stream.listenerCount('error')).toBeGreaterThanOrEqual(1)
+  expect(stream.listenerCount('error')).toBe(1)
 })
 
 test('a playback error names the song that failed', () => {

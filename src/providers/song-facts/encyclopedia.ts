@@ -5,8 +5,9 @@ const SUMMARY_URL = 'https://en.wikipedia.org/api/rest_v1/page/summary'
 const SEARCH_URL = 'https://en.wikipedia.org/w/rest.php/v1/search/page'
 const SONG_HIT_LIMIT = 3
 const ARTIST_SUMMARY_LIMIT = 200
+const SONG_SUMMARY_LIMIT = 300
 
-export function cap(text: string, limit: number): string {
+function cap(text: string, limit: number): string {
   if (text.length <= limit)
     return text
 
@@ -99,5 +100,5 @@ export function songSummary(payload: unknown, pageTitle: string, artist: string,
 
   const text = sentences(extract, 2)
 
-  return text ? cap(text, 300) : null
+  return text ? cap(text, SONG_SUMMARY_LIMIT) : null
 }

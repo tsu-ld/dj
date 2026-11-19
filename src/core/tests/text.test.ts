@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { clampMessage, dataBlock, oneLine } from '../text.ts'
+import { clampMessage, dataBlock, normalizeTitle, oneLine } from '../text.ts'
 
 describe('clampMessage', () => {
   test('drops empty input', () => {
@@ -41,5 +41,16 @@ describe('dataBlock', () => {
 
   test('rejects an invalid tag', () => {
     expect(() => dataBlock('queue >', [])).toThrow()
+  })
+})
+
+describe('normalizeTitle', () => {
+  test('drops bracketed tags, case and extra spaces', () => {
+    expect(normalizeTitle('  Matador (Official Video) [HD] ')).toBe('matador')
+    expect(normalizeTitle('Radiohead - Karma Police (Official Video)')).toBe(normalizeTitle('radiohead -  KARMA POLICE'))
+  })
+
+  test('a title that is only tags is empty', () => {
+    expect(normalizeTitle('(Official) [HD]')).toBe('')
   })
 })

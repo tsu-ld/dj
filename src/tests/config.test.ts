@@ -7,13 +7,7 @@ const TOKEN = { DISCORD_TOKEN: 'token' }
 describe('loadConfig', () => {
   test('requires the bot token', () => {
     expect(() => loadConfig({})).toThrow(ConfigError)
-
-    try {
-      loadConfig({})
-    }
-    catch (error) {
-      expect((error as ConfigError).issues).toContain('DISCORD_TOKEN is required.')
-    }
+    expect(() => loadConfig({})).toThrow('- DISCORD_TOKEN is required.')
   })
 
   test('degrades every optional capability without failing', () => {

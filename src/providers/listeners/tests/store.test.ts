@@ -2,8 +2,9 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
+import { systemClock } from '../../../core/clock.ts'
 import { isRecord } from '../../../core/json.ts'
-import { logger } from '../../../core/logger.ts'
+import { silentLog as log } from '../../../tests/fixtures.ts'
 import { listenersStore } from '../index.ts'
 
 const directories: string[] = []
@@ -18,8 +19,6 @@ async function tempFile(name = 'listeners.json'): Promise<string> {
 afterEach(async () => {
   await Promise.all(directories.splice(0).map(async directory => rm(directory, { recursive: true, force: true })))
 })
-
-const log = logger({ level: 'error', sink: () => {} })
 
 async function memberRecord(path: string, id: string): Promise<Record<string, unknown>> {
   const value: unknown = JSON.parse(await readFile(path, 'utf8'))
@@ -39,7 +38,7 @@ const beto = { id: 'u2', name: 'Beto' }
 describe('listenersStore', () => {
   test('request counts survive flush and reload from disk', async () => {
     const path = await tempFile()
-    const store = await listenersStore({ path, logger: log, now: () => 1_000 })
+    const store = await listenersStore({ path, logger: log, clock: { now: () => 1_000 } })
 
     store.recordRequest('g1', ana, { title: 'Karma Police', artist: 'Radiohead' })
     store.recordRequest('g1', ana, { title: 'No Surprises', artist: 'Radiohead' })
@@ -50,14 +49,11 @@ describe('listenersStore', () => {
       requests: 2,
       topSong: null,
       topArtists: ['Radiohead'],
-      skipsGiven: 0,
-      skippedByOthers: 0,
-      firstSeen: 1_000,
     })
 
     await store.flush()
 
-    const reloaded = await listenersStore({ path, logger: log, now: () => 2_000 })
+    const reloaded = await listenersStore({ path, logger: log, clock: { now: () => 2_000 } })
 
     expect(reloaded.profile('g1', ana.id)?.requests).toBe(2)
     expect(reloaded.profile('g1', beto.id)?.requests).toBe(1)
@@ -65,14 +61,14 @@ describe('listenersStore', () => {
     reloaded.recordRequest('g1', ana, { title: 'Karma Police', artist: 'Radiohead' })
     await reloaded.flush()
 
-    const again = await listenersStore({ path, logger: log })
+    const again = await listenersStore({ path, logger: log, clock: systemClock })
 
     expect(again.profile('g1', ana.id)?.requests).toBe(3)
   })
 
   test('a bracketed tag and the plain title are one song with count 2', async () => {
     const path = await tempFile()
-    const store = await listenersStore({ path, logger: log })
+    const store = await listenersStore({ path, logger: log, clock: systemClock })
 
     store.recordRequest('g1', ana, { title: 'Radiohead - Karma Police (Official Video)', artist: 'Radiohead' })
     store.recordRequest('g1', ana, { title: 'Radiohead - Karma Police', artist: 'Radiohead' })
@@ -81,7 +77,7 @@ describe('listenersStore', () => {
 
     await store.flush()
 
-    const reloaded = await listenersStore({ path, logger: log })
+    const reloaded = await listenersStore({ path, logger: log, clock: systemClock })
 
     expect(reloaded.profile('g1', ana.id)?.topSong).toEqual({ title: 'Radiohead - Karma Police', count: 2 })
   })
@@ -90,7 +86,7 @@ describe('listenersStore', () => {
     const path = await tempFile()
     await writeFile(path, '{not json')
 
-    const store = await listenersStore({ path, logger: log })
+    const store = await listenersStore({ path, logger: log, clock: systemClock })
 
     expect(store.profile('g1', ana.id)).toBeNull()
 
@@ -107,7 +103,7 @@ describe('listenersStore', () => {
 
   test('a member keeps at most 50 songs and the most requested survive', async () => {
     const path = await tempFile()
-    const store = await listenersStore({ path, logger: log })
+    const store = await listenersStore({ path, logger: log, clock: systemClock })
 
     for (let index = 0; index < 3; index++)
       store.recordRequest('g1', ana, { title: 'Favourite', artist: null })
@@ -122,14 +118,14 @@ describe('listenersStore', () => {
     expect(songs).toHaveLength(50)
     expect(songs).toContain('favourite')
 
-    const reloaded = await listenersStore({ path, logger: log })
+    const reloaded = await listenersStore({ path, logger: log, clock: systemClock })
 
     expect(reloaded.profile('g1', ana.id)?.topSong).toEqual({ title: 'Favourite', count: 3 })
   })
 
   test('a new song at the 50-song cap can become the top song', async () => {
     const path = await tempFile()
-    const store = await listenersStore({ path, logger: log })
+    const store = await listenersStore({ path, logger: log, clock: systemClock })
 
     for (let index = 0; index < 50; index++)
       store.recordRequest('g1', ana, { title: `Old Song ${index}`, artist: null })
@@ -155,7 +151,7 @@ describe('listenersStore', () => {
 
   test('a new artist at the 20-artist cap can become the top artist', async () => {
     const path = await tempFile()
-    const store = await listenersStore({ path, logger: log })
+    const store = await listenersStore({ path, logger: log, clock: systemClock })
 
     for (let index = 0; index < 20; index++)
       store.recordRequest('g1', ana, { title: `Track ${index}`, artist: `Artist ${index}` })
@@ -174,26 +170,19 @@ describe('listenersStore', () => {
     expect(names).toContain('New Artist')
   })
 
-  test('skippedByOthers lands on the requester, never on a self-skip', async () => {
+  test('a file with the old skip tallies loads and drops every field nothing reads', async () => {
     const path = await tempFile()
-    const store = await listenersStore({ path, logger: log })
+    const old = { name: 'Ana', requests: 3, songs: {}, artists: { Radiohead: { count: 2, lastRequested: 5 } }, skipsGiven: 4, skippedByOthers: 1, firstSeen: 7, lastSeen: 9 }
 
-    store.recordRequest('g1', ana, { title: 'Karma Police', artist: 'Radiohead' })
-    store.recordSkip('g1', ana, { requesterId: ana.id })
+    await writeFile(path, JSON.stringify({ g1: { [ana.id]: old } }))
 
-    expect(store.profile('g1', ana.id)).toMatchObject({ skipsGiven: 1, skippedByOthers: 0 })
+    const store = await listenersStore({ path, logger: log, clock: { now: () => 1_000 } })
 
-    store.recordSkip('g1', beto, { requesterId: ana.id })
-    store.recordSkip('g1', beto, { requesterId: null })
+    expect(store.profile('g1', ana.id)).toEqual({ name: 'Ana', requests: 3, topSong: null, topArtists: ['Radiohead'] })
 
-    expect(store.profile('g1', ana.id)?.skippedByOthers).toBe(1)
-    expect(store.profile('g1', beto.id)).toMatchObject({ skipsGiven: 2, skippedByOthers: 0 })
-
+    store.recordRequest('g1', ana, { title: 'Karma Police', artist: null })
     await store.flush()
 
-    const reloaded = await listenersStore({ path, logger: log })
-
-    expect(reloaded.profile('g1', ana.id)?.skippedByOthers).toBe(1)
-    expect(reloaded.profile('g1', beto.id)?.skipsGiven).toBe(2)
+    expect(Object.keys(await memberRecord(path, ana.id)).toSorted()).toEqual(['artists', 'lastSeen', 'name', 'requests', 'songs'])
   })
 })

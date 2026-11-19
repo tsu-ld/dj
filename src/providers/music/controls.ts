@@ -5,8 +5,9 @@ import type { MusicCatalog } from './catalog.ts'
 import type { MusicEmitter } from './types.ts'
 import { AudioPlayerStatus } from '@discordjs/voice'
 import { UserError } from '../../core/errors.ts'
+import { isPositionInQueue } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
-import { clearStation, isPositionInQueue, removeSongAt, skipSong } from './queue.ts'
+import { clearStation, removeSongAt, skipSong } from './queue.ts'
 
 type Controls = Pick<MusicPort, 'pause' | 'resume' | 'toggle' | 'skip' | 'stop' | 'shuffle' | 'remove' | 'radio' | 'view' | 'status'>
 
@@ -52,7 +53,7 @@ export function musicControls(deps: {
     }
   }
 
-  // Reported before the skip, while the song and its elapsed time still exist.
+  // Reported before the skip, while the song still exists.
   function emitSkipped(queue: Queue, by: Listener): void {
     const current = queue.songs[0]
 
@@ -63,7 +64,6 @@ export function musicControls(deps: {
       guildId: queue.id,
       track: catalog.trackOf(current),
       by,
-      playedMs: status(queue.id)?.playbackDurationMs ?? 0,
     })
   }
 
@@ -134,7 +134,7 @@ export function musicControls(deps: {
       return mutations.run(guildId, async () => {
         const queue = requireQueue(guildId)
 
-        if (!Number.isInteger(position) || !isPositionInQueue(queue, position))
+        if (!Number.isInteger(position) || !isPositionInQueue(queue.songs.length, position))
           throw new UserError(MESSAGES.removeOutOfRange)
 
         const song = queue.songs[position - 1]
@@ -155,14 +155,11 @@ export function musicControls(deps: {
         return removed
       })
     },
-    async radio(guildId, on) {
+    async radio(guildId) {
       return mutations.run(guildId, async () => {
         const queue = requireQueue(guildId)
 
-        if (on === undefined)
-          queue.toggleAutoplay()
-        else
-          queue.autoplay = on
+        queue.toggleAutoplay()
 
         emitState(queue)
 

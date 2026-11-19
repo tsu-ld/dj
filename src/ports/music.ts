@@ -32,9 +32,6 @@ export interface PlayRequest {
   readonly member: GuildMember
   readonly voiceChannel: VoiceBasedChannel
   readonly textChannel: GuildTextBasedChannel
-  // A batch requested by the dj must not announce each song: the dj already
-  // answered. A direct request does announce.
-  readonly announce: boolean
 }
 
 export interface PlayResult {
@@ -49,11 +46,11 @@ export interface BeforeStreamInput {
 }
 
 export interface MusicEventMap {
-  trackQueued: { guildId: string, track: Track, view: QueueView, textChannel: GuildTextBasedChannel | null, announce: boolean }
-  playlistQueued: { guildId: string, name: string, count: number, view: QueueView, textChannel: GuildTextBasedChannel | null, announce: boolean }
+  trackQueued: { guildId: string, track: Track, view: QueueView, textChannel: GuildTextBasedChannel | null }
+  playlistQueued: { guildId: string, name: string, count: number, view: QueueView, textChannel: GuildTextBasedChannel | null }
   trackStarted: { guildId: string, track: Track, view: QueueView, textChannel: GuildTextBasedChannel | null }
   stateChanged: { guildId: string, view: QueueView, textChannel: GuildTextBasedChannel | null }
-  trackSkipped: { guildId: string, track: Track, by: Listener, playedMs: number }
+  trackSkipped: { guildId: string, track: Track, by: Listener }
   queueEnded: { guildId: string }
   queueCleared: { guildId: string, resetStation: boolean }
   playbackError: { guildId: string, songId: string | null, textChannel: GuildTextBasedChannel | null, cleanupAfterError: boolean }
@@ -67,7 +64,6 @@ export interface PlaybackStatus {
 
 export interface AudioOverMusic {
   playClip: (guildId: string, filePath: string) => Promise<boolean>
-  playWelcome: (channel: VoiceBasedChannel) => Promise<void>
 }
 
 export interface MusicPort {
@@ -79,7 +75,7 @@ export interface MusicPort {
   stop: (guildId: string, options?: { resetStation?: boolean }) => Promise<void>
   shuffle: (guildId: string) => Promise<void>
   remove: (guildId: string, position: number, by: Listener) => Promise<string>
-  radio: (guildId: string, on?: boolean) => Promise<boolean>
+  radio: (guildId: string) => Promise<boolean>
   view: (guildId: string) => QueueView | null
   status: (guildId: string) => PlaybackStatus | null
   readonly audio: AudioOverMusic

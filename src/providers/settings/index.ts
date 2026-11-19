@@ -1,10 +1,8 @@
 import type { Logger } from '../../core/logger.ts'
 import type { GuildSettings, SettingsPort } from '../../ports/settings.ts'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
-import { errorMessage } from '../../core/errors.ts'
-import { isRecord, parseJson } from '../../core/json.ts'
+import { isRecord } from '../../core/json.ts'
 import { DEFAULT_SETTINGS } from '../../ports/settings.ts'
+import { jsonMapFile } from '../json-file.ts'
 
 type StoredSettings = Record<string, GuildSettings>
 
@@ -28,76 +26,11 @@ function normalizeSettings(value: unknown): GuildSettings | null {
   }
 }
 
-// The file is a flat guild map. One bad entry drops only that guild; a file
-// where no entry is an object is not a settings file and gets quarantined.
-function normalizeMap(value: unknown): StoredSettings | null {
-  if (!isRecord(value))
-    return null
-
-  const entries = Object.entries(value)
-
-  if (entries.length > 0 && !entries.some(([, settings]) => isRecord(settings)))
-    return null
-
-  const guilds: StoredSettings = {}
-
-  for (const [guildId, settings] of entries) {
-    const normalized = normalizeSettings(settings)
-
-    if (normalized)
-      guilds[guildId] = normalized
-  }
-
-  return guilds
-}
-
-async function read(filePath: string, logger: Logger): Promise<StoredSettings> {
-  let text: string
-
-  try {
-    text = await readFile(filePath, 'utf8')
-  }
-  catch (error) {
-    if (isRecord(error) && error.code === 'ENOENT')
-      return {}
-
-    throw error
-  }
-
-  const parsed = normalizeMap(parseJson(text))
-
-  if (parsed)
-    return parsed
-
-  const backup = `${filePath}.corrupt-${Date.now()}`
-
-  try {
-    await rename(filePath, backup)
-    logger.warn('settings.quarantined', { path: filePath, backup })
-  }
-  catch (error) {
-    logger.warn('settings.quarantine_failed', { path: filePath, error: errorMessage(error) })
-  }
-
-  return {}
-}
-
+// The file is a flat guild map; a file where no entry is an object is not a
+// settings file and gets quarantined.
 export async function settingsStore(options: { path: string, logger: Logger }): Promise<SettingsPort> {
-  const logger = options.logger
-  let file = await read(options.path, logger)
-  let writes: Promise<void> = Promise.resolve()
-
-  async function persist(): Promise<void> {
-    writes = writes.catch(() => {}).then(async () => {
-      await mkdir(dirname(options.path), { recursive: true })
-      const temporary = `${options.path}.tmp`
-
-      await writeFile(temporary, `${JSON.stringify(file, null, 2)}\n`)
-      await rename(temporary, options.path)
-    })
-
-    return writes
-  }
+  const store = jsonMapFile({ path: options.path, name: 'settings', logger: options.logger, entry: normalizeSettings })
+  let file: StoredSettings = await store.read()
 
   return {
     get(guildId) {
@@ -112,10 +45,10 @@ export async function settingsStore(options: { path: string, logger: Logger }): 
         ...file,
         [guildId]: { ...current, ...patch },
       }
-      await persist()
+      await store.write(file)
     },
     async flush() {
-      await writes
+      await store.settled()
     },
   }
 }

@@ -1,10 +1,9 @@
 import type { Client } from 'discord.js'
-import type { DisTubePlugin, Queue, Song } from 'distube'
+import type { Queue, Song } from 'distube'
 import type { AppConfig } from '../../config.ts'
 import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { BeforeStreamInput, MusicPort, QueueView } from '../../ports/music.ts'
-import type { PlayCapture } from './types.ts'
 import { SpotifyPlugin } from '@distube/spotify'
 import { DisTube } from 'distube'
 import { keyedQueue } from '../../core/async.ts'
@@ -16,6 +15,7 @@ import { musicControls } from './controls.ts'
 import { createEmitter } from './emitter.ts'
 import { musicEvents } from './events.ts'
 import { extractor } from './extraction.ts'
+import { MetadataCatalog } from './metadata.ts'
 import { musicPlay } from './play.ts'
 import { queueView } from './queue.ts'
 import { streamResolver } from './stream.ts'
@@ -66,7 +66,6 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
   const mutations = keyedQueue()
   const { emitter, clear: clearEvents } = createEmitter()
   const health = audioHealth({ clock: deps.clock, logger })
-  const plays = new Map<string, PlayCapture>()
   let disposed = false
 
   const audio = audioOverMusic({
@@ -84,19 +83,17 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
     logger,
   })
 
-  function metadataPlugin(): DisTubePlugin {
-    // The spotify package ships CJS declarations that extend the CJS copy of the
-    // SDK's plugin class, while this ESM package resolves the ESM copy. At
-    // runtime both are the same plugin type the engine accepts.
-    if (!deps.config.metadata.enabled)
-      return new SpotifyPlugin() as unknown as DisTubePlugin
+  function metadataPlugin(): MetadataCatalog {
+    const source = deps.config.metadata.enabled
+      ? new SpotifyPlugin({
+          api: {
+            clientId: deps.config.metadata.clientId,
+            clientSecret: deps.config.metadata.clientSecret,
+          },
+        })
+      : new SpotifyPlugin()
 
-    return new SpotifyPlugin({
-      api: {
-        clientId: deps.config.metadata.clientId,
-        clientSecret: deps.config.metadata.clientSecret,
-      },
-    }) as unknown as DisTubePlugin
+    return new MetadataCatalog({ source, logger })
   }
 
   function viewOf(queue: Queue): QueueView {
@@ -113,7 +110,6 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
     catalog,
     cache,
     emitter,
-    plays,
     beforeStream: deps.beforeStream,
     forgetStream: songId => stream.forget(songId),
     leave,
@@ -124,7 +120,7 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
 
   beforeStreamFor = events.beforeStreamFor
 
-  const play = musicPlay({ player, catalog, audio, mutations, plays, logger })
+  const play = musicPlay({ player, catalog, audio, mutations, logger })
   const controls = musicControls({ player, catalog, mutations, emitter, viewOf })
 
   return {
@@ -141,7 +137,6 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
       for (const off of events.detach) off()
 
       health.dispose()
-      plays.clear()
       await audio.dispose()
 
       for (const queue of [...player.queues.collection.values()]) {

@@ -61,7 +61,7 @@ function pausesTheModel(error: unknown): error is ProviderError {
 }
 
 // A member the store has never seen is on their first request, not unknown.
-export function requesterOf(listeners: ListenersPort, guildId: string, track: Track, now: number): ListenerProfile | null {
+export function requesterOf(listeners: ListenersPort, guildId: string, track: Track): ListenerProfile | null {
   if (track.fromRadio || track.requesterId === null)
     return null
 
@@ -70,9 +70,6 @@ export function requesterOf(listeners: ListenersPort, guildId: string, track: Tr
     requests: 0,
     topSong: null,
     topArtists: [],
-    skipsGiven: 0,
-    skippedByOthers: 0,
-    firstSeen: now,
   }
 }
 
@@ -110,12 +107,11 @@ export function lineWriter(deps: {
     // A welcome opens a new session: the songs of the last one are not
     // back-announced.
     const last = first ? null : run.last
-    const angle = pickAngle({ long, first, last, track, facts, listener, lastAngle: context.lastAngle, now })
+    const angle = pickAngle({ long, first, track, facts, listener, lastAngle: context.lastAngle, now })
     const instructions = buildOnAirPrompt({
       settings: settings.get(guildId),
       track,
       long,
-      first,
       last,
       earlier: first ? [] : run.earlier,
       upcoming: view.upcoming,

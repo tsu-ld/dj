@@ -136,25 +136,16 @@ function network(routes: Routes = {}): FakeNet {
   })
 }
 
-function testLogger(): { logger: Logger, events: string[] } {
-  const events: string[] = []
-  const base: Logger = {
-    debug: (event) => {
-      events.push(event)
-    },
-    info: () => {},
-    warn: () => {},
-    error: () => {},
-    child: () => base,
-  }
-
-  return { logger: base, events }
+const silent: Logger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  child: () => silent,
 }
 
 function portFor(net: FakeNet, options: { deadlineMs?: number } = {}): ReturnType<typeof songFacts> {
-  const { logger } = testLogger()
-
-  return songFacts({ logger, fetch: net.fetch, now: () => NOW, deadlineMs: options.deadlineMs })
+  return songFacts({ logger: silent, fetch: net.fetch, now: () => NOW, deadlineMs: options.deadlineMs })
 }
 
 const FRESH_NEWS = { title: 'Daft Punk announce a new album', source: 'BBC', publishedAt: Date.parse('Tue, 17 Nov 2026 08:00:00 GMT') }
@@ -425,9 +416,8 @@ describe('review regressions', () => {
 
   test('a partial answer is cached for an hour, not a day', async () => {
     let clock = NOW
-    const { logger } = testLogger()
     const net = network({ news: () => new Response('', { status: 429 }) })
-    const port = songFacts({ logger, fetch: net.fetch, now: () => clock })
+    const port = songFacts({ logger: silent, fetch: net.fetch, now: () => clock })
     const facts = await port.lookup({ title: TITLE, artist: null })
 
     expect(facts?.album).toBe('Discovery')
@@ -438,9 +428,8 @@ describe('review regressions', () => {
 
   test('a complete answer survives the same two hours', async () => {
     let clock = NOW
-    const { logger } = testLogger()
     const net = network()
-    const port = songFacts({ logger, fetch: net.fetch, now: () => clock })
+    const port = songFacts({ logger: silent, fetch: net.fetch, now: () => clock })
 
     await port.lookup({ title: TITLE, artist: null })
 
@@ -467,5 +456,56 @@ describe('review regressions', () => {
 
     expect(items).toHaveLength(1)
     expect(items[0]?.title).toBe('Daft Punk  return')
+  })
+})
+
+// Live Google News answers a one-word act with the word's other life: a
+// monarch, a city, a gas, a gesture. A doubtful headline is dropped, not read
+// out as a fact.
+function headline(title: string, source = 'Site'): string {
+  return `<rss><channel><item><title>${title} - ${source}</title><pubDate>Tue, 17 Nov 2026 08:00:00 GMT</pubDate><source>${source}</source></item></channel></rss>`
+}
+
+describe('common-word artists', () => {
+  test('a headline that uses the name as an ordinary word is dropped', () => {
+    expect(parseNews(headline('Queen Camilla visits hospital'), 'Queen', NOW)).toEqual([])
+    expect(parseNews(headline('Chicago weather: snow until Friday'), 'Chicago', NOW)).toEqual([])
+    expect(parseNews(headline('Air India flight delayed'), 'Air', NOW)).toEqual([])
+    expect(parseNews(headline('Kiss between strangers caught on camera'), 'Kiss', NOW)).toEqual([])
+  })
+
+  // The live Chicago and Air feeds: the word belongs to a team or an air show.
+  test('a one-word name inside another proper noun is dropped, music word or not', () => {
+    expect(parseNews(headline('Cada visita de Chicago Fire ya es parte del tour Lewandowski', 'MLS Español'), 'Chicago', NOW)).toEqual([])
+    expect(parseNews(headline('El Fort Lauderdale Air Show 2026 recibe 350.000 visitantes', 'Univision'), 'Air', NOW)).toEqual([])
+  })
+
+  test('an accented one-word name is matched against the accented headline', () => {
+    expect(parseNews(headline('Björk Reykjavik Airport opens a music hall'), 'Björk', NOW)).toEqual([])
+    expect(parseNews(headline('Björk anuncia un nuevo disco'), 'Björk', NOW)).toHaveLength(1)
+  })
+
+  // The live Chicago feed also answers with the outlet's own name in the title.
+  test('a headline that names the artist only in the outlet is dropped', () => {
+    expect(parseNews(headline('Garbage sella 30 años de historia con México', 'Chicago Tribune'), 'Chicago', NOW)).toEqual([])
+  })
+
+  test('a music headline for the same act is kept', () => {
+    expect(parseNews(headline('Queen\'s Brian May announces new album'), 'Queen', NOW).map(item => item.title))
+      .toEqual(['Queen\'s Brian May announces new album'])
+    expect(parseNews(headline('Kiss farewell concert film'), 'Kiss', NOW).map(item => item.title))
+      .toEqual(['Kiss farewell concert film'])
+    expect(parseNews(headline('Kiss estrenará un documental sobre su último concierto'), 'Kiss', NOW).map(item => item.title))
+      .toEqual(['Kiss estrenará un documental sobre su último concierto'])
+  })
+
+  test('a word with an everyday sense does not make a headline about music', () => {
+    expect(parseNews(headline('The Queen begins royal tour of Italy'), 'Queen', NOW)).toEqual([])
+    expect(parseNews(headline('Chicago single mother wins lottery'), 'Chicago', NOW)).toEqual([])
+    expect(parseNews(headline('Air quality back on track'), 'Air', NOW)).toEqual([])
+  })
+
+  test('a distinctive multi-word billing still needs no music word', () => {
+    expect(parseNews(headline('Daft Punk spotted in Paris'), 'Daft Punk', NOW)).toHaveLength(1)
   })
 })

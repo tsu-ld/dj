@@ -1,25 +1,24 @@
 import type { DisTube, Song } from 'distube'
 import type { KeyedQueue } from '../../core/async.ts'
 import type { Logger } from '../../core/logger.ts'
-import type { AudioOverMusic, PlayRequest, PlayResult } from '../../ports/music.ts'
+import type { PlayRequest, PlayResult } from '../../ports/music.ts'
+import type { MusicAudio } from './audio-types.ts'
 import type { MusicCatalog } from './catalog.ts'
-import type { PlayCapture } from './types.ts'
 import { UserError } from '../../core/errors.ts'
-import { MAX_QUEUE_SIZE } from '../../limits.ts'
+import { MAX_QUEUE_SIZE, queueRoom } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
 import { assertSupportedMusicUrl, PolicyError } from './policy.ts'
-import { capQueue, errorCodeOf, queueRoom } from './queue.ts'
+import { capQueue, errorCodeOf } from './queue.ts'
 import { voiceChannelProblem } from './voice.ts'
 
 export function musicPlay(deps: {
   player: DisTube
   catalog: MusicCatalog
-  audio: AudioOverMusic
+  audio: Pick<MusicAudio, 'playWelcome'>
   mutations: KeyedQueue
-  plays: Map<string, PlayCapture>
   logger: Logger
 }): (request: PlayRequest) => Promise<PlayResult> {
-  const { player, catalog, audio, mutations, plays, logger } = deps
+  const { player, catalog, audio, mutations, logger } = deps
 
   function mapPlayFailure(error: unknown, request: PlayRequest, text: boolean): UserError {
     if (error instanceof UserError)
@@ -46,18 +45,6 @@ export function musicPlay(deps: {
     return new UserError(MESSAGES.playbackError)
   }
 
-  function assertSupportedText(text: string): void {
-    try {
-      assertSupportedMusicUrl(text)
-    }
-    catch (error) {
-      if (error instanceof PolicyError)
-        throw new UserError(MESSAGES.unsupportedUrl)
-
-      throw error
-    }
-  }
-
   return async function play(request: PlayRequest): Promise<PlayResult> {
     const guildId = request.voiceChannel.guild.id
 
@@ -75,18 +62,23 @@ export function musicPlay(deps: {
       if (text === null && tracks.length === 0)
         throw new UserError(MESSAGES.noResult)
 
-      if (text !== null)
-        assertSupportedText(text)
+      if (text !== null) {
+        // Refused before the bot joins; the catalog's own check reaches the
+        // same mapping through the SDK.
+        try {
+          assertSupportedMusicUrl(text)
+        }
+        catch (error) {
+          throw mapPlayFailure(error, request, true)
+        }
+      }
 
-      if (queueRoom(player.getQueue(guildId)) === 0)
+      if (queueRoom(player.getQueue(guildId)?.songs.length ?? 0) === 0)
         throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
 
       await audio.playWelcome(request.voiceChannel)
 
-      const capture: PlayCapture = { announce: request.announce }
       const before = player.getQueue(guildId)?.songs.length ?? 0
-
-      plays.set(guildId, capture)
 
       try {
         if (text !== null) {
@@ -96,10 +88,7 @@ export function musicPlay(deps: {
           })
         }
         else {
-          const wanted = tracks.slice(0, queueRoom(player.getQueue(guildId)))
-
-          if (wanted.length === 0)
-            throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
+          const wanted = tracks.slice(0, queueRoom(player.getQueue(guildId)?.songs.length ?? 0))
 
           // All searches run in parallel, then the resolved playlist is added
           // with a single play() so the queue keeps the requested order and only
@@ -124,9 +113,6 @@ export function musicPlay(deps: {
       }
       catch (error) {
         throw mapPlayFailure(error, request, text !== null)
-      }
-      finally {
-        plays.delete(guildId)
       }
 
       const queue = player.getQueue(guildId)

@@ -54,7 +54,7 @@ export function djReplies(deps: { model: ConversationPort | null, logger: Logger
     async say(message: Message, settings: GuildSettings, text: string) {
       const channel = message.channel
 
-      if (!('sendTyping' in channel) || typeof channel.sendTyping !== 'function') {
+      if (!('sendTyping' in channel)) {
         await message.reply(text)
 
         return

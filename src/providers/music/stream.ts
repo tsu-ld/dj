@@ -40,7 +40,7 @@ export function directStreamUrl(formats: unknown): string | undefined {
   return undefined
 }
 
-export function isUrlFresh(entry: StreamEntry | undefined, now = Date.now()): entry is StreamEntry {
+export function isUrlFresh(entry: StreamEntry | undefined, now: number): entry is StreamEntry {
   if (entry === undefined || entry.url === '')
     return false
 

@@ -10,7 +10,7 @@ import { errorMessage } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
 import { clearConfirmation, noticeMessage, queueMessage } from './views.ts'
 
-const NOW_PLAYING_ACTIONS = new Set(['toggle', 'skip', 'radio', 'shuffle', 'clear', 'queue'])
+const NOW_PLAYING_ACTIONS = new Set(['toggle', 'skip', 'radio', 'shuffle', 'queue'])
 
 export interface InteractionHandlerDeps {
   readonly bus: CommandBus
@@ -127,18 +127,15 @@ async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction
 
   const outcome = await deps.bus.run('clear', {}, interactionContext(deps, interaction, guildId, member, channel, view))
 
-  if (outcome.kind === 'failed') {
-    // The bus already surfaced the generic error; only close the prompt.
+  if (outcome.kind !== 'ok') {
+    // The bus already surfaced the error or the refusal; only close the prompt.
     await interaction.editReply({ components: [] })
 
     return
   }
 
   try {
-    await interaction.editReply({
-      content: outcome.kind === 'ok' ? MESSAGES.cleared : outcome.message,
-      components: [],
-    })
+    await interaction.editReply({ content: MESSAGES.cleared, components: [] })
   }
   catch (error) {
     // The clear already happened; an expired prompt is not a failed command.
@@ -188,8 +185,10 @@ function interactionContext(
   view: QueueView,
 ): CommandContext {
   const ui: CommandUi = {
+    // In voice the card is the feedback; refusals and errors still follow up.
     reply: async (text) => {
-      await interaction.followUp({ content: text, flags: MessageFlags.Ephemeral })
+      if (deps.music.status(guildId) === null)
+        await interaction.followUp({ content: text, flags: MessageFlags.Ephemeral })
     },
     error: async (message) => {
       await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral })

@@ -153,39 +153,53 @@ test('the next song is prefetched once per server, and only when the extractor c
   try {
     const downloads: string[] = []
     let release = (): void => {}
+    let started = (): void => {}
+    const nextStart = async (): Promise<void> => new Promise((resolve) => {
+      started = resolve
+    })
 
     const pending = new Promise<void>((resolve) => {
       release = resolve
     })
-    const download = async (_url: string, id: string): Promise<void> => {
-      downloads.push(id)
-
-      return pending
-    }
+    const extraction = extractionStub({
+      async download(_url, template) {
+        downloads.push(template.slice(dir.length + 1).split('.')[0] ?? '')
+        started()
+        await pending
+        await writeFile(template.replace('%(ext)s', 'm4a'), 'audio')
+      },
+    })
 
     const tool = audioCache({
       dir,
       maxBytes: 1024 * 1024,
       maxAgeMs: 86_400_000,
-      extraction: extractionStub(),
+      extraction,
       logger: log,
     })
 
-    tool.prefetch({ url: 'https://www.youtube.com/watch?v=a', id: 'a' }, 'g1', download)
-    tool.prefetch({ url: 'https://www.youtube.com/watch?v=b', id: 'b' }, 'g1', download)
-    tool.prefetch({ url: 'https://open.spotify.com/track/x', id: 'x' }, 'g2', download)
-    tool.prefetch({ url: 'https://www.youtube.com/watch?v=c', id: 'c', isLive: true }, 'g2', download)
+    const first = nextStart()
+
+    tool.prefetch({ url: 'https://www.youtube.com/watch?v=a', id: 'a' }, 'g1')
+    tool.prefetch({ url: 'https://www.youtube.com/watch?v=b', id: 'b' }, 'g1')
+    tool.prefetch({ url: 'https://open.spotify.com/track/x', id: 'x' }, 'g2')
+    tool.prefetch({ url: 'https://www.youtube.com/watch?v=c', id: 'c', isLive: true }, 'g2')
+    await first
 
     expect(downloads).toEqual(['a'])
 
     release()
-    await pending
+    await tool.download('https://www.youtube.com/watch?v=a', 'a')
     await new Promise(resolve => setImmediate(resolve))
 
-    tool.prefetch({ url: 'https://www.youtube.com/watch?v=d', id: 'd' }, 'g1', download)
+    const second = nextStart()
+
+    tool.prefetch({ url: 'https://www.youtube.com/watch?v=d', id: 'd' }, 'g1')
+    await second
 
     expect(downloads).toEqual(['a', 'd'])
 
+    await tool.download('https://www.youtube.com/watch?v=d', 'd')
     await new Promise(resolve => setImmediate(resolve))
 
     tool.dispose()

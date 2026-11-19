@@ -3,7 +3,7 @@ import { MESSAGES } from '../../messages.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
 import { pause, radio, resume, shuffle, skip, toggle } from '../playback.ts'
-import { fakeContext, fakeMusic, fakeUi, log, track, view } from './fakes.ts'
+import { fakeContext, fakeMusic, fakeUi, log, queueContext, track, view } from './fakes.ts'
 
 describe('playback commands', () => {
   test('pause pauses a playing queue only once', async () => {
@@ -16,8 +16,8 @@ describe('playback commands', () => {
       },
     })
 
-    expect(await pause.run({}, fakeContext({ services: { music }, queue: view({ paused: false }) }))).toEqual({ paused: true })
-    expect(await pause.run({}, fakeContext({ services: { music }, queue: view({ paused: true }) }))).toEqual({ paused: true })
+    expect(await pause.run({}, queueContext({ services: { music }, queue: view({ paused: false }) }))).toEqual({ paused: true })
+    expect(await pause.run({}, queueContext({ services: { music }, queue: view({ paused: true }) }))).toEqual({ paused: true })
     expect(paused).toBe(true)
     expect(calls).toBe(1)
   })
@@ -32,8 +32,8 @@ describe('playback commands', () => {
       },
     })
 
-    expect(await resume.run({}, fakeContext({ services: { music }, queue: view({ paused: true }) }))).toEqual({ paused: false })
-    expect(await resume.run({}, fakeContext({ services: { music }, queue: view({ paused: false }) }))).toEqual({ paused: false })
+    expect(await resume.run({}, queueContext({ services: { music }, queue: view({ paused: true }) }))).toEqual({ paused: false })
+    expect(await resume.run({}, queueContext({ services: { music }, queue: view({ paused: false }) }))).toEqual({ paused: false })
     expect(paused).toBe(false)
     expect(calls).toBe(1)
   })
@@ -41,13 +41,13 @@ describe('playback commands', () => {
   test('toggle reports the state the music engine left behind', async () => {
     const music = fakeMusic({ toggle: async () => false })
 
-    expect(await toggle.run({}, fakeContext({ services: { music }, queue: view() }))).toEqual({ paused: false })
+    expect(await toggle.run({}, queueContext({ services: { music }, queue: view() }))).toEqual({ paused: false })
   })
 
   test('skip names the song that was playing', async () => {
     const music = fakeMusic()
 
-    const data = await skip.run({}, fakeContext({ services: { music }, queue: view({ current: track({ title: 'Antes' }) }) }))
+    const data = await skip.run({}, queueContext({ services: { music }, queue: view({ current: track({ title: 'Antes' }) }) }))
 
     expect(data).toEqual({ skipped: 'Antes' })
     expect(music.calls).toContain('skip')
@@ -56,14 +56,14 @@ describe('playback commands', () => {
   test('shuffle reports the queue size', async () => {
     const music = fakeMusic()
 
-    expect(await shuffle.run({}, fakeContext({ services: { music }, queue: view({ size: 3 }) }))).toEqual({ shuffled: 3 })
+    expect(await shuffle.run({}, queueContext({ services: { music }, queue: view({ size: 3 }) }))).toEqual({ shuffled: 3 })
     expect(music.calls).toContain('shuffle')
   })
 
   test('radio reports the state the music engine returned', async () => {
     const music = fakeMusic({ radio: async () => true })
 
-    expect(await radio.run({}, fakeContext({ services: { music }, queue: view() }))).toEqual({ radio: true })
+    expect(await radio.run({}, queueContext({ services: { music }, queue: view() }))).toEqual({ radio: true })
   })
 
   test('radio announces the state it left behind', async () => {

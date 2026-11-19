@@ -2,19 +2,17 @@ import type { ListenerProfile } from '../ports/listeners.ts'
 import type { Track } from '../ports/music.ts'
 import type { GuildSettings } from '../ports/settings.ts'
 import type { SongFacts } from '../ports/song-facts.ts'
-import type { Angle, PlayedEntry } from './angle.ts'
+import type { Angle } from './angle.ts'
+import type { PlayedEntry } from './station.ts'
 import { dataBlock } from '../core/text.ts'
 import { personaFor } from '../dj/prompts.ts'
 import { RADIO_LONG_CHARS, RADIO_SHORT_CHARS } from '../limits.ts'
-import { anniversaryOf, freshNews } from './angle.ts'
-
-export type { Angle, PlayedEntry } from './angle.ts'
+import { anniversaryOf, DAY_MS, freshNews } from './angle.ts'
 
 export interface OnAirInput {
   readonly settings: GuildSettings
   readonly track: Track
   readonly long: boolean
-  readonly first: boolean
   readonly last: PlayedEntry | null
   readonly earlier: readonly PlayedEntry[]
   readonly upcoming: readonly Track[]
@@ -25,18 +23,17 @@ export interface OnAirInput {
   readonly now: number
 }
 
-const MAX_EARLIER = 3
 const MAX_NEXT = 3
 const MAX_NEWS = 3
-const DAY_MS = 86_400_000
 
 const RADIO_RULES = [
   'You are live on the radio. Your line is spoken out loud in the voice channel, in the gap before the song starts.',
+  'You are the radio: a song nobody asked for is your own pick. Introduce it like any other song; the listener already knows who runs the station, so it needs no credit.',
   'Write only the words to say: no emojis, no stage directions outside square brackets, no quotes, no markdown, no links.',
   'Talk to one listener, as "you". Keep the language your persona speaks, with its accent and slang.',
   'One direction per line: follow the angle below and leave the rest of the blocks out. Start with your best material. Short sentences, one thing per sentence.',
   'When there is a last song, back-announce it by name, then hand off to the song playing now or tease what comes next.',
-  'When the angle is skip, name who skipped the last song: playful, never mean.',
+  'A skipped last song is context for you, not news for the listener: do not back-announce it or dwell on who skipped it, hand off to the song playing now.',
   'State facts about a song or an artist only from the verified-facts block, translated into your language. Without that block, state no facts and use the run.',
   'Never invent a request, a count, a date, a chart position, a credit, a quote or a story. Only the numbers in the blocks are true: never count songs yourself.',
   'The on-air block is exact about what played, what is playing and what comes next: never add, drop or reorder songs.',
@@ -48,13 +45,12 @@ const RADIO_RULES = [
 
 const ANGLE_INSTRUCTIONS: Record<Angle, string> = {
   welcome: 'Say a short hello to the listener and introduce the first song. No facts and no numbers.',
-  skip: 'Say that the person named in Last song skipped it, playful and never mean, then hand off to the song playing now.',
   listener: 'Use exactly one item from the About block: their most requested song, their go-to artist, their request number, or that this is their first request. Then hand off to the song.',
   anniversary: 'The song or its album has an anniversary: say the exact age from the Anniversary line, then hand off to the song.',
   story: 'Tell one fact from the Song story line in your own words, then hand off to the song.',
   news: 'Share one recent headline about the artist from the News lines, say it is news and how recent it is, then hand off to the song.',
   fact: 'Give one fact from the verified-facts block: the album, the year or the genre. Then hand off to the song.',
-  run: 'Say who asked for this song, or that the radio picked it, and hand off from the last song to this one.',
+  run: 'Say who asked for this song when someone did, otherwise just introduce it, and hand off from the last song to this one.',
 }
 
 const EMOJI = /[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier}\uFE0F\u200D]/gu
@@ -83,8 +79,7 @@ export function lineRequest(input: { long: boolean, angle: Angle }): string {
 }
 
 export function buildOnAirPrompt(input: OnAirInput): string {
-  // A welcome is short whatever the cadence says: facts come later.
-  const long = input.long && input.angle !== 'welcome'
+  const { long } = input
   const target = lineTarget(long)
   const length = long
     ? `Say two sentences, at most ${target} characters.`
@@ -114,10 +109,10 @@ function hasName(name: string | null): name is string {
 }
 
 // Autoplay songs inherit the member who started the queue, so the radio flag
-// wins: a radio pick was never requested by that person.
+// wins: the host picked that song, that person never asked for it.
 function origin(song: { readonly requestedBy: string | null, readonly fromRadio: boolean }): string | null {
   if (song.fromRadio)
-    return 'radio pick'
+    return 'your own pick'
 
   return hasName(song.requestedBy) ? `requested by ${song.requestedBy}` : null
 }
@@ -141,21 +136,18 @@ function runLines(input: OnAirInput): string[] {
   const lines = [`Playing now: ${songName(track.title || track.url, track.artist)}`]
 
   if (track.fromRadio)
-    lines.push('Who asked: nobody, picked by the radio')
+    lines.push('Who asked: nobody, it is your own pick')
   else if (hasName(track.requestedBy))
     lines.push(`Who asked: requested by ${track.requestedBy}`)
 
   if (input.last !== null) {
-    const { skippedBy, playedSeconds } = input.last
-    const outcome = hasName(skippedBy)
-      ? `skipped by ${skippedBy}${playedSeconds === null ? '' : ` after ${Math.round(playedSeconds)} s`}`
-      : 'played through'
+    const { skippedBy } = input.last
 
-    lines.push(`Last song: ${entry(input.last)}, ${outcome}`)
+    lines.push(`Last song: ${entry(input.last)}, ${hasName(skippedBy) ? `skipped by ${skippedBy}` : 'played through'}`)
   }
 
   if (input.earlier.length > 0)
-    lines.push(`Earlier, newest first: ${input.earlier.slice(0, MAX_EARLIER).map(entry).join(' | ')}`)
+    lines.push(`Earlier, newest first: ${input.earlier.map(entry).join(' | ')}`)
 
   const next = input.upcoming
     .slice(0, MAX_NEXT)
@@ -167,7 +159,7 @@ function runLines(input: OnAirInput): string[] {
     lines.push('Next up: nothing, the queue ends with this song')
 
   if (input.radio && input.upcoming.length < MAX_NEXT)
-    lines.push('When the queue runs out the radio keeps going')
+    lines.push('When the queue runs out you keep picking the songs yourself')
 
   return lines
 }
@@ -190,8 +182,6 @@ function aboutLines(input: OnAirInput): string[] {
 
   if (listener.topArtists.length > 0)
     lines.push(`Top artists: ${listener.topArtists.join(', ')}`)
-
-  lines.push(`Songs they skipped: ${listener.skipsGiven}`, `Their songs skipped by others: ${listener.skippedByOthers}`)
 
   return lines
 }

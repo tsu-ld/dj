@@ -72,9 +72,7 @@ export function songFacts(deps: {
 
   async function attempt<T>(state: Collection, source: string, work: () => Promise<T>, fallback: T): Promise<T> {
     try {
-      const result = await work()
-
-      return result
+      return await work()
     }
     catch (error) {
       // Everything here is best effort, but the answer is now incomplete and
@@ -148,7 +146,6 @@ export function songFacts(deps: {
   async function withinDeadline(parsed: ParsedTitle): Promise<Result> {
     const state = collect(parsed)
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), deadlineMs)
     let timedOut = false
 
     try {
@@ -164,7 +161,6 @@ export function songFacts(deps: {
       state.partial = true
     }
     finally {
-      clearTimeout(timer)
       // A real request must not outlive the lookup that abandoned it.
       controller.abort()
     }
@@ -186,7 +182,6 @@ export function songFacts(deps: {
 
     const work = withinDeadline(parsed)
       .catch((error: unknown) => {
-        misses.set(key, null)
         logger.debug('song_facts.lookup_failed', {
           title: parsed.title,
           artist: parsed.artist,
@@ -215,56 +210,42 @@ export function songFacts(deps: {
     return work
   }
 
+  // Parsing and the cache are pure string and map work; start() turns every
+  // failure of the lookup itself into a miss, so this never rejects.
   async function lookup(input: { title: string, artist: string | null }): Promise<SongFacts | null> {
-    try {
-      const parsed = parseTitle(input.title, input.artist)
+    const parsed = parseTitle(input.title, input.artist)
 
-      // Without an artist there is nothing to check against, and an unchecked
-      // fact is exactly what this provider exists to avoid.
-      if (parsed.artist === null) {
-        logger.debug('song_facts.lookup_skipped', { title: parsed.title })
-
-        return null
-      }
-
-      const key = cacheKey(parsed)
-      const cached = complete.get(key) ?? partial.get(key)
-
-      if (cached !== undefined)
-        return cached
-
-      if (misses.get(key) !== undefined)
-        return null
-
-      const result = await start(parsed, key)
-
-      return result.facts
-    }
-    catch (error) {
-      logger.debug('song_facts.lookup_failed', {
-        title: input.title,
-        artist: input.artist,
-        error: errorMessage(error),
-      })
+    // Without an artist there is nothing to check against, and an unchecked
+    // fact is exactly what this provider exists to avoid.
+    if (parsed.artist === null) {
+      logger.debug('song_facts.lookup_skipped', { title: parsed.title })
 
       return null
     }
+
+    const key = cacheKey(parsed)
+    const cached = complete.get(key) ?? partial.get(key)
+
+    if (cached !== undefined)
+      return cached
+
+    if (misses.get(key) !== undefined)
+      return null
+
+    const result = await start(parsed, key)
+
+    return result.facts
   }
 
   function cached(input: { title: string, artist: string | null }): SongFacts | null {
-    try {
-      const parsed = parseTitle(input.title, input.artist)
+    const parsed = parseTitle(input.title, input.artist)
 
-      if (parsed.artist === null)
-        return null
-
-      const key = cacheKey(parsed)
-
-      return complete.get(key) ?? partial.get(key) ?? null
-    }
-    catch {
+    if (parsed.artist === null)
       return null
-    }
+
+    const key = cacheKey(parsed)
+
+    return complete.get(key) ?? partial.get(key) ?? null
   }
 
   return { lookup, cached }

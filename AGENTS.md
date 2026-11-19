@@ -34,36 +34,41 @@ src/
   index.ts          process entry: config, app, signals
   app.ts            the only composition root
   config.ts         env -> validated AppConfig (the only env reader)
-  core/             clock, errors, logger, async primitives, text, TTL map, JSON guards
-  ports/            MusicPort, SpeechPort, ConversationPort, DecisionPort, SettingsPort, RepliesPort
+  core/             clock, errors, logger, async primitives, cooldown, text, TTL map, JSON guards
+  ports/            MusicPort, SpeechPort, ConversationPort, DecisionPort, SettingsPort, RepliesPort, SongFactsPort, ListenersPort
   providers/        adapters; the only place a technology is named
     music/          engine, catalogue, extractor, cache, stream, policy, welcome
     speech/         voice synthesis + quota
     language-model/ conversation wire format
     classifier/     fast typed decision
     settings/       flat JSON store
-  dj/               persona, prompts, conversation loop, replies, announcements
-  on-air/           station state machine, script, host
+    listeners/      per-member request history (JSON store)
+    song-facts/     verified song and artist facts, news
+    json-file.ts    shared read/quarantine/atomic-write for the JSON stores
+    http-failure.ts shared HTTP status -> ProviderError mapping
+  dj/               persona, prompts, conversation loop and history, replies, announcements
+  on-air/           station state machine, angle, script, line writer, host
   commands/         command specs, bus, fast router
   discord/          gateway, message/interaction handlers, views, message slot
-  tests/            architecture contract
+  tests/            architecture contract, app smoke test, shared test fixtures
 ```
 
-- `app.ts` builds every capability as a plain object (`musicEngine`, `speechSynthesizer`, `conversationModel`, `intentClassifier`, `settingsStore`) and wires the events. Nothing else constructs a provider.
+- `app.ts` builds every capability as a plain object (`musicEngine`, `speechSynthesizer`, `conversationModel`, `intentClassifier`, `settingsStore`, `listenersStore`, `songFacts`) and wires the events. Nothing else constructs a provider.
 - **Dependency rule:** `app -> commands/discord/dj/on-air -> ports -> core`; providers sit behind ports and import `core`, `ports`, the `config` types plus `limits`/`messages`, and their own SDK. Providers never import `commands`, `discord`, `dj` or `on-air`. `src/tests/architecture.test.ts` enforces this.
 - **No technology names outside `src/providers/`.** A module is named for what it does (`music`, `speech`, `language-model`, `classifier`), never for the library behind it.
 - **Commands:** one `CommandBus` executes the fast router, the model's tool calls and the buttons. Preconditions, member authorization, confirmation, ack and error mapping live once.
 - **Plain messages:** in the listening channel, every message goes through the fast router first. A confident control runs, a song request is searched, a mood or question goes to the DJ, and no confident choice falls back to the search. The bot mention still works and falls back to the DJ instead.
 - **State:** no module-level mutable request state. The message slot owns its card ids/timers, the station owns cadence and prepared clips, the conversation owns its bounded history, the speech provider owns its quota cache. Every object that owns a timer, file or child exposes `dispose`/`flush`; bounded TTL maps die with the process.
 - **Lifecycle:** shutdown aborts in-flight work, flushes settings, leaves voice, kills extractor children and destroys the client with a timeout. Unhandled rejections stop the process cleanly with a non-zero exit.
-- **Errors:** `UserError` is safe to show, `ProviderError` carries a capability and a retryable/fatal/quota kind, and unknown errors are logged and answered with a generic message. Providers map their wire errors once.
+- **Errors:** `UserError` is safe to show, `ProviderError` carries a retryable/fatal/quota kind and the HTTP status, and unknown errors are logged and answered with a generic message. Providers map their wire errors once.
 - **Types:** explicit at ports and exported signatures, inference inside. No `any`, no non-null assertions, no casts outside a runtime-validated boundary. No enums.
 
 ## Behavior Invariants
 
 - The stream waits for the on-air line: `beforeStream` is awaited before the audio URL is returned, so a spoken line never plays over the music.
-- A prepared line belongs to one song; skip, removal, disconnect and reset delete it. One requested song in three is silent; autoplay speaks one in three; a skip nobody has named yet makes the next slot speak anyway; every fifth line is long. Short lines use the run (who asked, the last song, what comes next); long lines add one fact the model is sure of. Cadence survives a disconnect and resets on a manual clear; the recent-song window lasts half an hour.
+- A prepared line belongs to one song; skip, removal, disconnect and reset delete it. One requested song in three is silent; autoplay speaks one in three; every second line is long. Short lines use the run (who asked, the last song, what comes next); long lines add one fact the model is sure of. The host is the radio: an autoplay song is his own pick and is introduced like any other, never credited to "the radio". A skip is context in the prompt (who skipped the last song, never when), not an angle, and never makes a slot speak. Cadence survives a disconnect and resets on a manual clear; the recent-song window lasts half an hour.
 - TTS, quota and model failures skip the line; they never break playback.
+- While the bot is in a voice channel (`music.status(guildId) !== null`) it posts no chatter: DJ answers and command confirmations become a ✅ reaction (or nothing for buttons), and a song request is acknowledged with ✅. A DJ answer after a refused or failed tool, refusals and errors still post as text.
 - The conversation has a deadline, tool-round/call caps and a final tool-free answer; history is trimmed to whole exchanges.
 - Every command is authorized against the invoking member before any side effect.
 - Untrusted titles, names and persona text only appear inside a `dataBlock`; they can never close the block or become instructions.
@@ -75,5 +80,5 @@ src/
 - Pure rules (station, prompts, queue, text, policy) are tested without mocks.
 - Providers have contract tests with fake HTTP, a fake extractor binary and fake audio players; no network.
 - Handlers are tested with fake messages/channels and a fake `CommandBus`.
-- `src/tests/architecture.test.ts` fails on a cycle, a missing import, an upward dependency, a leaked technology name, a `process.env` read outside `config.ts`, a `console` call, or a non-test source file over 300 lines.
+- `src/tests/architecture.test.ts` fails on a cycle, a missing import, an upward dependency, a technology name in a file path, a `process.env` read outside `config.ts`, a `console` call, or a non-test source file over 300 lines.
 - The e2e suite is event/status based (playback duration, queue size, voice state), uses a temporary settings file and is run manually while the service is stopped.

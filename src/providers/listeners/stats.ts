@@ -16,18 +16,6 @@ export interface ArtistStat {
   readonly lastRequested: number
 }
 
-// The same song arrives with different decorations: the request text, a link
-// title or an autoplay title. Keying on the stripped, lowercased title makes
-// "Radiohead - Karma Police (Official Video)" and "Radiohead - Karma Police"
-// one count, while the last display title is kept for the air.
-export function normalizeTitle(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 export function countOf(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
 }

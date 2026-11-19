@@ -3,11 +3,10 @@ import type { CompletionRequest } from '../../../ports/conversation.ts'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { ProviderError } from '../../../core/errors.ts'
 import { isRecord, parseJson } from '../../../core/json.ts'
-import { logger } from '../../../core/logger.ts'
+import { silentLog as log } from '../../../tests/fixtures.ts'
 import { conversationModel } from '../index.ts'
 
 const realFetch = globalThis.fetch
-const log = logger({ level: 'error', sink: () => {} })
 
 const config: AppConfig['language'] = {
   enabled: true,

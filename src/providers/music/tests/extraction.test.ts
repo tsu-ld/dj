@@ -40,7 +40,7 @@ test('the extractor JSON is read from stdout', async () => {
 {"id":"abc123","title":"Tema"}
 JSON`)
     const tool = extractor({ command, logger: log })
-    const info = await tool.json('https://www.youtube.com/watch?v=abc123')
+    const info = await tool.json('https://www.youtube.com/watch?v=abc123', [])
 
     expect(info).toEqual({ id: 'abc123', title: 'Tema' })
 
@@ -58,7 +58,7 @@ test('a failed extractor run reports its stderr', async () => {
     const command = await shellScript(dir, 'fail.sh', 'echo boom >&2\nexit 3')
     const tool = extractor({ command, logger: log })
 
-    expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123'))).toBe('boom')
+    expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).toBe('boom')
 
     await tool.dispose()
   }
@@ -74,7 +74,7 @@ test('an invalid JSON payload is rejected', async () => {
     const command = await shellScript(dir, 'bad.sh', 'echo not-json')
     const tool = extractor({ command, logger: log })
 
-    expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123'))).toMatch(/invalid JSON/)
+    expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).toMatch(/invalid JSON/)
 
     await tool.dispose()
   }
@@ -222,7 +222,7 @@ test('a download failure carries the extractor stderr', async () => {
 test('a spawn failure is reported instead of hanging', async () => {
   const tool = extractor({ command: '/definitely/not/an/extractor', logger: log })
 
-  expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123'))).not.toBe('')
+  expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).not.toBe('')
 
   await tool.dispose()
 })

@@ -1,33 +1,10 @@
 # dependencies
 node_modules
 
-# output
-out
-dist
-*.tgz
-
-# code coverage
-coverage
-*.lcov
-
-# logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
-
-# caches
-.eslintcache
+# caches written at runtime (.cache/players)
 .cache
-*.tsbuildinfo
 
-# IntelliJ based IDEs
-.idea
-
-# Finder (MacOS) folder config
-.DS_Store
-
-# project secrets & runtime config
-config.json
+# runtime data
 data/
 
 # agent findings

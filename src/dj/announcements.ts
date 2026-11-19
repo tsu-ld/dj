@@ -22,26 +22,6 @@ export function djAnnouncements(deps: {
   })
 
   return {
-    trackQueued(payload: MusicEventMap['trackQueued']): void {
-      if (!payload.announce || !payload.textChannel)
-        return
-
-      void deps.replies.announce(
-        payload.textChannel,
-        deps.settings.get(payload.guildId),
-        MESSAGES.songAdded(payload.track.title),
-      )
-    },
-    playlistQueued(payload: MusicEventMap['playlistQueued']): void {
-      if (!payload.announce || !payload.textChannel)
-        return
-
-      void deps.replies.announce(
-        payload.textChannel,
-        deps.settings.get(payload.guildId),
-        MESSAGES.playlistAdded(payload.name, payload.count),
-      )
-    },
     playbackError(payload: MusicEventMap['playbackError']): void {
       if (!errorWindow.take(payload.guildId) || !payload.textChannel)
         return

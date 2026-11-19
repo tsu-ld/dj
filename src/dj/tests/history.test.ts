@@ -130,14 +130,14 @@ describe('conversationHistory', () => {
   })
 
   test('the number of conversations is capped', () => {
-    const history = conversationHistory({ clock: testClock(), maxConversations: 2 })
+    const history = conversationHistory({ clock: testClock() })
 
-    history.remember('channel-1', 'user-a', exchange(1))
-    history.remember('channel-2', 'user-a', exchange(2))
-    history.remember('channel-3', 'user-a', exchange(3))
+    // one past the cap of a thousand conversations evicts the oldest
+    for (let channel = 0; channel <= 1_000; channel++)
+      history.remember(`channel-${channel}`, 'user-a', exchange(channel))
 
-    expect(history.size()).toBe(2)
-    expect(history.recall('channel-1', 'user-a')).toEqual([])
-    expect(history.recall('channel-3', 'user-a')).toEqual(exchange(3))
+    expect(history.recall('channel-0', 'user-a')).toEqual([])
+    expect(history.recall('channel-1', 'user-a')).toEqual(exchange(1))
+    expect(history.recall('channel-1000', 'user-a')).toEqual(exchange(1000))
   })
 })

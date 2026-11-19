@@ -1,28 +1,12 @@
 import type { ListenerProfile } from '../../ports/listeners.ts'
-import type { Track } from '../../ports/music.ts'
 import type { SongFacts } from '../../ports/song-facts.ts'
-import type { AngleInput, PlayedEntry } from '../angle.ts'
+import type { AngleInput } from '../angle.ts'
 import { describe, expect, test } from 'bun:test'
-import { anniversaryOf, normalizeTitle, pickAngle } from '../angle.ts'
+import { testTrack as track } from '../../tests/fixtures.ts'
+import { anniversaryOf, pickAngle } from '../angle.ts'
 
 const NOW = Date.UTC(2026, 10, 18, 12)
 const DAY = 86_400_000
-
-function track(title: string, extra: Partial<Track> = {}): Track {
-  return {
-    id: title,
-    title,
-    url: `https://example.test/${encodeURIComponent(title)}`,
-    durationSeconds: 200,
-    isLive: false,
-    thumbnail: null,
-    requestedBy: 'tsu',
-    requesterId: '1',
-    artist: 'Soda Stereo',
-    fromRadio: false,
-    ...extra,
-  }
-}
 
 function facts(extra: Partial<SongFacts> = {}): SongFacts {
   return {
@@ -39,18 +23,12 @@ function facts(extra: Partial<SongFacts> = {}): SongFacts {
   }
 }
 
-const SKIPPED: PlayedEntry = { title: 'A', artist: null, requestedBy: 'tsu', fromRadio: false, skippedBy: 'ana', playedSeconds: 30 }
-const THROUGH: PlayedEntry = { ...SKIPPED, skippedBy: null }
-
 // a regular who is not at a milestone and asked for nothing they usually ask for
 const REGULAR: ListenerProfile = {
   name: 'tsu',
   requests: 7,
   topSong: { title: 'Matador', count: 3 },
   topArtists: ['Los Fabulosos Cadillacs'],
-  skipsGiven: 0,
-  skippedByOthers: 0,
-  firstSeen: 0,
 }
 
 const ALL_FACTS = facts({
@@ -66,7 +44,6 @@ function pick(extra: Partial<AngleInput> = {}) {
   return pickAngle({
     long: true,
     first: false,
-    last: THROUGH,
     track: track('Tema'),
     facts: null,
     listener: null,
@@ -78,13 +55,12 @@ function pick(extra: Partial<AngleInput> = {}) {
 
 describe('pickAngle priority', () => {
   test('the first line is a welcome, whatever else is known', () => {
-    expect(pick({ first: true, last: SKIPPED, facts: ALL_FACTS, listener: { ...REGULAR, requests: 0 } })).toBe('welcome')
+    expect(pick({ first: true, facts: ALL_FACTS, listener: { ...REGULAR, requests: 0 } })).toBe('welcome')
   })
 
   test('each angle wins when everything above it is missing', () => {
     const milestone = { ...REGULAR, requests: 0 }
 
-    expect(pick({ last: SKIPPED, listener: milestone, facts: ALL_FACTS })).toBe('skip')
     expect(pick({ listener: milestone, facts: ALL_FACTS })).toBe('listener')
     expect(pick({ listener: REGULAR, facts: ALL_FACTS })).toBe('anniversary')
     expect(pick({ facts: { ...ALL_FACTS, releaseDate: null, year: 1999 } })).toBe('story')
@@ -101,8 +77,6 @@ describe('pickAngle priority', () => {
 
 describe('pickAngle data', () => {
   test('missing data never picks its angle', () => {
-    expect(pick({ last: null })).toBe('run')
-    expect(pick({ last: { ...SKIPPED, skippedBy: '' } })).toBe('run')
     expect(pick({ listener: null })).toBe('run')
     expect(pick({ listener: REGULAR })).toBe('run')
     expect(pick({ facts: facts() })).toBe('run')
@@ -121,7 +95,7 @@ describe('pickAngle data', () => {
       expect(pick({ listener: { ...REGULAR, requests } })).toBe('run')
 
     expect(pick({ listener: REGULAR, track: track('MATADOR (Official Video) [HD]') })).toBe('listener')
-    expect(pick({ listener: { ...REGULAR, topArtists: ['soda stereo'] } })).toBe('listener')
+    expect(pick({ listener: { ...REGULAR, topArtists: ['soda stereo'] }, track: track('Tema', { artist: 'Soda Stereo' }) })).toBe('listener')
   })
 
   test('a radio pick is nobody\'s milestone', () => {
@@ -134,15 +108,7 @@ describe('pickAngle rotation', () => {
     const milestone = { ...REGULAR, requests: 0 }
 
     expect(pick({ listener: milestone, facts: ALL_FACTS, lastAngle: 'listener' })).toBe('anniversary')
-    expect(pick({ last: SKIPPED, listener: milestone, facts: ALL_FACTS, lastAngle: 'listener' })).toBe('skip')
     expect(pick({ facts: facts({ genre: 'Rock' }), lastAngle: 'fact' })).toBe('run')
-  })
-
-  test('every skip is attributed, even right after a skip', () => {
-    const milestone = { ...REGULAR, requests: 0 }
-
-    expect(pick({ last: SKIPPED, listener: milestone, facts: ALL_FACTS, lastAngle: 'skip' })).toBe('skip')
-    expect(pick({ last: SKIPPED, long: false, lastAngle: 'skip' })).toBe('skip')
   })
 
   test('run repeats when nothing else is left', () => {
@@ -178,11 +144,5 @@ describe('anniversaryOf', () => {
 
   test('a song released this week is not an anniversary', () => {
     expect(anniversaryOf(facts({ releaseDate: '2026-11-16' }), NOW)).toBeNull()
-  })
-})
-
-describe('normalizeTitle', () => {
-  test('lowercases and drops bracketed tags', () => {
-    expect(normalizeTitle('  Matador (Official Video) [HD] {live} ')).toBe('matador')
   })
 })

@@ -23,10 +23,6 @@ export interface StoppableQueue {
   stop: () => Promise<void>
 }
 
-export interface PlayCapture {
-  readonly announce: boolean
-}
-
 export type MusicEmitter = {
   readonly on: <K extends keyof MusicEventMap>(event: K, listener: (payload: MusicEventMap[K]) => void) => () => void
 } & { readonly [K in keyof MusicEventMap]: (payload: MusicEventMap[K]) => void }

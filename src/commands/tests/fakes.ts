@@ -1,47 +1,24 @@
 import type { GuildMember, GuildTextBasedChannel, Message, VoiceBasedChannel } from 'discord.js'
-import type { Logger } from '../../core/logger.ts'
-import type { MusicPort, QueueView, Track } from '../../ports/music.ts'
+import type { MusicPort, QueueView } from '../../ports/music.ts'
 import type { GuildSettings, SettingsPort } from '../../ports/settings.ts'
-import type { CommandContext, CommandServices, CommandUi } from '../spec.ts'
-import { logger } from '../../core/logger.ts'
+import type { CommandContext, CommandServices, CommandUi, QueueContext, VoiceContext } from '../spec.ts'
+import { silentLog, testTrack, testView } from '../../tests/fixtures.ts'
 
-export const log: Logger = logger({ level: 'error', sink: () => {} })
-
-export function track(overrides: Partial<Track> = {}): Track {
-  return {
-    id: 'track-1',
-    title: 'Song 1',
-    url: 'https://youtu.be/1',
-    durationSeconds: 180,
-    isLive: false,
-    thumbnail: null,
-    requestedBy: 'tsu',
-    requesterId: 'member-1',
-    artist: null,
-    fromRadio: false,
-    ...overrides,
-  }
-}
-
-export function view(overrides: Partial<QueueView> = {}): QueueView {
-  return {
-    current: overrides.current === undefined ? track() : overrides.current,
-    upcoming: [],
-    paused: false,
-    radio: false,
-    size: 1,
-    ...overrides,
-  }
-}
+export { silentLog as log, testTrack as track, testView as view }
 
 export function fakeVoice(id = 'voice-1'): VoiceBasedChannel {
   return { id } as unknown as VoiceBasedChannel
 }
 
-export function fakeMember(options: { allowed?: boolean, voiceChannel?: VoiceBasedChannel | null } = {}): GuildMember {
+export function fakeMember(options: { allowed?: boolean, voiceChannel?: VoiceBasedChannel | null, botVoiceChannel?: VoiceBasedChannel | null } = {}): GuildMember {
   return {
     permissions: { has: () => options.allowed ?? true },
     voice: { channel: options.voiceChannel ?? null },
+    guild: {
+      members: {
+        me: { voice: { channelId: options.botVoiceChannel?.id ?? null } },
+      },
+    },
   } as unknown as GuildMember
 }
 
@@ -104,7 +81,6 @@ export function fakeMusic(overrides: Partial<MusicPort> = {}): MusicRecorder {
       async playClip() {
         return false
       },
-      async playWelcome() {},
     },
     on() {
       return () => {}
@@ -188,9 +164,18 @@ export function fakeContext(options: ContextOptions = {}): CommandContext {
     message: options.message ?? null,
     settings: options.settings ?? { textChannelId: null, persona: null },
     queue: options.queue ?? null,
-    services: { music: fakeMusic(), settings: fakeSettings(), logger: log, ...options.services },
+    services: { music: fakeMusic(), settings: fakeSettings(), logger: silentLog, ...options.services },
     ui: options.ui ?? fakeUi(),
   }
+}
+
+// Contexts that already passed the bus precondition, for calling run directly.
+export function queueContext(options: ContextOptions & { queue?: QueueView } = {}): QueueContext {
+  return { ...fakeContext(options), queue: options.queue ?? testView() }
+}
+
+export function voiceContext(options: ContextOptions = {}): VoiceContext {
+  return { ...fakeContext(options), voiceChannel: options.voiceChannel ?? fakeVoice() }
 }
 
 export interface MessageOptions {

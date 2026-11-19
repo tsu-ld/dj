@@ -1,17 +1,17 @@
 import type { Interaction } from 'discord.js'
 import type { MusicRecorder } from '../../commands/tests/fakes.ts'
 import type { Logger } from '../../core/logger.ts'
-import type { ViewMessage } from '../views.ts'
+import type { MusicPort } from '../../ports/music.ts'
 import type { SlotRecorder } from './fakes.ts'
 import { describe, expect, test } from 'bun:test'
-import { ComponentType, MessageFlags } from 'discord.js'
+import { MessageFlags } from 'discord.js'
 import { commandBus } from '../../commands/bus.ts'
 import { commands } from '../../commands/index.ts'
-import { fakeMusic, fakeSettings, log, track, view } from '../../commands/tests/fakes.ts'
+import { fakeMember, fakeMusic, fakeSettings, fakeVoice, log, track, view } from '../../commands/tests/fakes.ts'
 import { UserError } from '../../core/errors.ts'
 import { MESSAGES } from '../../messages.ts'
 import { interactionHandler } from '../interactions.ts'
-import { editContent, fakeChannel, fakeInteraction, fakeSlot, optionContent } from './fakes.ts'
+import { buttonsOf, cardText, contentOf, fakeChannel, fakeInteraction, fakeSlot } from './fakes.ts'
 
 function setup(options: { music?: MusicRecorder, slot?: SlotRecorder, logger?: Logger } = {}): {
   handler: (interaction: Interaction) => Promise<void>
@@ -32,37 +32,6 @@ function setup(options: { music?: MusicRecorder, slot?: SlotRecorder, logger?: L
   return { handler, music, slot }
 }
 
-interface ButtonInfo {
-  readonly customId: string
-  readonly disabled: boolean
-}
-
-function buttonsOf(message: ViewMessage): ButtonInfo[] {
-  return message.components.flatMap(container => container.toJSON().components.flatMap((component) => {
-    if (component.type !== ComponentType.ActionRow)
-      return []
-
-    return component.components.flatMap((child) => {
-      if (child.type !== ComponentType.Button || !('custom_id' in child))
-        return []
-
-      return [{ customId: child.custom_id, disabled: child.disabled ?? false }]
-    })
-  }))
-}
-
-function textOf(message: ViewMessage | undefined): string {
-  if (!message)
-    return ''
-
-  return message.components.flatMap(container => container.toJSON().components.flatMap((component) => {
-    if (component.type === ComponentType.TextDisplay)
-      return [component.content]
-
-    return []
-  })).join('\n')
-}
-
 describe('now-playing buttons', () => {
   test('clear asks for confirmation before touching the music', async () => {
     const recorder = fakeInteraction({ customId: 'np:clear' })
@@ -72,7 +41,7 @@ describe('now-playing buttons', () => {
 
     const reply = recorder.replies[0]
 
-    expect(optionContent(reply)).toBe(MESSAGES.clearConfirm)
+    expect(contentOf(reply)).toBe(MESSAGES.clearConfirm)
     expect(typeof reply === 'string' ? null : reply?.flags).toBe(MessageFlags.Ephemeral)
     expect(recorder.deferredUpdates()).toBe(0)
     expect(music.calls).not.toContain('stop')
@@ -92,8 +61,20 @@ describe('now-playing buttons', () => {
     await handler(recorder.interaction)
 
     expect(recorder.deferredUpdates()).toBe(1)
-    expect(editContent(recorder.editReplies[0])).toBe(MESSAGES.cleared)
+    expect(contentOf(recorder.editReplies[0])).toBe(MESSAGES.cleared)
     expect(calls).toEqual([['123456789012345678', { resetStation: true }]])
+  })
+
+  test('a refused clear says why once and only closes the prompt', async () => {
+    const member = fakeMember({ voiceChannel: fakeVoice('7'), botVoiceChannel: fakeVoice('8') })
+    const recorder = fakeInteraction({ customId: 'nc:clear:yes', member })
+    const { handler, music } = setup({ music: fakeMusic({ view: () => view() }) })
+
+    await handler(recorder.interaction)
+
+    expect(music.calls).not.toContain('stop')
+    expect(recorder.editReplies.map(contentOf)).not.toContain(MESSAGES.sameVoiceChannel)
+    expect(JSON.stringify(recorder.followUps)).toContain(MESSAGES.sameVoiceChannel)
   })
 
   test('a failed confirmation edit does not report the clear as failed', async () => {
@@ -133,7 +114,7 @@ describe('now-playing buttons', () => {
 
     await handler(recorder.interaction)
 
-    expect(editContent(recorder.editReplies[0])).toBe(MESSAGES.clearCancelled)
+    expect(contentOf(recorder.editReplies[0])).toBe(MESSAGES.clearCancelled)
     expect(music.calls).not.toContain('stop')
   })
 
@@ -143,7 +124,7 @@ describe('now-playing buttons', () => {
 
     await handler(recorder.interaction)
 
-    expect(editContent(recorder.editReplies[0])).toBe(MESSAGES.nothingPlaying)
+    expect(contentOf(recorder.editReplies[0])).toBe(MESSAGES.nothingPlaying)
     expect(music.calls).not.toContain('stop')
   })
 
@@ -153,7 +134,7 @@ describe('now-playing buttons', () => {
 
     await handler(recorder.interaction)
 
-    expect(optionContent(recorder.replies[0])).toBe(MESSAGES.nothingPlaying)
+    expect(contentOf(recorder.replies[0])).toBe(MESSAGES.nothingPlaying)
     expect(recorder.deferredUpdates()).toBe(0)
     expect(slot.shown).toEqual([])
   })
@@ -206,7 +187,7 @@ describe('now-playing buttons', () => {
 
     await handler(recorder.interaction)
 
-    expect(optionContent(recorder.followUps[0])).toBe('No puedo saltar.')
+    expect(contentOf(recorder.followUps[0])).toBe('No puedo saltar.')
   })
 
   test('an unexpected button failure surfaces the generic message', async () => {
@@ -222,7 +203,7 @@ describe('now-playing buttons', () => {
 
     await handler(recorder.interaction)
 
-    expect(optionContent(recorder.followUps[0])).toBe(MESSAGES.genericError)
+    expect(contentOf(recorder.followUps[0])).toBe(MESSAGES.genericError)
   })
 
   test('a missing guild is ignored', async () => {
@@ -265,7 +246,7 @@ describe('queue pagination', () => {
     const message = recorder.edits[0]
 
     expect(recorder.deferredUpdates()).toBe(1)
-    expect(textOf(message)).toContain('Page 2 of 2')
+    expect(cardText(message)).toContain('Page 2 of 2')
     expect(message?.content).toBeNull()
     expect(message?.embeds).toEqual([])
     expect(message?.allowedMentions).toEqual({ parse: [] })
@@ -283,7 +264,7 @@ describe('queue pagination', () => {
 
     await handler(recorder.interaction)
 
-    expect(textOf(recorder.edits[0])).toContain('Page 1 of 2')
+    expect(cardText(recorder.edits[0])).toContain('Page 1 of 2')
   })
 
   test('pagination with nothing playing replaces the card with the reason', async () => {
@@ -294,7 +275,7 @@ describe('queue pagination', () => {
 
     const edit = recorder.edits[0]
 
-    expect(textOf(edit)).toBe(MESSAGES.nothingPlaying)
+    expect(cardText(edit)).toBe(MESSAGES.nothingPlaying)
     expect(edit?.flags).toBe(MessageFlags.IsComponentsV2)
     expect(edit?.content).toBeNull()
     expect(edit?.embeds).toEqual([])
@@ -309,5 +290,36 @@ describe('queue pagination', () => {
 
     expect(recorder.deferredUpdates()).toBe(1)
     expect(recorder.edits).toEqual([])
+  })
+})
+
+describe('buttons while the bot is in voice', () => {
+  const inVoice: Pick<MusicPort, 'status'> = { status: () => ({ state: 'playing', playbackDurationMs: 0 }) }
+
+  test('a confirmation in voice sends no follow-up', async () => {
+    const recorder = fakeInteraction({ customId: 'np:radio' })
+    let toggled = 0
+    const { handler } = setup({ music: fakeMusic({ ...inVoice, view: () => view(), async radio() {
+      toggled++
+
+      return true
+    } }) })
+
+    await handler(recorder.interaction)
+
+    expect(toggled).toBe(1)
+    expect(recorder.deferredUpdates()).toBe(1)
+    expect(recorder.followUps).toEqual([])
+    expect(recorder.replies).toEqual([])
+  })
+
+  test('a refusal in voice is still sent', async () => {
+    const recorder = fakeInteraction({ customId: 'np:radio', member: fakeMember({ voiceChannel: null, botVoiceChannel: fakeVoice() }) })
+    const { handler, music } = setup({ music: fakeMusic({ ...inVoice, view: () => view() }) })
+
+    await handler(recorder.interaction)
+
+    expect(music.calls).toEqual([])
+    expect(recorder.followUps).toEqual([{ content: MESSAGES.sameVoiceChannel, flags: MessageFlags.Ephemeral }])
   })
 })

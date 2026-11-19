@@ -9,7 +9,7 @@ import { withTimeout } from './core/async.ts'
 import { systemClock } from './core/clock.ts'
 import { errorMessage } from './core/errors.ts'
 import { logger as createLogger } from './core/logger.ts'
-import { discordClient } from './discord/client.ts'
+import { discordClient, waitForGateway } from './discord/client.ts'
 import { interactionHandler } from './discord/interactions.ts'
 import { messageHandler } from './discord/messages.ts'
 import { messageSlot } from './discord/slot.ts'
@@ -37,17 +37,14 @@ const SHUTDOWN_TIMEOUT_MS = 5_000
 // imports a provider, and no provider imports a feature.
 export async function createApp(config: AppConfig): Promise<App> {
   const log = createLogger({ level: config.logLevel }).child({ app: 'dj' })
-  const clock = systemClock
   const settings = await settingsStore({ path: config.settingsPath, logger: log })
   const client: Client = discordClient(config, log)
   const model = config.language.enabled
     ? conversationModel({ config: config.language, logger: log })
     : null
-  const decision = intentClassifier({ config: config.decision, logger: log, clock })
-  const speech = speechSynthesizer({ config: config.speech, logger: log, clock })
-  const slot = messageSlot({ logger: log })
+  const decision = intentClassifier({ config: config.decision, clock: systemClock })
+  const speech = speechSynthesizer({ config: config.speech, logger: log, clock: systemClock })
   const replies = djReplies({ model, logger: log })
-  const announcements = djAnnouncements({ replies, settings, clock })
 
   const hostRef: { current: OnAirHost | null } = { current: null }
 
@@ -59,20 +56,22 @@ export async function createApp(config: AppConfig): Promise<App> {
     client,
     config: config.music,
     logger: log,
-    clock,
+    clock: systemClock,
     beforeStream: async (input) => {
       await hostRef.current?.beforeStream(input)
     },
   })
 
+  const announcements = djAnnouncements({ replies, settings, clock: systemClock })
+  const slot = messageSlot({ logger: log, playback: guildId => music.status(guildId) })
   const facts = songFacts({ logger: log })
-  const listeners = await listenersStore({ path: config.listenersPath, logger: log })
-  const host = onAirHost({ music, speech, model, settings, facts, listeners, logger: log, clock })
+  const listeners = await listenersStore({ path: config.listenersPath, logger: log, clock: systemClock })
+  const host = onAirHost({ music, speech, model, settings, facts, listeners, logger: log, clock: systemClock })
 
   hostRef.current = host
 
   const bus = commandBus({ specs: commands, logger: log })
-  const agent = model === null ? null : djAgent({ model, bus, settings, logger: log, clock })
+  const agent = model === null ? null : djAgent({ model, bus, settings, logger: log, clock: systemClock })
 
   const onMessage = messageHandler({
     bus,
@@ -89,25 +88,23 @@ export async function createApp(config: AppConfig): Promise<App> {
 
   const detach: Array<() => void> = [
     music.on('trackQueued', (payload) => {
-      announcements.trackQueued(payload)
       host.trackQueued(payload)
+      slot.queueChanged(payload)
     }),
     music.on('playlistQueued', (payload) => {
-      announcements.playlistQueued(payload)
       host.playlistQueued(payload)
       slot.playlistQueued(payload)
     }),
     // The host records each request when the song goes on air.
     music.on('trackStarted', (payload) => {
-      slot.trackStarted(payload)
+      slot.update(payload)
       host.trackStarted(payload)
     }),
     music.on('trackSkipped', (payload) => {
-      listeners.recordSkip(payload.guildId, payload.by, { requesterId: payload.track.requesterId })
       host.trackSkipped(payload)
     }),
     music.on('stateChanged', (payload) => {
-      slot.stateChanged(payload)
+      slot.update(payload)
       host.stateChanged(payload)
     }),
     music.on('queueEnded', ({ guildId }) => slot.queueCleared({ guildId })),
@@ -146,17 +143,31 @@ export async function createApp(config: AppConfig): Promise<App> {
   client.on(Events.MessageCreate, onMessageEvent)
   client.on(Events.InteractionCreate, onInteractionEvent)
 
-  let started = false
   let stopped = false
+  const stopping = new AbortController()
 
   return {
     logger: log,
     async start() {
-      if (started)
-        return
-
-      started = true
       log.info('app.starting')
+
+      await waitForGateway({
+        fetch,
+        // A stop during the wait ends the sleep, so shutdown never waits on it.
+        sleep: async milliseconds => new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, milliseconds)
+
+          stopping.signal.addEventListener('abort', () => {
+            clearTimeout(timer)
+            resolve()
+          }, { once: true })
+        }),
+        logger: log,
+        signal: stopping.signal,
+      })
+
+      if (stopped)
+        return
 
       await client.login()
       log.info('app.started', { user: client.user?.tag ?? null })
@@ -166,6 +177,7 @@ export async function createApp(config: AppConfig): Promise<App> {
         return
 
       stopped = true
+      stopping.abort()
       log.info('app.stopping')
 
       for (const off of detach) {

@@ -1,7 +1,7 @@
 import type { AudioPlayerLike, VoiceConnectionLike } from './audio-types.ts'
 import { AudioPlayerStatus, VoiceConnectionStatus } from '@discordjs/voice'
 
-export type AudioOutcome = 'idle' | 'error' | 'destroyed' | 'timeout' | 'aborted'
+type AudioOutcome = 'idle' | 'error' | 'destroyed' | 'timeout' | 'aborted'
 
 // A player holds the connection until it reaches idle, fails, the connection
 // dies, or the caller's abort/timeout fires. Every exit removes its listeners.

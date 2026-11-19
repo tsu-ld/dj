@@ -14,7 +14,7 @@ import {
 } from 'discord.js'
 import { QUEUE_PAGE_SIZE } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
-import { linkedTitle, PAUSED_ACCENT, PLAYING_ACCENT, queueLine, statusLine, thumbnailUrl, totalDuration, upcomingText } from './card-format.ts'
+import { clock, linkedTitle, PAUSED_ACCENT, PLAYING_ACCENT, queueLine, statusLine, thumbnailUrl, totalDuration, upcomingText } from './card-format.ts'
 
 export interface ViewMessage {
   readonly components: readonly ContainerBuilder[]
@@ -40,14 +40,30 @@ function separator(): SeparatorBuilder {
   return new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
 }
 
-export function nowPlayingMessage(view: QueueView): ViewMessage | null {
+const PROGRESS_SEGMENTS = 12
+
+// Only a song with a known length gets a bar: a live stream has no end.
+function progressLine(track: Track, elapsedMs: number | null): string | null {
+  const total = Math.floor(track.durationSeconds)
+
+  if (elapsedMs === null || track.isLive || !Number.isFinite(total) || total <= 0)
+    return null
+
+  const elapsed = Math.min(Math.max(Math.floor(elapsedMs / 1000), 0), total)
+  const filled = Math.round((elapsed / total) * PROGRESS_SEGMENTS)
+
+  return `${'▰'.repeat(filled)}${'▱'.repeat(PROGRESS_SEGMENTS - filled)} \`${clock(elapsed)} / ${clock(total)}\``
+}
+
+export function nowPlayingMessage(view: QueueView, elapsedMs: number | null = null): ViewMessage | null {
   const track = view.current
 
   if (!track)
     return null
 
   const container = new ContainerBuilder().setAccentColor(view.paused ? PAUSED_ACCENT : PLAYING_ACCENT)
-  const header = `## ${linkedTitle(track)}\n${statusLine(track, view)}`
+  const progress = progressLine(track, elapsedMs)
+  const header = `## ${linkedTitle(track)}\n${statusLine(track, view)}${progress === null ? '' : `\n${progress}`}`
   const thumbnail = thumbnailUrl(track)
 
   if (thumbnail === null) {

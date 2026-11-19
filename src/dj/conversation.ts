@@ -36,6 +36,9 @@ const SILENT_UI: Omit<CommandContext['ui'], 'showQueue'> = {
 export interface AskInput {
   request: string
   context: CommandContext
+  // A refused or failed tool makes the answer an explanation of a problem,
+  // which the caller must not swallow into a bare reaction.
+  onRefused?: () => void
 }
 
 export interface DjAgent {
@@ -51,26 +54,26 @@ async function resolveToolCall(
   context: CommandContext,
   bus: CommandBus,
   logger: Logger,
-): Promise<{ message: ChatMessage, acted: boolean }> {
+): Promise<{ message: ChatMessage, acted: boolean, refused: boolean }> {
   const args = parseJson(call.arguments)
 
   if (!isRecord(args))
-    return { message: toolResult(call, { error: INVALID_ARGUMENTS_RESULT }), acted: false }
+    return { message: toolResult(call, { error: INVALID_ARGUMENTS_RESULT }), acted: false, refused: true }
 
-  function failed(error: unknown, message?: string): { message: ChatMessage, acted: boolean } {
+  function failed(error: unknown, message?: string): { message: ChatMessage, acted: boolean, refused: boolean } {
     logger.error('dj.tool_failed', error, { tool: call.name })
 
-    return { message: toolResult(call, { error: message ?? FAILED_RESULT }), acted: false }
+    return { message: toolResult(call, { error: message ?? FAILED_RESULT }), acted: false, refused: true }
   }
 
   try {
     const outcome: CommandOutcome = await bus.runTool(call.name, args, context)
 
     if (outcome.kind === 'ok')
-      return { message: toolResult(call, outcome.data ?? { done: call.name }), acted: true }
+      return { message: toolResult(call, outcome.data ?? { done: call.name }), acted: true, refused: false }
 
     if (outcome.kind === 'refused')
-      return { message: toolResult(call, { error: outcome.message }), acted: false }
+      return { message: toolResult(call, { error: outcome.message }), acted: false, refused: true }
 
     return failed(outcome.error, outcome.message)
   }
@@ -101,7 +104,7 @@ export function djAgent(deps: {
       ]
       const toolContext: CommandContext = {
         ...context,
-        ui: { ...SILENT_UI, showQueue: async view => context.ui.showQueue(view) },
+        ui: { ...SILENT_UI, showQueue: context.ui.showQueue },
       }
 
       const instructions = () => buildConversationInstructions(
@@ -156,12 +159,14 @@ export function djAgent(deps: {
 
             if (remainingBudget() === null) {
               exchange.push(toolResult(call, { error: TIMEOUT_RESULT }))
+              input.onRefused?.()
 
               continue
             }
 
             if (callsThisRound > MAX_TOOL_CALLS_PER_ROUND || toolCalls >= MAX_TOOL_CALLS) {
               exchange.push(toolResult(call, { error: CAP_RESULT }))
+              input.onRefused?.()
 
               continue
             }
@@ -177,6 +182,10 @@ export function djAgent(deps: {
             const outcome = await resolveToolCall(call, callContext, deps.bus, deps.logger)
 
             acted ||= outcome.acted
+
+            if (outcome.refused)
+              input.onRefused?.()
+
             exchange.push(outcome.message)
           }
         }

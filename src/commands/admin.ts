@@ -38,7 +38,6 @@ export const setChannel: CommandSpec = {
   name: 'set_channel',
   description: 'Set the text channel where the bot listens. Use it only when the user\'s own message mentions exactly one channel for the bot.',
   parameters: EMPTY_PARAMETERS,
-  modelTool: true,
   fastRoute: false,
   ack: false,
   authorize(context) {
@@ -86,7 +85,6 @@ export const setPersona: CommandSpec = {
     },
     required: ['persona'],
   },
-  modelTool: true,
   fastRoute: false,
   authorize(context) {
     requirePermission(context, PermissionFlagsBits.ManageGuild, MESSAGES.personaPermission)

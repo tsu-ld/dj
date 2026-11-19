@@ -1,6 +1,7 @@
 import type { AppConfig } from '../config.ts'
 import type { Logger } from '../core/logger.ts'
 import { Client, Events, GatewayIntentBits } from 'discord.js'
+import { errorMessage } from '../core/errors.ts'
 
 const INTENTS = [
   GatewayIntentBits.Guilds,
@@ -8,6 +9,50 @@ const INTENTS = [
   GatewayIntentBits.MessageContent,
   GatewayIntentBits.GuildVoiceStates,
 ]
+
+const GATEWAY_URL = 'https://discord.com/api/v10/gateway'
+const GATEWAY_PROBE_TIMEOUT_MS = 5_000
+export const GATEWAY_RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000]
+
+export interface GatewayProbe {
+  readonly fetch: (url: string, init: { signal: AbortSignal }) => Promise<{ ok: boolean }>
+  readonly sleep: (milliseconds: number) => Promise<void>
+  readonly logger: Logger
+  readonly signal?: AbortSignal
+}
+
+// A user unit starts before the network is up (network-online.target does not
+// apply to it), and a failed login destroys the client's gateway manager for
+// good. So the one login waits for Discord's unauthenticated gateway endpoint;
+// past the budget it logs in anyway and a failure restarts the process.
+export async function waitForGateway(probe: GatewayProbe): Promise<boolean> {
+  // read on every call: the stop can land while a probe or a sleep is pending
+  const stopped = (): boolean => probe.signal?.aborted === true
+
+  for (let attempt = 0; ; attempt++) {
+    if (stopped())
+      return false
+
+    try {
+      const signals = [AbortSignal.timeout(GATEWAY_PROBE_TIMEOUT_MS), ...(probe.signal ? [probe.signal] : [])]
+      const response = await probe.fetch(GATEWAY_URL, { signal: AbortSignal.any(signals) })
+
+      if (response.ok)
+        return true
+    }
+    catch (error) {
+      probe.logger.debug('discord.gateway_probe_failed', { attempt, error: errorMessage(error) })
+    }
+
+    const delay = GATEWAY_RETRY_DELAYS_MS[attempt]
+
+    if (delay === undefined || stopped())
+      return false
+
+    probe.logger.warn('discord.gateway_unreachable', { attempt: attempt + 1, retryInMs: delay })
+    await probe.sleep(delay)
+  }
+}
 
 // Mentions are disabled by default for every message the bot sends: an
 // untrusted song title must never ping a role or a person.

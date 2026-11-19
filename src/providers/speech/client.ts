@@ -1,10 +1,10 @@
 import type { ProviderFailure } from '../../core/errors.ts'
 import { ProviderError } from '../../core/errors.ts'
 import { isRecord, parseJson } from '../../core/json.ts'
+import { MAX_ERROR_BODY } from '../http-failure.ts'
 
 const API_BASE = 'https://api.elevenlabs.io/v1'
 const OUTPUT_FORMAT = 'mp3_44100_128'
-const MAX_ERROR_BODY = 300
 
 // The API answers {"detail": {"code": ..., "status": ...}} on failures; the
 // codes are the only reliable way to tell a rejected key from an empty quota.
@@ -63,7 +63,7 @@ export class SpeechRequestError extends ProviderError {
   readonly detail: unknown
 
   constructor(status: number, body: string, detail: unknown) {
-    super('speech', `Speech service responded ${status}: ${body.slice(0, MAX_ERROR_BODY)}`, {
+    super(`Speech service responded ${status}: ${body.slice(0, MAX_ERROR_BODY)}`, {
       failure: failureFor(status, detail),
       status,
     })

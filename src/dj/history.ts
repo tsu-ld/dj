@@ -27,15 +27,14 @@ export function trimToWholeExchanges(messages: readonly ChatMessage[]): ChatMess
 export interface ConversationHistory {
   recall: (channelId: string, userId: string | null) => readonly ChatMessage[]
   remember: (channelId: string, userId: string | null, messages: readonly ChatMessage[]) => void
-  size: () => number
 }
 
 // The history belongs to one dj agent, not to the module: two bots in one
 // process must never see each other's conversations.
-export function conversationHistory(options: { clock: Clock, maxConversations?: number }): ConversationHistory {
+export function conversationHistory(options: { clock: Clock }): ConversationHistory {
   const entries = ttlMap<string, readonly ChatMessage[]>({
     ttlMs: HISTORY_IDLE_MS,
-    max: options.maxConversations ?? MAX_CONVERSATIONS,
+    max: MAX_CONVERSATIONS,
     now: () => options.clock.now(),
   })
 
@@ -45,9 +44,6 @@ export function conversationHistory(options: { clock: Clock, maxConversations?: 
     },
     remember(channelId, userId, messages) {
       entries.set(conversationKey(channelId, userId), trimToWholeExchanges(messages))
-    },
-    size() {
-      return entries.size()
     },
   }
 }
