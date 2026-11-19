@@ -3,7 +3,7 @@ import type { DisTube } from 'distube'
 import { expect, test } from 'bun:test'
 import { Song } from 'distube'
 import { MusicCatalog } from '../catalog.ts'
-import { extractionStub, log, memberOf, streamStub } from './helpers.ts'
+import { extractionStub, log, memberOf, streamStub } from './fakes.ts'
 
 const MIX = [
   { id: 'remaster', title: 'The Chain (2004 Remaster)', channel: 'Fleetwood Mac - Topic' },

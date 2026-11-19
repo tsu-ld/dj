@@ -3,7 +3,7 @@ import type { AudioCache } from '../cache.ts'
 import { expect, test } from 'bun:test'
 import { Song } from 'distube'
 import { directStreamUrl, isUrlFresh, streamResolver, streamWithDjLine, urlExpiresAt } from '../stream.ts'
-import { extractionStub, log, rejection } from './helpers.ts'
+import { extractionStub, log, rejection } from './fakes.ts'
 
 function song(overrides: { id?: string, url?: string, isLive?: boolean } = {}): Song {
   return new Song({

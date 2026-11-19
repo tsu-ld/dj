@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 import { audioOverMusic } from '../welcome.ts'
-import { log, tempDir } from './helpers.ts'
+import { log, tempDir } from './fakes.ts'
 
 interface FakePlayer extends AudioPlayerLike {
   readonly pauses: number

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { Playlist, Song } from 'distube'
 import { MESSAGES } from '../../../messages.ts'
 import { MusicCatalog } from '../catalog.ts'
-import { extractionStub, log, memberOf, rejection, streamStub } from './helpers.ts'
+import { extractionStub, log, memberOf, rejection, streamStub } from './fakes.ts'
 
 function catalogWith(
   json: (url: string, flags?: readonly string[]) => Promise<unknown> = async () => ({}),

@@ -7,7 +7,7 @@ import { MESSAGES } from '../../../messages.ts'
 import { MusicCatalog } from '../catalog.ts'
 import { musicPlay } from '../play.ts'
 import { assertYoutubeUrl } from '../policy.ts'
-import { extractionStub, log, memberOf, rejection, streamStub } from './helpers.ts'
+import { extractionStub, log, memberOf, rejection, streamStub } from './fakes.ts'
 
 function station(resolve: (input: string) => void): { play: ReturnType<typeof musicPlay>, calls: string[] } {
   const calls: string[] = []
