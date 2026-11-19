@@ -254,6 +254,7 @@ export function fakeSlot(): SlotRecorder {
     disposed: () => disposed,
     trackStarted: () => {},
     stateChanged: () => {},
+    queueChanged: () => {},
     playlistQueued: () => {},
     queueCleared: () => {},
     async showQueue(view, channel) {

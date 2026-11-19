@@ -582,10 +582,13 @@ describe('beforeStream', () => {
     await host.beforeStream({ guildId: 'g1', view: at(6) })
     await waitFor(() => model.requests.length === 6)
 
-    const prepared = model.requests[5]?.instructions ?? ''
+    const long = model.requests[4]?.instructions ?? ''
+    const short = model.requests[5]?.instructions ?? ''
 
-    expect(prepared).toContain('two sentences')
-    expect(prepared).toContain('Playing now: H')
+    expect(long).toContain('two sentences')
+    expect(long).toContain('Playing now: G')
+    expect(short).not.toContain('two sentences')
+    expect(short).toContain('Playing now: H')
 
     await host.dispose()
   })

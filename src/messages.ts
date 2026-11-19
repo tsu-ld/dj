@@ -1,5 +1,6 @@
 export const MESSAGES = {
   joinVoiceChannel: 'Please join a voice channel first to play something.',
+  sameVoiceChannel: 'Join my voice channel to control the music.',
   stageChannelPermissions: 'I can\'t play in stage channels. Use a regular voice channel instead.',
   botPermissions: 'I need permissions to join and speak in your voice channel.',
   noResult: 'Sorry, I couldn\'t find any song matching your query.',

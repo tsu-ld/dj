@@ -156,8 +156,8 @@ export function onAirStation(deps: { clock: Clock }): Station {
       }
     },
     // A real station opens with a proper rant and then keeps the song intros
-    // short; every fifth line gets long again so it does not become background
-    // noise.
+    // short; every second line gets long again so it does not become
+    // background noise.
     shouldUseLongLine(guildId) {
       return (lines.get(guildId) ?? 0) % RADIO_LONG_EVERY === 0
     },

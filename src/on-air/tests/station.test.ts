@@ -28,7 +28,7 @@ function fakeClock(start = 1_000_000): TestClock {
 }
 
 describe('cadence', () => {
-  test('the first line and every fifth after it are long', () => {
+  test('the first line and every second after it are long', () => {
     const station = onAirStation({ clock: fakeClock() })
     const long: boolean[] = []
 
@@ -37,7 +37,7 @@ describe('cadence', () => {
       station.recordLine('g1')
     }
 
-    expect(long).toEqual([true, false, false, false, false, true])
+    expect(long).toEqual([true, false, true, false, true, false])
   })
 
   test('a line that never aired does not use up the long slot', () => {

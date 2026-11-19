@@ -9,7 +9,7 @@ import { withTimeout } from './core/async.ts'
 import { systemClock } from './core/clock.ts'
 import { errorMessage } from './core/errors.ts'
 import { logger as createLogger } from './core/logger.ts'
-import { discordClient } from './discord/client.ts'
+import { discordClient, waitForGateway } from './discord/client.ts'
 import { interactionHandler } from './discord/interactions.ts'
 import { messageHandler } from './discord/messages.ts'
 import { messageSlot } from './discord/slot.ts'
@@ -45,7 +45,6 @@ export async function createApp(config: AppConfig): Promise<App> {
     : null
   const decision = intentClassifier({ config: config.decision, logger: log, clock })
   const speech = speechSynthesizer({ config: config.speech, logger: log, clock })
-  const slot = messageSlot({ logger: log })
   const replies = djReplies({ model, logger: log })
   const announcements = djAnnouncements({ replies, settings, clock })
 
@@ -65,6 +64,7 @@ export async function createApp(config: AppConfig): Promise<App> {
     },
   })
 
+  const slot = messageSlot({ logger: log, playback: guildId => music.status(guildId) })
   const facts = songFacts({ logger: log })
   const listeners = await listenersStore({ path: config.listenersPath, logger: log })
   const host = onAirHost({ music, speech, model, settings, facts, listeners, logger: log, clock })
@@ -91,6 +91,7 @@ export async function createApp(config: AppConfig): Promise<App> {
     music.on('trackQueued', (payload) => {
       announcements.trackQueued(payload)
       host.trackQueued(payload)
+      slot.queueChanged(payload)
     }),
     music.on('playlistQueued', (payload) => {
       announcements.playlistQueued(payload)
@@ -148,6 +149,7 @@ export async function createApp(config: AppConfig): Promise<App> {
 
   let started = false
   let stopped = false
+  const stopping = new AbortController()
 
   return {
     logger: log,
@@ -158,6 +160,24 @@ export async function createApp(config: AppConfig): Promise<App> {
       started = true
       log.info('app.starting')
 
+      await waitForGateway({
+        fetch: async (url, init) => fetch(url, init),
+        // A stop during the wait ends the sleep, so shutdown never waits on it.
+        sleep: async milliseconds => new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, milliseconds)
+
+          stopping.signal.addEventListener('abort', () => {
+            clearTimeout(timer)
+            resolve()
+          }, { once: true })
+        }),
+        logger: log,
+        signal: stopping.signal,
+      })
+
+      if (stopped)
+        return
+
       await client.login()
       log.info('app.started', { user: client.user?.tag ?? null })
     },
@@ -166,6 +186,7 @@ export async function createApp(config: AppConfig): Promise<App> {
         return
 
       stopped = true
+      stopping.abort()
       log.info('app.stopping')
 
       for (const off of detach) {

@@ -1,8 +1,10 @@
 import type { GuildTextBasedChannel, Message } from 'discord.js'
 import type { Logger } from '../core/logger.ts'
-import type { QueueView } from '../ports/music.ts'
+import type { PlaybackStatus, QueueView } from '../ports/music.ts'
 import { keyedQueue } from '../core/async.ts'
+import { errorMessage } from '../core/errors.ts'
 import { NOW_PLAYING_REPOST_MS } from '../limits.ts'
+import { isDeletedMessage, isPastEditWindow, progressTimers } from './progress.ts'
 import { nowPlayingMessage, queueMessage } from './views.ts'
 
 export interface SlotPayload {
@@ -14,6 +16,7 @@ export interface SlotPayload {
 export interface MessageSlot {
   trackStarted: (payload: SlotPayload) => void
   stateChanged: (payload: SlotPayload) => void
+  queueChanged: (payload: SlotPayload) => void
   playlistQueued: (payload: SlotPayload) => void
   queueCleared: (payload: { readonly guildId: string }) => void
   showQueue: (view: QueueView, textChannel: GuildTextBasedChannel) => Promise<void>
@@ -34,17 +37,16 @@ interface ViewState {
 // The now-playing and queue cards are the bot's only long-lived messages. This
 // object owns their ids, their writes and their timers per guild: music events
 // and the message handler only hand it a snapshot.
-export function messageSlot(deps: { logger: Logger }): MessageSlot {
+export function messageSlot(deps: {
+  logger: Logger
+  playback?: (guildId: string) => PlaybackStatus | null
+}): MessageSlot {
   const nowPlaying = new Map<string, Card>()
   const queueCards = new Map<string, Message>()
   const latest = new Map<string, ViewState>()
   const repostTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const writes = keyedQueue()
   let disposed = false
-
-  function report(event: string, error: unknown, fields?: Record<string, unknown>): void {
-    deps.logger.error(event, error, fields)
-  }
 
   async function deleteCard(message: Message, label: string): Promise<void> {
     if (!message.deletable)
@@ -54,7 +56,7 @@ export function messageSlot(deps: { logger: Logger }): MessageSlot {
       await message.delete()
     }
     catch (error) {
-      report('discord.card_delete_failed', error, { label })
+      deps.logger.error('discord.card_delete_failed', error, { label })
     }
   }
 
@@ -83,10 +85,16 @@ export function messageSlot(deps: { logger: Logger }): MessageSlot {
     if (!state)
       return
 
-    const payload = nowPlayingMessage(state.view)
+    const status = deps.playback?.(guildId) ?? null
+    // a song that just started is still buffering, which the player calls idle
+    const payload = nowPlayingMessage(state.view, status === null ? null : status.state === 'idle' ? 0 : status.playbackDurationMs)
 
     if (!payload)
       return
+
+    // a long run replaces its card before Discord stops accepting edits to it
+    if (isPastEditWindow(nowPlaying.get(guildId)?.message, Date.now()))
+      await deleteNowPlaying(guildId)
 
     const card = nowPlaying.get(guildId)
 
@@ -97,7 +105,7 @@ export function messageSlot(deps: { logger: Logger }): MessageSlot {
         return
       }
       catch (error) {
-        report('discord.now_playing_edit_failed', error)
+        deps.logger.error('discord.now_playing_edit_failed', error)
 
         if (nowPlaying.get(guildId) === card)
           nowPlaying.delete(guildId)
@@ -107,6 +115,27 @@ export function messageSlot(deps: { logger: Logger }): MessageSlot {
     const sent = await state.textChannel.send(payload)
 
     nowPlaying.set(guildId, { message: sent, channelId: state.textChannel.id })
+  }
+
+  // Write lock held. A tick only edits the card where it is, never posts one.
+  async function repaintNowPlaying(guildId: string): Promise<void> {
+    const card = nowPlaying.get(guildId)
+    const state = latest.get(guildId)
+    const status = deps.playback?.(guildId) ?? null
+    const payload = state && status ? nowPlayingMessage(state.view, status.playbackDurationMs) : null
+
+    if (!card || !payload)
+      return
+
+    try {
+      await card.message.edit(payload)
+    }
+    catch (error) {
+      deps.logger.warn('discord.progress_edit_failed', { error: errorMessage(error) })
+
+      if (isDeletedMessage(error) && nowPlaying.get(guildId) === card)
+        nowPlaying.delete(guildId)
+    }
   }
 
   function clearRepostTimer(guildId: string): void {
@@ -137,9 +166,38 @@ export function messageSlot(deps: { logger: Logger }): MessageSlot {
 
         await deleteNowPlaying(guildId)
         await writeNowPlaying(guildId)
-      }).catch(error => report('discord.now_playing_repost_failed', error))
+      }).catch(error => deps.logger.error('discord.now_playing_repost_failed', error))
     }, NOW_PLAYING_REPOST_MS))
   }
+
+  // Assumes the guild's write lock is held. The queue order just changed, so the
+  // card goes back to page 1, where the playing song is.
+  async function redrawQueueCard(guildId: string): Promise<void> {
+    const message = queueCards.get(guildId)
+    const state = latest.get(guildId)
+
+    if (!message || !state)
+      return
+
+    try {
+      await message.edit(queueMessage(state.view, 1))
+    }
+    catch (error) {
+      deps.logger.error('discord.queue_card_edit_failed', error)
+
+      if (queueCards.get(guildId) === message)
+        queueCards.delete(guildId)
+    }
+  }
+
+  const progress = progressTimers({
+    enabled: deps.playback !== undefined,
+    playing: guildId => deps.playback?.(guildId)?.state === 'playing',
+    repaint: (guildId) => {
+      void writes.run(guildId, async () => repaintNowPlaying(guildId))
+        .catch(error => deps.logger.error('discord.progress_failed', error))
+    },
+  })
 
   function update(payload: SlotPayload): void {
     const { guildId, view, textChannel } = payload
@@ -148,9 +206,24 @@ export function messageSlot(deps: { logger: Logger }): MessageSlot {
       return
 
     latest.set(guildId, { view, textChannel })
+    progress.sync(guildId, view)
 
-    void writes.run(guildId, async () => writeNowPlaying(guildId))
-      .catch(error => report('discord.now_playing_failed', error))
+    void writes.run(guildId, async () => {
+      await redrawQueueCard(guildId)
+      await writeNowPlaying(guildId)
+    }).catch(error => deps.logger.error('discord.now_playing_failed', error))
+  }
+
+  // One song added: only a visible queue card changes.
+  function queueChanged({ guildId, view }: SlotPayload): void {
+    const state = latest.get(guildId)
+
+    if (!state || !queueCards.has(guildId))
+      return
+
+    latest.set(guildId, { view, textChannel: state.textChannel })
+    void writes.run(guildId, async () => redrawQueueCard(guildId))
+      .catch(error => deps.logger.error('discord.queue_card_failed', error))
   }
 
   function playlistQueued(payload: SlotPayload): void {
@@ -167,7 +240,7 @@ export function messageSlot(deps: { logger: Logger }): MessageSlot {
       const sent = await textChannel.send(queueMessage(view, 1))
 
       queueCards.set(guildId, sent)
-    }).then(() => scheduleRepost(guildId)).catch(error => report('discord.queue_card_failed', error))
+    }).then(() => scheduleRepost(guildId)).catch(error => deps.logger.error('discord.queue_card_failed', error))
   }
 
   async function showQueue(view: QueueView, textChannel: GuildTextBasedChannel): Promise<void> {
@@ -199,12 +272,13 @@ export function messageSlot(deps: { logger: Logger }): MessageSlot {
 
   function queueCleared({ guildId }: { readonly guildId: string }): void {
     clearRepostTimer(guildId)
+    progress.stop(guildId)
     latest.delete(guildId)
 
     void writes.run(guildId, async () => {
       await deleteNowPlaying(guildId)
       await deleteQueueCard(guildId)
-    }).catch(error => report('discord.clear_cards_failed', error))
+    }).catch(error => deps.logger.error('discord.clear_cards_failed', error))
   }
 
   function dispose(): void {
@@ -213,9 +287,10 @@ export function messageSlot(deps: { logger: Logger }): MessageSlot {
     for (const timer of repostTimers.values())
       clearTimeout(timer)
 
+    progress.dispose()
     repostTimers.clear()
     latest.clear()
   }
 
-  return { trackStarted: update, stateChanged: update, playlistQueued, queueCleared, showQueue, repost, dispose }
+  return { trackStarted: update, stateChanged: update, queueChanged, playlistQueued, queueCleared, showQueue, repost, dispose }
 }

@@ -303,6 +303,30 @@ describe('nowPlayingMessage', () => {
   test('a card without a current song is not rendered', () => {
     expect(nowPlayingMessage(view({ current: null, size: 0 }))).toBeNull()
   })
+
+  test('the elapsed time and a progress bar follow the status line', () => {
+    const message = nowPlayingMessage(view({ current: track({ title: 'Mix', durationSeconds: 200 }) }), 50_000)
+    const header = message ? textMatching(message, /^## /) : undefined
+
+    expect(header).toBe('## [Mix](https://youtu.be/1)\n**Playing** · 3:20 · Requested by tsu\n▰▰▰▱▱▱▱▱▱▱▱▱ `0:50 / 3:20`')
+  })
+
+  test('the elapsed time is clamped to the song and hours are shown', () => {
+    const long = nowPlayingMessage(view({ current: track({ durationSeconds: 3_725 }) }), 3_725_000 + 9_000)
+    const early = nowPlayingMessage(view({ current: track({ durationSeconds: 180 }) }), -5)
+
+    expect(long ? textMatching(long, /1:02:05 \/ 1:02:05/) : undefined).toContain('▰▰▰▰▰▰▰▰▰▰▰▰')
+    expect(early ? textMatching(early, /0:00 \/ 3:00/) : undefined).toContain('▱▱▱▱▱▱▱▱▱▱▱▱')
+  })
+
+  test('a live or unknown-length song has no progress line', () => {
+    const live = card(view({ current: track({ isLive: true }) }))
+    const unknown = nowPlayingMessage(view({ current: track({ durationSeconds: 0 }) }), 10_000)
+    const live2 = nowPlayingMessage(view({ current: track({ isLive: true }) }), 10_000)
+
+    for (const message of [live, unknown, live2])
+      expect(message ? textMatching(message, / \/ /) : 'missing').toBeUndefined()
+  })
 })
 
 describe('noticeMessage', () => {

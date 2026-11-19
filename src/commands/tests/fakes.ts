@@ -38,10 +38,15 @@ export function fakeVoice(id = 'voice-1'): VoiceBasedChannel {
   return { id } as unknown as VoiceBasedChannel
 }
 
-export function fakeMember(options: { allowed?: boolean, voiceChannel?: VoiceBasedChannel | null } = {}): GuildMember {
+export function fakeMember(options: { allowed?: boolean, voiceChannel?: VoiceBasedChannel | null, botVoiceChannel?: VoiceBasedChannel | null } = {}): GuildMember {
   return {
     permissions: { has: () => options.allowed ?? true },
     voice: { channel: options.voiceChannel ?? null },
+    guild: {
+      members: {
+        me: { voice: { channelId: options.botVoiceChannel?.id ?? null } },
+      },
+    },
   } as unknown as GuildMember
 }
 

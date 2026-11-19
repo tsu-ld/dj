@@ -3,6 +3,7 @@ import { UserError } from '../core/errors.ts'
 import { isPositionInQueue } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
 import { EMPTY_PARAMETERS } from './parameters.ts'
+import { requireSameVoiceChannel } from './voice.ts'
 
 const POSITION = /(?:^|\s)(\d{1,3})(?=\s|$)/
 
@@ -35,6 +36,7 @@ export const remove: CommandSpec = {
     required: ['position'],
   },
   requiresQueue: true,
+  authorize: requireSameVoiceChannel,
   parse(text, context) {
     const match = POSITION.exec(text)
     const raw = match?.[1]
@@ -66,6 +68,7 @@ export const clear: CommandSpec = {
   requiresQueue: true,
   // The button path renders its own confirmation; a text path needs an answer
   // more explicit than the generic ack reaction.
+  authorize: requireSameVoiceChannel,
   confirm: (_data, context) => context.message === null ? null : MESSAGES.cleared,
   async run(_args, context) {
     await context.services.music.stop(context.guildId, { resetStation: true })

@@ -1,12 +1,14 @@
 import type { CommandSpec } from './spec.ts'
 import { MESSAGES } from '../messages.ts'
 import { EMPTY_PARAMETERS } from './parameters.ts'
+import { requireSameVoiceChannel } from './voice.ts'
 
 export const pause: CommandSpec = {
   name: 'pause',
   description: 'Pause the music that is playing. Users say: pausá, pará, pausa, hold on.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
+  authorize: requireSameVoiceChannel,
   async run(_args, context) {
     if (!context.queue?.paused)
       await context.services.music.pause(context.guildId)
@@ -20,6 +22,7 @@ export const resume: CommandSpec = {
   description: 'Resume the music that is paused. Users say: seguí, continuá, reanudá, dale, play.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
+  authorize: requireSameVoiceChannel,
   async run(_args, context) {
     if (context.queue?.paused)
       await context.services.music.resume(context.guildId)
@@ -38,6 +41,7 @@ export const toggle: CommandSpec = {
   modelTool: false,
   fastRoute: false,
   ack: false,
+  authorize: requireSameVoiceChannel,
   async run(_args, context) {
     const paused = await context.services.music.toggle(context.guildId)
 
@@ -50,6 +54,7 @@ export const skip: CommandSpec = {
   description: 'Skip the song that is playing now and play the next one. Users say: saltéala, pasá a la siguiente, poné otra, pasá otra, skipeá, skipeate, skipeá esto, che skipeate esto, skipealo, skipeala, next, skip.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
+  authorize: requireSameVoiceChannel,
   async run(_args, context) {
     const skipped = context.queue?.current?.title ?? null
 
@@ -64,6 +69,7 @@ export const shuffle: CommandSpec = {
   description: 'Shuffle the songs that are waiting in the queue. Users say: mezclá, shuffle, random.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
+  authorize: requireSameVoiceChannel,
   async run(_args, context) {
     await context.services.music.shuffle(context.guildId)
 
@@ -76,6 +82,7 @@ export const radio: CommandSpec = {
   description: 'Turn the radio on or off: when it is on, related songs keep playing after the queue runs dry. Users say: prendé la radio, apagá la radio, modo radio.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
+  authorize: requireSameVoiceChannel,
   confirm: data => typeof data?.radio === 'boolean'
     ? (data.radio ? MESSAGES.radioEnabled : MESSAGES.radioDisabled)
     : null,

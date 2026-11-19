@@ -1,14 +1,24 @@
-import type { ResolveOptions } from 'distube'
+import type { DisTube, ResolveOptions } from 'distube'
 import type { Logger } from '../../core/logger.ts'
 import type { Track } from '../../ports/music.ts'
 import type { Extractor } from './extraction.ts'
 import type { StreamResolver } from './stream.ts'
 import { ExtractorPlugin, Playlist, Song } from 'distube'
+import { errorMessage } from '../../core/errors.ts'
 import { isRecord } from '../../core/json.ts'
 import { MAX_PLAYLIST_SONGS } from '../../limits.ts'
 import { assertYoutubeUrl, liveError } from './policy.ts'
+import { recentTitles, sameSong, titleKeys } from './titles.ts'
 
-const RELATED_SONGS_LIMIT = 10
+// a mix repeats itself around the songs just played; read far enough into it
+const RELATED_FETCH_LIMIT = 25
+
+// The song autoplay relates to; its member names the guild.
+interface RelatedSeed {
+  readonly id?: string
+  readonly name?: string
+  readonly member?: { readonly guild: { readonly id: string } }
+}
 
 function idOf(info: Record<string, unknown>): string | null {
   const id = info.id
@@ -90,6 +100,8 @@ export class MusicCatalog extends ExtractorPlugin {
   // The artist of the songs this catalog built; a Spotify song carries its own
   // artists in the uploader instead.
   readonly #artists = new WeakMap<object, string | null>()
+  readonly #recent = recentTitles()
+  #player: DisTube | null = null
 
   constructor(deps: { extraction: Extractor, stream: StreamResolver, logger: Logger }) {
     super()
@@ -105,7 +117,12 @@ export class MusicCatalog extends ExtractorPlugin {
     return true
   }
 
-  override async getRelatedSongs(song: { readonly id?: string }): Promise<Song[]> {
+  override init(distube: DisTube): void {
+    super.init(distube)
+    this.#player = distube
+  }
+
+  override async getRelatedSongs(song: RelatedSeed): Promise<Song[]> {
     if (song.id === undefined || song.id === '')
       return []
 
@@ -113,12 +130,17 @@ export class MusicCatalog extends ExtractorPlugin {
       // RD<id> is YouTube's mix (radio) playlist for that video.
       const info = infoRecord(await this.#extraction.json(
         `https://www.youtube.com/watch?v=${song.id}&list=RD${song.id}`,
-        ['--flat-playlist', '--playlist-end', String(RELATED_SONGS_LIMIT)],
+        ['--flat-playlist', '--playlist-end', String(RELATED_FETCH_LIMIT)],
       ))
-
-      return recordsOf(info.entries)
+      const heard = this.#heard(song)
+      const playable = recordsOf(info.entries)
         .filter(entry => idOf(entry) !== null && idOf(entry) !== song.id && !isLiveInfo(entry))
-        .slice(0, RELATED_SONGS_LIMIT)
+      const fresh = playable.filter(entry => !sameSong(stringOf(entry, 'title') ?? '', heard))
+
+      // The engine plays the first entry whose id did not play this session.
+      // Unheard titles go first; the rest stay behind them so a long radio run
+      // replays a song instead of running dry and leaving the channel.
+      return [...fresh, ...playable.filter(entry => !fresh.includes(entry))]
         .map(entry => this.buildSong(entry, {}, true))
     }
     catch (error) {
@@ -128,11 +150,37 @@ export class MusicCatalog extends ExtractorPlugin {
     }
   }
 
+  // What the guild just played or has queued, which the mix may offer again
+  // under another upload.
+  #heard(song: RelatedSeed): Set<string> {
+    const guildId = song.member?.guild.id
+    const queued = guildId === undefined ? [] : this.#player?.getQueue(guildId)?.songs ?? []
+    const titles = [
+      song.name,
+      ...guildId === undefined ? [] : this.#recent.of(guildId),
+      ...queued.flatMap(entry => [entry.name, entry.stream.playFromSource ? undefined : entry.stream.song?.name]),
+    ]
+
+    return new Set(titles.flatMap(title => title === undefined ? [] : titleKeys(title)))
+  }
+
+  // YouTube Music's song shelf holds only catalogue tracks with a credited
+  // artist; plain YouTube is the fallback for what is not on it (covers,
+  // memes, live cuts) or when that search breaks.
   override async searchSong<T>(query: string, options: ResolveOptions<T>): Promise<Song<T> | null> {
-    const info = infoRecord(await this.#extraction.json(`ytsearch1:${query}`, ['--no-playlist']))
-    const first = recordsOf(info.entries)[0]
+    const songs = `https://music.youtube.com/search?${new URLSearchParams({ q: query }).toString()}#songs`
+    const song = await this.#firstEntry(songs, ['--playlist-end', '1']).catch((error: unknown) => {
+      this.#logger.warn('music.song_search_failed', { error: errorMessage(error) })
+
+      return undefined
+    })
+    const first = song ?? await this.#firstEntry(`ytsearch1:${query}`, ['--no-playlist'])
 
     return first ? this.buildSong(first, options) : null
+  }
+
+  async #firstEntry(url: string, flags: readonly string[]): Promise<Record<string, unknown> | undefined> {
+    return recordsOf(infoRecord(await this.#extraction.json(url, flags)).entries)[0]
   }
 
   override async resolve<T>(url: string, options: ResolveOptions<T>): Promise<Song<T> | Playlist<T>> {
@@ -181,6 +229,11 @@ export class MusicCatalog extends ExtractorPlugin {
   override async getStreamURL<T>(song: Song<T>): Promise<string> {
     if (song.isLive)
       throw liveError()
+
+    const guildId = song.member?.guild.id
+
+    if (guildId !== undefined && song.name !== undefined)
+      this.#recent.add(guildId, song.name)
 
     return this.#stream.playableUrl(song)
   }

@@ -113,7 +113,7 @@ explicit state enum: two in-flight sets (generating, airing) and the station's
 counters decide what happens next.
 
 - cadence: one requested song in three is silent, autoplay speaks one in three,
-  every fifth line is long, the first line is long;
+  every second line is long, the first line is long;
 - the station keeps the last eight songs for half an hour; the prompt carries the
   song number, the last four, the next two or three, who asked, and the request
   streak on long lines. A short line names the run (who asked, what just played,

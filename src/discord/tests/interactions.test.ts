@@ -7,7 +7,7 @@ import { describe, expect, test } from 'bun:test'
 import { ComponentType, MessageFlags } from 'discord.js'
 import { commandBus } from '../../commands/bus.ts'
 import { commands } from '../../commands/index.ts'
-import { fakeMusic, fakeSettings, log, track, view } from '../../commands/tests/fakes.ts'
+import { fakeMember, fakeMusic, fakeSettings, fakeVoice, log, track, view } from '../../commands/tests/fakes.ts'
 import { UserError } from '../../core/errors.ts'
 import { MESSAGES } from '../../messages.ts'
 import { interactionHandler } from '../interactions.ts'
@@ -94,6 +94,18 @@ describe('now-playing buttons', () => {
     expect(recorder.deferredUpdates()).toBe(1)
     expect(editContent(recorder.editReplies[0])).toBe(MESSAGES.cleared)
     expect(calls).toEqual([['123456789012345678', { resetStation: true }]])
+  })
+
+  test('a refused clear says why once and only closes the prompt', async () => {
+    const member = fakeMember({ voiceChannel: fakeVoice('7'), botVoiceChannel: fakeVoice('8') })
+    const recorder = fakeInteraction({ customId: 'nc:clear:yes', member })
+    const { handler, music } = setup({ music: fakeMusic({ view: () => view() }) })
+
+    await handler(recorder.interaction)
+
+    expect(music.calls).not.toContain('stop')
+    expect(recorder.editReplies.map(editContent)).not.toContain(MESSAGES.sameVoiceChannel)
+    expect(JSON.stringify(recorder.followUps)).toContain(MESSAGES.sameVoiceChannel)
   })
 
   test('a failed confirmation edit does not report the clear as failed', async () => {

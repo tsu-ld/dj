@@ -127,18 +127,15 @@ async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction
 
   const outcome = await deps.bus.run('clear', {}, interactionContext(deps, interaction, guildId, member, channel, view))
 
-  if (outcome.kind === 'failed') {
-    // The bus already surfaced the generic error; only close the prompt.
+  if (outcome.kind !== 'ok') {
+    // The bus already surfaced the error or the refusal; only close the prompt.
     await interaction.editReply({ components: [] })
 
     return
   }
 
   try {
-    await interaction.editReply({
-      content: outcome.kind === 'ok' ? MESSAGES.cleared : outcome.message,
-      components: [],
-    })
+    await interaction.editReply({ content: MESSAGES.cleared, components: [] })
   }
   catch (error) {
     // The clear already happened; an expired prompt is not a failed command.

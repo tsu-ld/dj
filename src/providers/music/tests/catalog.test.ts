@@ -256,6 +256,46 @@ test('a search returns the first result', async () => {
   expect(song?.id).toBe('found')
 })
 
+test('a search returns the top song on youtube music, with its credited artist', async () => {
+  const calls: Array<{ url: string, flags: readonly string[] }> = []
+  const catalog = catalogWith(async (url, flags = []) => {
+    calls.push({ url, flags })
+
+    return { entries: [{ id: 'song', title: 'La Bestia Pop', artist: 'Patricio Rey y sus Redonditos de Ricota' }] }
+  })
+  const song = await catalog.searchSong('la bestia pop & más', {})
+
+  expect(calls).toEqual([{
+    url: 'https://music.youtube.com/search?q=la+bestia+pop+%26+m%C3%A1s#songs',
+    flags: ['--playlist-end', '1'],
+  }])
+  expect(song && catalog.trackOf(song).artist).toBe('Patricio Rey y sus Redonditos de Ricota')
+})
+
+test('a search youtube music has no song for falls back to youtube', async () => {
+  const urls: string[] = []
+  const catalog = catalogWith(async (url) => {
+    urls.push(url)
+
+    return url.startsWith('ytsearch1:') ? { entries: [{ id: 'video', title: 'Meme' }] } : { entries: [] }
+  })
+  const song = await catalog.searchSong('some meme', {})
+
+  expect(song?.id).toBe('video')
+  expect(urls).toEqual(['https://music.youtube.com/search?q=some+meme#songs', 'ytsearch1:some meme'])
+})
+
+test('a failed youtube music search falls back to youtube', async () => {
+  const catalog = catalogWith(async (url) => {
+    if (!url.startsWith('ytsearch1:'))
+      throw new Error('boom')
+
+    return { entries: [{ id: 'video', title: 'Tema' }] }
+  })
+
+  expect((await catalog.searchSong('tema', {}))?.id).toBe('video')
+})
+
 test('a search without results returns null', async () => {
   const catalog = catalogWith(async () => ({ entries: [] }))
 
