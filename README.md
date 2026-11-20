@@ -48,7 +48,7 @@ With a voice configured, the DJ speaks in the gap before a song starts. The song
 ### A card that keeps up
 
 <p align="center">
-  <img src="docs/assets/now-playing.png" alt="The now-playing card for Radiohead's Weird Fishes/Arpeggi: status, a progress bar, the next two songs and buttons for pause, skip, shuffle, radio, queue and leave, beside an original dithered spiral of fish" width="760">
+  <img src="docs/assets/now-playing.png" alt="The now-playing card for Radiohead's Weird Fishes/Arpeggi: status, a progress bar, the next two songs and buttons for pause, skip, shuffle, radio, queue and leave, beside a dithered In Rainbows cover" width="760">
 </p>
 
 One card per server shows:
