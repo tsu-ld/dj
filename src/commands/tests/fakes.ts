@@ -185,7 +185,6 @@ export interface MessageOptions {
   content?: string
   channels?: readonly { readonly id: string, readonly name?: string }[]
   fetchChannel?: (id: string) => unknown
-  me?: unknown
 }
 
 export function fakeMessage(options: MessageOptions = {}): Message {
@@ -197,7 +196,7 @@ export function fakeMessage(options: MessageOptions = {}): Message {
       users: new Map(),
     },
     guild: {
-      members: { me: options.me ?? {} },
+      members: { me: {} },
       channels: {
         async fetch(id: string) {
           if (options.fetchChannel)

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { artistMatches, cacheKey, containsWords, mentionsName, parseTitle, stripDecorations, titleMatches } from '../title.ts'
+import { cacheKey, containsWords, eitherContains, parseTitle, stripDecorations } from '../title.ts'
 
 describe('stripDecorations', () => {
   test('production notes in brackets are dropped', () => {
@@ -55,26 +55,26 @@ describe('parseTitle', () => {
   })
 })
 
-describe('artistMatches', () => {
+describe('eitherContains', () => {
   test('case and accents do not separate the same act', () => {
-    expect(artistMatches('Beyonce', 'Beyoncé')).toBe(true)
-    expect(artistMatches('DAFT PUNK', 'Daft Punk')).toBe(true)
+    expect(eitherContains('Beyonce', 'Beyoncé')).toBe(true)
+    expect(eitherContains('DAFT PUNK', 'Daft Punk')).toBe(true)
   })
 
   test('a longer billing still names the same act', () => {
-    expect(artistMatches('Calvin Harris feat. Rihanna', 'Calvin Harris')).toBe(true)
+    expect(eitherContains('Calvin Harris feat. Rihanna', 'Calvin Harris')).toBe(true)
   })
 
   test('a different act is a mismatch', () => {
-    expect(artistMatches('Dua Lipa', 'Daft Punk')).toBe(false)
-    expect(artistMatches('', 'Daft Punk')).toBe(false)
+    expect(eitherContains('Dua Lipa', 'Daft Punk')).toBe(false)
+    expect(eitherContains('', 'Daft Punk')).toBe(false)
   })
 })
 
-describe('mentionsName', () => {
+describe('containsWords', () => {
   test('a summary that names the artist is accepted', () => {
-    expect(mentionsName('One More Time is a song by the French duo Daft Punk.', 'Daft Punk')).toBe(true)
-    expect(mentionsName('One More Time is a song by Dua Lipa.', 'Daft Punk')).toBe(false)
+    expect(containsWords('One More Time is a song by the French duo Daft Punk.', 'Daft Punk')).toBe(true)
+    expect(containsWords('One More Time is a song by Dua Lipa.', 'Daft Punk')).toBe(false)
   })
 })
 
@@ -87,14 +87,14 @@ describe('cacheKey', () => {
 
 describe('word boundaries', () => {
   test('a name is not a prefix of another name', () => {
-    expect(artistMatches('Airbourne', 'Air')).toBe(false)
-    expect(artistMatches('Siamese', 'Sia')).toBe(false)
+    expect(eitherContains('Airbourne', 'Air')).toBe(false)
+    expect(eitherContains('Siamese', 'Sia')).toBe(false)
     expect(containsWords('Airbourne announced a tour', 'Air')).toBe(false)
     expect(containsWords('Air announced a tour', 'Air')).toBe(true)
   })
 
   test('a remaster suffix still names the same track', () => {
-    expect(titleMatches('The Chain', 'The Chain (2004 Remaster)')).toBe(true)
-    expect(titleMatches('Dreams', 'The Chain (2004 Remaster)')).toBe(false)
+    expect(eitherContains('The Chain', 'The Chain (2004 Remaster)')).toBe(true)
+    expect(eitherContains('Dreams', 'The Chain (2004 Remaster)')).toBe(false)
   })
 })

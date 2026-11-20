@@ -20,7 +20,7 @@ export function musicPlay(deps: {
 }): (request: PlayRequest) => Promise<PlayResult> {
   const { player, catalog, audio, mutations, logger } = deps
 
-  function mapPlayFailure(error: unknown, request: PlayRequest, text: boolean): UserError {
+  function mapPlayFailure(error: unknown, request: PlayRequest): UserError {
     if (error instanceof UserError)
       return error
 
@@ -39,7 +39,7 @@ export function musicPlay(deps: {
 
     // A text request that never created a queue leaves the bot sitting alone in
     // voice: a failed direct query disconnects. A dj batch keeps its connection.
-    if (text && !player.getQueue(request.voiceChannel.guild.id))
+    if (request.kind === 'text' && !player.getQueue(request.voiceChannel.guild.id))
       void request.voiceChannel.guild.members.me?.voice?.disconnect()
 
     return new UserError(MESSAGES.playbackError)
@@ -54,22 +54,14 @@ export function musicPlay(deps: {
       if (problem !== null)
         throw new UserError(problem)
 
-      const text = request.kind === 'text' && typeof request.value === 'string' ? request.value : null
-      const tracks: readonly string[] = request.kind === 'tracks' && Array.isArray(request.value)
-        ? request.value.filter((entry): entry is string => typeof entry === 'string')
-        : []
-
-      if (text === null && tracks.length === 0)
-        throw new UserError(MESSAGES.noResult)
-
-      if (text !== null) {
+      if (request.kind === 'text') {
         // Refused before the bot joins; the catalog's own check reaches the
         // same mapping through the SDK.
         try {
-          assertSupportedMusicUrl(text)
+          assertSupportedMusicUrl(request.value)
         }
         catch (error) {
-          throw mapPlayFailure(error, request, true)
+          throw mapPlayFailure(error, request)
         }
       }
 
@@ -81,14 +73,14 @@ export function musicPlay(deps: {
       const before = player.getQueue(guildId)?.songs.length ?? 0
 
       try {
-        if (text !== null) {
-          await player.play(request.voiceChannel, text, {
+        if (request.kind === 'text') {
+          await player.play(request.voiceChannel, request.value, {
             textChannel: request.textChannel,
             member: request.member,
           })
         }
         else {
-          const wanted = tracks.slice(0, queueRoom(player.getQueue(guildId)?.songs.length ?? 0))
+          const wanted = request.value.slice(0, queueRoom(player.getQueue(guildId)?.songs.length ?? 0))
 
           // All searches run in parallel, then the resolved playlist is added
           // with a single play() so the queue keeps the requested order and only
@@ -112,7 +104,7 @@ export function musicPlay(deps: {
         }
       }
       catch (error) {
-        throw mapPlayFailure(error, request, text !== null)
+        throw mapPlayFailure(error, request)
       }
 
       const queue = player.getQueue(guildId)

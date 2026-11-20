@@ -9,7 +9,6 @@ export interface StationSong {
   readonly title: string
   readonly artist: string | null
   readonly requestedBy: string | null
-  readonly requesterId: string | null
   readonly fromRadio: boolean
 }
 
@@ -55,7 +54,7 @@ export interface Station extends Pick<PreparedClips, 'preparedFor' | 'setPrepare
 
 // Every third requested song stays silent. Autoplay songs invert the cadence:
 // only one in three speaks, so the radio runs mostly music.
-export function shouldSpeak(index: number, fromRadio = false): boolean {
+export function shouldSpeak(index: number, fromRadio: boolean): boolean {
   return fromRadio ? index % RADIO_SPEAK_EVERY === 0 : index % RADIO_SILENT_EVERY !== 0
 }
 
@@ -93,7 +92,6 @@ export function onAirStation(deps: { clock: Clock }): Station {
         title: song.title,
         artist: song.artist,
         requestedBy: song.requestedBy,
-        requesterId: song.requesterId,
         fromRadio: song.fromRadio,
         skippedBy: null,
         at: clock.now(),

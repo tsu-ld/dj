@@ -48,7 +48,7 @@ test('a spotify playlist reaches the engine as a playlist of playable songs, cap
   expect(resolved).toBeInstanceOf(Playlist)
 
   if (!(resolved instanceof Playlist))
-    return
+    throw new Error('expected a playlist')
 
   expect(resolved.songs).toHaveLength(MAX_PLAYLIST_SONGS)
   expect(resolved.songs.every(song => song instanceof Song && song.stream.playFromSource === false)).toBe(true)

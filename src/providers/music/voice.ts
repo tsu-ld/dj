@@ -17,17 +17,14 @@ export interface VoiceChannelLike {
 
 // The same checks gate every path into the voice channel: a direct query or the
 // dj's own tool calls must not join where the bot cannot speak.
-export function voiceChannelProblem(
-  voiceChannel: VoiceChannelLike | null,
-  guild: GuildLike | undefined = voiceChannel?.guild,
-): string | null {
+export function voiceChannelProblem(voiceChannel: VoiceChannelLike | null): string | null {
   if (!voiceChannel)
     return MESSAGES.joinVoiceChannel
 
   if (voiceChannel.type === ChannelType.GuildStageVoice)
     return MESSAGES.stageChannelPermissions
 
-  const me = guild?.members.me
+  const me = voiceChannel.guild?.members.me
   const permissions = me === undefined || me === null ? null : voiceChannel.permissionsFor(me)
 
   if (permissions === null || !permissions.has([PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]))

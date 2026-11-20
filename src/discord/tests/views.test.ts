@@ -33,8 +33,8 @@ describe('queueMessage', () => {
 
     expect(lines).toHaveLength(10)
     expect(lines[0]).toBe('▶ 1. Song 1 · 3:00')
-    expect(textMatching(message, /Page 1 of 2/)).toBeDefined()
-    expect(textMatching(message, /15 songs/)).toBeDefined()
+    expect(textMatching(message, /Page 1 of 2/)).toBe('## Queue\n-# 15 songs · 45m · Page 1 of 2')
+    expect(textMatching(message, /15 songs/)).toBe('## Queue\n-# 15 songs · 45m · Page 1 of 2')
 
     const [previous, next] = buttonsOf(message)
 
@@ -57,15 +57,15 @@ describe('queueMessage', () => {
   })
 
   test('out-of-range pages are clamped to the real pages', () => {
-    expect(textMatching(queueMessage(queueOf(15), 0), /Page 1 of 2/)).toBeDefined()
-    expect(textMatching(queueMessage(queueOf(15), 99), /Page 2 of 2/)).toBeDefined()
+    expect(textMatching(queueMessage(queueOf(15), 0), /Page 1 of 2/)).toBe('## Queue\n-# 15 songs · 45m · Page 1 of 2')
+    expect(textMatching(queueMessage(queueOf(15), 99), /Page 2 of 2/)).toBe('## Queue\n-# 15 songs · 45m · Page 2 of 2')
   })
 
   test('an empty queue explains how to start it', () => {
     const message = queueMessage(queueOf(0), 1)
 
     expect(textMatching(message, /^## Queue/m)).toContain('Nothing queued yet.')
-    expect(textMatching(message, /Ask me for a song/)).toBeDefined()
+    expect(textMatching(message, /Ask me for a song/)).toBe('## Queue\nNothing queued yet.\n-# Ask me for a song to get started.')
     expect(buttonsOf(message)).toEqual([])
     expect(containerOf(message).accent_color).toBe(0x57F287)
   })
@@ -88,8 +88,8 @@ describe('queueMessage', () => {
       size: 2,
     }), 1)
 
-    expect(textMatching(known, /3 songs · 9m/)).toBeDefined()
-    expect(textMatching(mixed, /2 songs · ~3m/)).toBeDefined()
+    expect(textMatching(known, /3 songs · 9m/)).toBe('## Queue\n-# 3 songs · 9m')
+    expect(textMatching(mixed, /2 songs · ~3m/)).toBe('## Queue\n-# 2 songs · ~3m')
   })
 
   test('titles are escaped so markdown cannot change the list', () => {
@@ -120,8 +120,8 @@ describe('nowPlayingMessage', () => {
     const playing = card(queueOf(2))
     const paused = card(view({ paused: true, size: 2 }))
 
-    expect(textMatching(playing, /\*\*Playing\*\*/)).toBeDefined()
-    expect(textMatching(paused, /\*\*Paused\*\*/)).toBeDefined()
+    expect(textMatching(playing, /\*\*Playing\*\*/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:00\n-# 1 in queue')
+    expect(textMatching(paused, /\*\*Paused\*\*/)).toBe('## [Song 1](https://youtu.be/1)\n**Paused** · 3:00\n-# 1 in queue')
     expect(containerOf(playing).accent_color).toBe(0x57F287)
     expect(containerOf(paused).accent_color).toBe(0xFEE75C)
   })
@@ -152,7 +152,7 @@ describe('nowPlayingMessage', () => {
     expect(buttons[3]?.style).toBe(ButtonStyle.Success)
     expect(buttons[5]?.label).toBe('Leave')
     expect(buttons[5]?.style).toBe(ButtonStyle.Danger)
-    expect(textMatching(message, /3 in queue · radio on/)).toBeDefined()
+    expect(textMatching(message, /3 in queue · radio on/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:00\n-# 3 in queue · radio on')
   })
 
   test('a song playing alone does not claim a queue', () => {
@@ -168,11 +168,11 @@ describe('nowPlayingMessage', () => {
   })
 
   test('a live song is labelled live', () => {
-    expect(textMatching(card(view({ current: track({ isLive: true }) })), /\*\*Playing\*\* · Live/)).toBeDefined()
+    expect(textMatching(card(view({ current: track({ isLive: true }) })), /\*\*Playing\*\* · Live/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · Live')
   })
 
   test('a known duration is formatted in minutes and seconds', () => {
-    expect(textMatching(card(view({ current: track({ durationSeconds: 185 }) })), /\*\*Playing\*\* · 3:05/)).toBeDefined()
+    expect(textMatching(card(view({ current: track({ durationSeconds: 185 }) })), /\*\*Playing\*\* · 3:05/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:05')
   })
 
   test('an unknown requester is left out instead of labelled unknown', () => {
@@ -186,8 +186,8 @@ describe('nowPlayingMessage', () => {
     const inherited = card(view({ current: track({ requestedBy: 'tsu', fromRadio: true }) }))
     const anonymous = card(view({ current: track({ requestedBy: null, fromRadio: true }) }))
 
-    expect(textMatching(inherited, /Picked by radio/)).toBeDefined()
-    expect(textMatching(anonymous, /Picked by radio/)).toBeDefined()
+    expect(textMatching(inherited, /Picked by radio/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:00 · Picked by radio')
+    expect(textMatching(anonymous, /Picked by radio/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:00 · Picked by radio')
   })
 
   test('the next songs are previewed with their queue positions', () => {

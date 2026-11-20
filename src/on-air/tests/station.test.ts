@@ -5,7 +5,7 @@ import { testClock } from '../../tests/fixtures.ts'
 import { onAirStation, shouldSpeak } from '../station.ts'
 
 function song(id: string, extra: Partial<StationSong> = {}): StationSong {
-  return { id, title: id.toUpperCase(), artist: null, requestedBy: null, requesterId: null, fromRadio: false, ...extra }
+  return { id, title: id.toUpperCase(), artist: null, requestedBy: null, fromRadio: false, ...extra }
 }
 
 function clip(songId: string, key = 'k'): { songId: string, key: string, file: string, angle: 'run', line: string } {
@@ -53,7 +53,7 @@ describe('cadence', () => {
   })
 
   test('one requested song in three runs without a line', () => {
-    expect([1, 2, 3, 4, 5, 6].map(index => shouldSpeak(index)))
+    expect([1, 2, 3, 4, 5, 6].map(index => shouldSpeak(index, false)))
       .toEqual([true, true, false, true, true, false])
   })
 
@@ -208,7 +208,7 @@ describe('run and session', () => {
     expect(station.run('g1')).toEqual({ lastId: null, last: null, earlier: [] })
 
     for (const id of ['a', 'b', 'c', 'd'])
-      station.recordSong('g1', song(id, { requestedBy: 'tsu', requesterId: 'u1', artist: 'Band' }))
+      station.recordSong('g1', song(id, { requestedBy: 'tsu', artist: 'Band' }))
 
     station.recordSong('g1', song('e', { fromRadio: true }))
     station.markSkipped('g1', 'e', 'Ana')
@@ -217,8 +217,6 @@ describe('run and session', () => {
 
     expect(run.lastId).toBe('e')
     expect(run.last).toMatchObject({ title: 'E', fromRadio: true, skippedBy: 'Ana' })
-    expect(run.last).not.toHaveProperty('playedSeconds')
-    expect(run).not.toHaveProperty('skipPending')
     expect(run.earlier.map(entry => [entry.title, entry.artist, entry.requestedBy, entry.skippedBy])).toEqual([
       ['D', 'Band', 'tsu', null],
       ['C', 'Band', 'tsu', null],

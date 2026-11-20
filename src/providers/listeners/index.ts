@@ -73,12 +73,6 @@ function normalizeMember(value: unknown): StoredMember | null {
   }
 }
 
-// The file maps guilds to members. One bad guild or member drops only that
-// entry; a file where no guild is an object is quarantined.
-function normalizeGuild(value: unknown): StoredGuild | null {
-  return normalizeMap(value, normalizeMember)
-}
-
 function capMembers(guild: StoredGuild): void {
   const ids = Object.keys(guild)
 
@@ -93,7 +87,9 @@ function capMembers(guild: StoredGuild): void {
 
 export async function listenersStore(deps: { path: string, logger: Logger, clock: Clock }): Promise<ListenersPort> {
   const { clock } = deps
-  const store = jsonMapFile({ path: deps.path, name: 'listeners', logger: deps.logger, entry: normalizeGuild })
+  // The file maps guilds to members. One bad guild or member drops only that
+  // entry; a file where no guild is an object is quarantined.
+  const store = jsonMapFile({ path: deps.path, name: 'listeners', logger: deps.logger, entry: value => normalizeMap(value, normalizeMember) })
   const file = await store.read()
   let timer: ReturnType<typeof setTimeout> | null = null
 

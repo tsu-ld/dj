@@ -20,7 +20,7 @@ describe('discordClient', () => {
 })
 
 describe('waitForGateway', () => {
-  function probe(outcomes: ReadonlyArray<'ok' | 'down' | 'error'>, signal?: AbortSignal) {
+  function probe(outcomes: ReadonlyArray<'ok' | 'down' | 'error'>, signal = new AbortController().signal) {
     const urls: string[] = []
     const slept: number[] = []
     let call = 0
@@ -51,7 +51,8 @@ describe('waitForGateway', () => {
   test('a reachable gateway is used at once', async () => {
     const fake = probe(['ok'])
 
-    expect(await waitForGateway(fake.probe)).toBe(true)
+    await waitForGateway(fake.probe)
+
     expect(fake.urls).toEqual(['https://discord.com/api/v10/gateway'])
     expect(fake.slept).toEqual([])
   })
@@ -59,14 +60,17 @@ describe('waitForGateway', () => {
   test('a network that comes up late is waited for with growing delays', async () => {
     const fake = probe(['error', 'error', 'down', 'ok'])
 
-    expect(await waitForGateway(fake.probe)).toBe(true)
+    await waitForGateway(fake.probe)
+
     expect(fake.slept).toEqual(GATEWAY_RETRY_DELAYS_MS.slice(0, 3))
+    expect(fake.urls).toHaveLength(4)
   })
 
   test('a network that never comes up gives up after the budget', async () => {
     const fake = probe(['error'])
 
-    expect(await waitForGateway(fake.probe)).toBe(false)
+    await waitForGateway(fake.probe)
+
     expect(fake.slept).toEqual([...GATEWAY_RETRY_DELAYS_MS])
     expect(fake.urls).toHaveLength(GATEWAY_RETRY_DELAYS_MS.length + 1)
   })
@@ -80,7 +84,9 @@ describe('waitForGateway', () => {
       stop.abort()
     }
 
-    expect(await waitForGateway(fake.probe)).toBe(false)
+    await waitForGateway(fake.probe)
+
+    expect(fake.slept).toEqual(GATEWAY_RETRY_DELAYS_MS.slice(0, 1))
     expect(fake.urls).toHaveLength(1)
   })
 })

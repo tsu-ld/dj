@@ -1,14 +1,14 @@
 import type { GuildMember, GuildTextBasedChannel, Message } from 'discord.js'
 import type { CommandBus, CommandContext, CommandOutcome } from '../../commands/spec.ts'
 import type { Logger } from '../../core/logger.ts'
-import type { CompletionReply, CompletionRequest, ConversationPort, ToolCall, ToolSpec } from '../../ports/conversation.ts'
-import type { MusicPort, PlaybackStatus, QueueView } from '../../ports/music.ts'
+import type { CompletionReply, CompletionRequest, ConversationPort, ToolCall } from '../../ports/conversation.ts'
+import type { MusicPort } from '../../ports/music.ts'
 import type { GuildSettings, SettingsPort } from '../../ports/settings.ts'
 import { isRecord, parseJson } from '../../core/json.ts'
 import { logger } from '../../core/logger.ts'
-import { silentLogger } from '../../tests/fixtures.ts'
+import { silentLog } from '../../tests/fixtures.ts'
 
-export { silentLogger, testClock, testTrack, testView } from '../../tests/fixtures.ts'
+export { silentLog, testClock, testTrack, testView } from '../../tests/fixtures.ts'
 export type { TestClock } from '../../tests/fixtures.ts'
 
 export interface CapturedLog {
@@ -66,12 +66,12 @@ export interface TestMessage {
   replies: string[]
 }
 
-export function testMessage(channel: GuildTextBasedChannel, authorId = 'user-1'): TestMessage {
+export function testMessage(channel: GuildTextBasedChannel): TestMessage {
   const replies: string[] = []
   const message = {
     channelId: channel.id,
     channel,
-    author: { id: authorId },
+    author: { id: 'user-1' },
     async reply(content: string) {
       replies.push(content)
 
@@ -82,7 +82,7 @@ export function testMessage(channel: GuildTextBasedChannel, authorId = 'user-1')
   return { message, replies }
 }
 
-export function testMember(): GuildMember {
+function testMember(): GuildMember {
   return {} as unknown as GuildMember
 }
 
@@ -103,10 +103,10 @@ export function testSettings(initial: Partial<GuildSettings> = {}): TestSettings
   }
 }
 
-export function testMusic(view: QueueView | null = null, status: PlaybackStatus | null = null): MusicPort {
+function testMusic(): MusicPort {
   return {
-    view: () => view,
-    status: () => status,
+    view: () => null,
+    status: () => null,
   } as unknown as MusicPort
 }
 
@@ -116,13 +116,12 @@ export interface TestBus extends CommandBus {
 
 export function testBus(
   run?: (name: string, args: Record<string, unknown>, context: CommandContext) => CommandOutcome | Promise<CommandOutcome>,
-  tools: readonly ToolSpec[] = [{ name: 'skip', description: 'Skip the current song.', parameters: { type: 'object' } }],
 ): TestBus {
   const calls: { name: string, args: Record<string, unknown> }[] = []
 
   const bus: TestBus = {
     specs: [],
-    tools,
+    tools: [{ name: 'skip', description: 'Skip the current song.', parameters: { type: 'object' } }],
     routes: [],
     calls,
     async run(name, args, context) {
@@ -153,15 +152,12 @@ export function failed(error: unknown): CommandOutcome {
 export interface TestContextOptions {
   channel?: GuildTextBasedChannel
   message?: Message | null
-  settings?: GuildSettings
-  view?: QueueView | null
   music?: MusicPort
-  logger?: Logger
 }
 
 export function testContext(options: TestContextOptions = {}): CommandContext {
   const channel = options.channel ?? testChannel().channel
-  const settingsPort = testSettings(options.settings)
+  const settingsPort = testSettings()
 
   return {
     guildId: '123456789012345678',
@@ -169,12 +165,12 @@ export function testContext(options: TestContextOptions = {}): CommandContext {
     voiceChannel: null,
     textChannel: channel,
     message: options.message ?? null,
-    settings: options.settings ?? settingsPort.get('123456789012345678'),
-    queue: options.view ?? null,
+    settings: settingsPort.get('123456789012345678'),
+    queue: null,
     services: {
-      music: options.music ?? testMusic(options.view ?? null),
+      music: options.music ?? testMusic(),
       settings: settingsPort,
-      logger: options.logger ?? silentLogger(),
+      logger: silentLog,
     },
     ui: {
       reply: async () => {},

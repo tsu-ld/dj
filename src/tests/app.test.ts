@@ -2,7 +2,7 @@ import type { AppConfig } from '../config.ts'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, test } from 'bun:test'
 import { createApp } from '../app.ts'
 
 const directories: string[] = []
@@ -39,6 +39,6 @@ async function config(): Promise<AppConfig> {
 test('the composition root builds and stops twice without throwing', async () => {
   const app = await createApp(await config())
 
-  await expect(app.stop()).resolves.toBeUndefined()
-  await expect(app.stop()).resolves.toBeUndefined()
+  await app.stop()
+  await app.stop()
 })

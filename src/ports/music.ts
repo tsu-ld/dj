@@ -26,13 +26,16 @@ export interface QueueView {
   readonly size: number
 }
 
-export interface PlayRequest {
-  readonly kind: 'text' | 'tracks'
-  readonly value: string | readonly string[]
+interface PlayRequestFrom {
   readonly member: GuildMember
   readonly voiceChannel: VoiceBasedChannel
   readonly textChannel: GuildTextBasedChannel
 }
+
+export type PlayRequest = PlayRequestFrom & (
+  | { readonly kind: 'text', readonly value: string }
+  | { readonly kind: 'tracks', readonly value: readonly string[] }
+)
 
 export interface PlayResult {
   readonly added: number
@@ -47,7 +50,7 @@ export interface BeforeStreamInput {
 
 export interface MusicEventMap {
   trackQueued: { guildId: string, track: Track, view: QueueView, textChannel: GuildTextBasedChannel | null }
-  playlistQueued: { guildId: string, name: string, count: number, view: QueueView, textChannel: GuildTextBasedChannel | null }
+  playlistQueued: { guildId: string, view: QueueView, textChannel: GuildTextBasedChannel | null }
   trackStarted: { guildId: string, track: Track, view: QueueView, textChannel: GuildTextBasedChannel | null }
   stateChanged: { guildId: string, view: QueueView, textChannel: GuildTextBasedChannel | null }
   trackSkipped: { guildId: string, track: Track, by: Listener }

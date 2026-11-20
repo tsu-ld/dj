@@ -38,7 +38,7 @@ interface ViewState {
 // and the message handler only hand it a snapshot.
 export function messageSlot(deps: {
   logger: Logger
-  playback?: (guildId: string) => PlaybackStatus | null
+  playback: (guildId: string) => PlaybackStatus | null
 }): MessageSlot {
   const nowPlaying = new Map<string, Card>()
   const queueCards = new Map<string, Message>()
@@ -84,7 +84,7 @@ export function messageSlot(deps: {
     if (!state)
       return
 
-    const status = deps.playback?.(guildId) ?? null
+    const status = deps.playback(guildId)
     const payload = nowPlayingMessage(state.view, status === null ? null : status.playbackDurationMs)
 
     if (!payload)
@@ -119,7 +119,7 @@ export function messageSlot(deps: {
   async function repaintNowPlaying(guildId: string): Promise<void> {
     const card = nowPlaying.get(guildId)
     const state = latest.get(guildId)
-    const status = deps.playback?.(guildId) ?? null
+    const status = deps.playback(guildId)
     const payload = state && status ? nowPlayingMessage(state.view, status.playbackDurationMs) : null
 
     if (!card || !payload)
@@ -189,8 +189,7 @@ export function messageSlot(deps: {
   }
 
   const progress = progressTimers({
-    enabled: deps.playback !== undefined,
-    playing: guildId => deps.playback?.(guildId)?.state === 'playing',
+    playing: guildId => deps.playback(guildId)?.state === 'playing',
     repaint: (guildId) => {
       void writes.run(guildId, async () => repaintNowPlaying(guildId))
         .catch(error => deps.logger.error('discord.progress_failed', error))

@@ -19,7 +19,7 @@ export interface FakeSentMessage {
   readonly message: Message
 }
 
-export function fakeSentMessage(id = '900'): FakeSentMessage {
+export function fakeSentMessage(id: string): FakeSentMessage {
   const edits: ViewMessage[] = []
   let deletions = 0
   const state = {
@@ -48,7 +48,6 @@ export interface SentRecord extends FakeSentMessage {
 }
 
 export interface FakeChannel {
-  readonly id: string
   readonly sent: SentRecord[]
   readonly channel: GuildTextBasedChannel
 }
@@ -68,7 +67,7 @@ export function fakeChannel(id = '2', guildId = '123456789012345678'): FakeChann
     },
   }
 
-  return { id, sent, channel: channel as unknown as GuildTextBasedChannel }
+  return { sent, channel: channel as unknown as GuildTextBasedChannel }
 }
 
 export interface IncomingOptions {
@@ -271,40 +270,32 @@ export function queueOf(count: number): QueueView {
 
 export interface RepliesRecorder extends RepliesPort {
   readonly said: string[]
-  readonly announced: string[]
 }
 
 export function fakeReplies(): RepliesRecorder {
   const said: string[] = []
-  const announced: string[] = []
 
   return {
     said,
-    announced,
     async say(_message, _settings, text) {
       said.push(text)
     },
-    async announce(_channel, _settings, text) {
-      announced.push(text)
-    },
+    async announce() {},
   }
 }
 
 export interface SlotRecorder extends MessageSlot {
   readonly reposts: SlotPayload[]
   readonly shown: { readonly view: QueueView, readonly channel: GuildTextBasedChannel }[]
-  readonly disposed: () => boolean
 }
 
 export function fakeSlot(): SlotRecorder {
   const reposts: SlotPayload[] = []
   const shown: { view: QueueView, channel: GuildTextBasedChannel }[] = []
-  let disposed = false
 
   return {
     reposts,
     shown,
-    disposed: () => disposed,
     update: () => {},
     queueChanged: () => {},
     playlistQueued: () => {},
@@ -315,8 +306,6 @@ export function fakeSlot(): SlotRecorder {
     repost(payload) {
       reposts.push(payload)
     },
-    dispose() {
-      disposed = true
-    },
+    dispose: () => {},
   }
 }

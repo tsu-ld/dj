@@ -1,11 +1,13 @@
 import type { AppConfig } from '../../../config.ts'
 import type { Clock } from '../../../core/clock.ts'
+import type { FetchCalls } from '../../tests/http.ts'
 import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { logger } from '../../../core/logger.ts'
+import { json, restoreFetch, stubFetch } from '../../tests/http.ts'
 import { fitsQuota, speechSynthesizer } from '../index.ts'
 
 type SpeechConfig = AppConfig['speech']
@@ -15,24 +17,8 @@ interface TestClock extends Clock {
   advance: (milliseconds: number) => void
 }
 
-type FetchHandler = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
-
-interface FetchCalls {
-  count: () => number
-  matching: (path: string) => number
-}
-
-// Bun's fetch carries a static helper, so the stub has to carry it too.
-function fetchStub(handler: FetchHandler): typeof fetch {
-  return Object.assign(
-    async (input: Parameters<typeof fetch>[0], init?: RequestInit) => handler(input, init),
-    { preconnect: globalThis.fetch.preconnect },
-  )
-}
-
 let directory = ''
 let previousTmp: string | undefined
-const restores: (() => void)[] = []
 
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), 'dj-speech-'))
@@ -41,8 +27,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  while (restores.length > 0)
-    restores.pop()?.()
+  restoreFetch()
 
   if (previousTmp === undefined)
     delete process.env.TMPDIR
@@ -80,21 +65,6 @@ function captureLogger(): { lines: string[], port: ReturnType<typeof logger> } {
   const lines: string[] = []
 
   return { lines, port: logger({ level: 'debug', sink: line => lines.push(line) }) }
-}
-
-function stubFetch(handler: FetchHandler): FetchCalls {
-  const spy = spyOn(globalThis, 'fetch').mockImplementation(fetchStub(handler))
-
-  restores.push(() => spy.mockRestore())
-
-  return {
-    count: () => spy.mock.calls.length,
-    matching: path => spy.mock.calls.filter(([input]) => String(input).includes(path)).length,
-  }
-}
-
-function json(body: unknown): Response {
-  return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
 
 function usageBody(used: number, limit: number): Response {

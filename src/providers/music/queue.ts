@@ -12,13 +12,13 @@ export function errorCodeOf(error: unknown): string | null {
   return typeof code === 'string' ? code : null
 }
 
-export function capQueue(queue: MutableTrackQueue, max = MAX_QUEUE_SIZE): number {
-  if (queue.songs.length <= max)
+export function capQueue(queue: MutableTrackQueue): number {
+  if (queue.songs.length <= MAX_QUEUE_SIZE)
     return 0
 
-  const removed = queue.songs.length - max
+  const removed = queue.songs.length - MAX_QUEUE_SIZE
 
-  queue.songs.splice(max)
+  queue.songs.splice(MAX_QUEUE_SIZE)
 
   return removed
 }

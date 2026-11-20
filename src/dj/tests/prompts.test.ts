@@ -22,7 +22,7 @@ describe('buildConversationInstructions', () => {
     expect(prompt).toContain('Playing now, at position 1: "La mano de Dios"')
     expect(prompt).toContain('2. "Tema 2"')
     expect(prompt).toContain('6. "Tema 6"')
-    expect(prompt).not.toContain('7. Tema 7')
+    expect(prompt).not.toContain('7. "Tema 7"')
     expect(prompt).toContain('...and 2 more.')
   })
 

@@ -23,10 +23,8 @@ const INVALID_ARGUMENTS_RESULT = 'those arguments were not valid JSON'
 const FAILED_RESULT = 'the player could not do that'
 
 // The dj already answers in its own words; a tool call must not also ack, react
-// or announce a confirmation in the channel. The old tool path ran actions
-// without the command feedback loop, and this keeps that behavior when the
-// shared bus owns the execution. Showing the queue stays visible: that tool
-// exists to post the queue card.
+// or announce a confirmation in the channel. Showing the queue stays visible:
+// that tool exists to post the queue card.
 const SILENT_UI: Omit<CommandContext['ui'], 'showQueue'> = {
   reply: async () => {},
   error: async () => {},
@@ -174,7 +172,7 @@ export function djAgent(deps: {
             toolCalls++
 
             // The queue changes between calls (adding songs creates it), so
-            // every tool sees the live view, exactly as the old tool runner did.
+            // every tool sees the live view.
             const callContext: CommandContext = {
               ...toolContext,
               queue: context.services.music.view(context.guildId),

@@ -12,7 +12,6 @@ describe('ttlMap', () => {
     now = 101
 
     expect(map.get('a')).toBeUndefined()
-    expect(map.size()).toBe(0)
   })
 
   test('evicts the oldest entry when the cap is reached', () => {

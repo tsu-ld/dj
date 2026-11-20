@@ -62,7 +62,7 @@ export function freshNews(facts: SongFacts | null, now: number): readonly SongNe
   return (facts?.news ?? []).filter(item => now - item.publishedAt <= NEWS_MAX_AGE_DAYS * DAY_MS)
 }
 
-export function isListenerMilestone(track: Track, listener: ListenerProfile | null): boolean {
+function isListenerMilestone(track: Track, listener: ListenerProfile | null): boolean {
   if (listener === null || track.fromRadio)
     return false
 

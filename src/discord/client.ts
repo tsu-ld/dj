@@ -18,27 +18,27 @@ export interface GatewayProbe {
   readonly fetch: (url: string, init: { signal: AbortSignal }) => Promise<{ ok: boolean }>
   readonly sleep: (milliseconds: number) => Promise<void>
   readonly logger: Logger
-  readonly signal?: AbortSignal
+  readonly signal: AbortSignal
 }
 
 // A user unit starts before the network is up (network-online.target does not
 // apply to it), and a failed login destroys the client's gateway manager for
 // good. So the one login waits for Discord's unauthenticated gateway endpoint;
 // past the budget it logs in anyway and a failure restarts the process.
-export async function waitForGateway(probe: GatewayProbe): Promise<boolean> {
+export async function waitForGateway(probe: GatewayProbe): Promise<void> {
   // read on every call: the stop can land while a probe or a sleep is pending
-  const stopped = (): boolean => probe.signal?.aborted === true
+  const stopped = (): boolean => probe.signal.aborted
 
   for (let attempt = 0; ; attempt++) {
     if (stopped())
-      return false
+      return
 
     try {
-      const signals = [AbortSignal.timeout(GATEWAY_PROBE_TIMEOUT_MS), ...(probe.signal ? [probe.signal] : [])]
-      const response = await probe.fetch(GATEWAY_URL, { signal: AbortSignal.any(signals) })
+      const signal = AbortSignal.any([AbortSignal.timeout(GATEWAY_PROBE_TIMEOUT_MS), probe.signal])
+      const response = await probe.fetch(GATEWAY_URL, { signal })
 
       if (response.ok)
-        return true
+        return
     }
     catch (error) {
       probe.logger.debug('discord.gateway_probe_failed', { attempt, error: errorMessage(error) })
@@ -47,7 +47,7 @@ export async function waitForGateway(probe: GatewayProbe): Promise<boolean> {
     const delay = GATEWAY_RETRY_DELAYS_MS[attempt]
 
     if (delay === undefined || stopped())
-      return false
+      return
 
     probe.logger.warn('discord.gateway_unreachable', { attempt: attempt + 1, retryInMs: delay })
     await probe.sleep(delay)
