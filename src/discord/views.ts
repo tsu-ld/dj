@@ -41,18 +41,50 @@ function separator(): SeparatorBuilder {
 }
 
 const PROGRESS_SEGMENTS = 12
+// Discord's most buttons in one row.
+const TIMELINE_POINTS = 5
+const CUSTOM_ID_MAX = 100
 
-// Only a song with a known length gets a bar: a live stream has no end.
-function progressLine(track: Track, elapsedMs: number | null): string | null {
+interface Position {
+  readonly elapsed: number
+  readonly total: number
+}
+
+// Only a song with a known length has a position: a live stream has no end.
+function positionOf(track: Track, elapsedMs: number | null): Position | null {
   const total = Math.floor(track.durationSeconds)
 
   if (elapsedMs === null || track.isLive || !Number.isFinite(total) || total <= 0)
     return null
 
-  const elapsed = Math.min(Math.max(Math.floor(elapsedMs / 1000), 0), total)
+  return { elapsed: Math.min(Math.max(Math.floor(elapsedMs / 1000), 0), total), total }
+}
+
+function progressLine({ elapsed, total }: Position): string {
   const filled = Math.round((elapsed / total) * PROGRESS_SEGMENTS)
 
   return `${'▰'.repeat(filled)}${'▱'.repeat(PROGRESS_SEGMENTS - filled)} \`${clock(elapsed)} / ${clock(total)}\``
+}
+
+// Each button jumps to the time it shows; the one the song is in is lit. The
+// song id rides along so a click on a card the next song already replaced is
+// refused. Discord rejects the whole card over a repeated or overlong id, so a
+// song too short for distinct points, or with a huge id, goes without.
+// A paused song cannot seek, so its timeline stays visible but disabled.
+function timelineRow(track: Track, { elapsed, total }: Position, paused: boolean): ActionRowBuilder<MessageActionRowComponentBuilder> | null {
+  const longestId = `np:seek:${total}:${track.id}`
+
+  if (total < TIMELINE_POINTS || longestId.length > CUSTOM_ID_MAX)
+    return null
+
+  const points = Array.from({ length: TIMELINE_POINTS }, (_, index) => Math.floor((total * index) / TIMELINE_POINTS))
+  const current = points.findLastIndex(seconds => seconds <= elapsed)
+
+  return row(...points.map((seconds, index) => new ButtonBuilder()
+    .setCustomId(`np:seek:${seconds}:${track.id}`)
+    .setLabel(clock(seconds))
+    .setStyle(index === current ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    .setDisabled(paused)))
 }
 
 export function nowPlayingMessage(view: QueueView, elapsedMs: number | null = null): ViewMessage | null {
@@ -62,8 +94,8 @@ export function nowPlayingMessage(view: QueueView, elapsedMs: number | null = nu
     return null
 
   const container = new ContainerBuilder().setAccentColor(view.paused ? PAUSED_ACCENT : PLAYING_ACCENT)
-  const progress = progressLine(track, elapsedMs)
-  const header = `## ${linkedTitle(track)}\n${statusLine(track, view)}${progress === null ? '' : `\n${progress}`}`
+  const position = positionOf(track, elapsedMs)
+  const header = `## ${linkedTitle(track)}\n${statusLine(track, view)}${position === null ? '' : `\n${progressLine(position)}`}`
   const thumbnail = thumbnailUrl(track)
 
   if (thumbnail === null) {
@@ -76,6 +108,11 @@ export function nowPlayingMessage(view: QueueView, elapsedMs: number | null = nu
         .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnail).setDescription('Album art')),
     )
   }
+
+  const timeline = position === null ? null : timelineRow(track, position, view.paused)
+
+  if (timeline !== null)
+    container.addActionRowComponents(timeline)
 
   const upcoming = upcomingText(view)
 

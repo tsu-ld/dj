@@ -477,6 +477,18 @@ describe('messageSlot progress', () => {
     slot.dispose()
   })
 
+  test('a song buffering after a seek shows where it jumped to', async () => {
+    const channel = fakeChannel('2', GUILD)
+    const slot = messageSlot({ logger: log, playback: reader({ state: 'idle', playbackDurationMs: 80_000 }).read })
+
+    slot.update({ guildId: GUILD, view: view({ size: 1 }), textChannel: channel.channel })
+    await settle()
+
+    expect(cardText(channel.sent[0]?.payload)).toContain('1:20 / 3:00')
+
+    slot.dispose()
+  })
+
   test('a repaint never posts a card, even after its edit failed', async () => {
     const home = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log, playback: reader({ state: 'playing', playbackDurationMs: 5_000 }).read })

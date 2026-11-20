@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
-import { pause, radio, resume, shuffle, skip, toggle } from '../playback.ts'
+import { pause, radio, resume, seek, shuffle, skip, toggle } from '../playback.ts'
 import { fakeContext, fakeMusic, fakeUi, log, queueContext, track, view } from './fakes.ts'
 
 describe('playback commands', () => {
@@ -84,7 +84,7 @@ describe('playback commands', () => {
   test('every playback command refuses without a queue', async () => {
     const bus = commandBus({ specs: commands, logger: log })
 
-    for (const spec of [pause, resume, toggle, skip, shuffle, radio]) {
+    for (const spec of [pause, resume, toggle, skip, shuffle, radio, seek]) {
       const ui = fakeUi()
       const outcome = await bus.run(spec.name, {}, fakeContext({ ui }))
 

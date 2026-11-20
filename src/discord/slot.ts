@@ -85,8 +85,7 @@ export function messageSlot(deps: {
       return
 
     const status = deps.playback?.(guildId) ?? null
-    // a song that just started is still buffering, which the player calls idle
-    const payload = nowPlayingMessage(state.view, status === null ? null : status.state === 'idle' ? 0 : status.playbackDurationMs)
+    const payload = nowPlayingMessage(state.view, status === null ? null : status.playbackDurationMs)
 
     if (!payload)
       return

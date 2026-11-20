@@ -45,7 +45,7 @@ export function musicEvents(deps: {
   viewOf: (queue: Queue) => QueueView
   health: AudioHealth
   logger: Logger
-}): { detach: Array<() => void>, beforeStreamFor: (song: Song) => Promise<void> } {
+}): { detach: Array<() => void>, beforeStreamFor: (song: Song) => Promise<void>, watchStream: (queue: Queue) => void } {
   const { player, client, catalog, cache, emitter, beforeStream, forgetStream, leave, viewOf, health, logger } = deps
   const lastSong = new Map<string, string>()
   const detach: Array<() => void> = []
@@ -290,5 +290,5 @@ export function musicEvents(deps: {
   detach.push(() => client.off(DiscordEvents.VoiceStateUpdate, onVoiceStateUpdate))
   detach.push(() => watched.clear())
 
-  return { detach, beforeStreamFor }
+  return { detach, beforeStreamFor, watchStream }
 }

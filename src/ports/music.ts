@@ -76,6 +76,8 @@ export interface MusicPort {
   shuffle: (guildId: string) => Promise<void>
   remove: (guildId: string, position: number, by: Listener) => Promise<string>
   radio: (guildId: string) => Promise<boolean>
+  // songId is the song the listener saw; another song playing is refused
+  seek: (guildId: string, songId: string, seconds: number) => Promise<void>
   view: (guildId: string) => QueueView | null
   status: (guildId: string) => PlaybackStatus | null
   readonly audio: AudioOverMusic

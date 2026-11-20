@@ -164,6 +164,53 @@ describe('now-playing buttons', () => {
     expect(slot.shown[0]?.channel).toBe(channel)
   })
 
+  test('a timeline button jumps the song it was drawn for', async () => {
+    const seeks: [string, string, number][] = []
+    const recorder = fakeInteraction({ customId: 'np:seek:40:abc' })
+    const { handler } = setup({
+      music: fakeMusic({
+        view: () => view({ current: track({ id: 'abc', durationSeconds: 200 }) }),
+        async seek(guildId, songId, seconds) {
+          seeks.push([guildId, songId, seconds])
+        },
+      }),
+    })
+
+    await handler(recorder.interaction)
+
+    expect(recorder.deferredUpdates()).toBe(1)
+    expect(seeks).toEqual([['123456789012345678', 'abc', 40]])
+    expect(recorder.followUps).toEqual([])
+  })
+
+  test('a timeline button refused by the engine says why, only to the clicker', async () => {
+    const recorder = fakeInteraction({ customId: 'np:seek:40:abc' })
+    const { handler } = setup({
+      music: fakeMusic({
+        view: () => view({ current: track({ id: 'next' }) }),
+        async seek() {
+          throw new UserError(MESSAGES.seekStale)
+        },
+      }),
+    })
+
+    await handler(recorder.interaction)
+
+    expect(contentOf(recorder.followUps[0])).toBe(MESSAGES.seekStale)
+    expect(recorder.followUps[0]?.flags).toBe(MessageFlags.Ephemeral)
+  })
+
+  test('a timeline button needs the member in the voice channel', async () => {
+    const member = fakeMember({ voiceChannel: fakeVoice('7'), botVoiceChannel: fakeVoice('8') })
+    const recorder = fakeInteraction({ customId: 'np:seek:40:abc', member })
+    const { handler, music } = setup({ music: fakeMusic({ view: () => view({ current: track({ id: 'abc' }) }) }) })
+
+    await handler(recorder.interaction)
+
+    expect(music.calls).not.toContain('seek')
+    expect(contentOf(recorder.followUps[0])).toBe(MESSAGES.sameVoiceChannel)
+  })
+
   test('an unknown now-playing button only acknowledges', async () => {
     const recorder = fakeInteraction({ customId: 'np:nope' })
     const { handler, music } = setup({ music: fakeMusic({ view: () => view() }) })

@@ -73,6 +73,9 @@ export function fakeMusic(overrides: Partial<MusicPort> = {}): MusicRecorder {
 
       return true
     },
+    async seek() {
+      calls.push('seek')
+    },
     view() {
       return null
     },
