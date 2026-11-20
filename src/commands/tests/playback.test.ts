@@ -73,7 +73,7 @@ describe('playback commands', () => {
       const ui = fakeUi()
       const music = fakeMusic({ view: () => view(), radio: async () => enabled })
 
-      const outcome = await bus.run('radio', {}, fakeContext({ ui, services: { music }, queue: view() }))
+      const outcome = await bus.run('radio', {}, fakeContext({ ui, services: { music } }))
 
       expect(outcome).toEqual({ kind: 'ok', data: { radio: enabled } })
       expect(ui.replies).toEqual([enabled ? MESSAGES.radioEnabled : MESSAGES.radioDisabled])

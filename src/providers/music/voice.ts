@@ -5,8 +5,7 @@ export interface GuildLike {
   readonly members: { readonly me: unknown }
 }
 
-// The SDK's channel methods are declared as methods: turning them into function
-// properties makes their parameters contravariant and rejects the real channel.
+// discord.js declares these as methods; function properties would be contravariant and reject the real channel
 /* eslint-disable ts/method-signature-style */
 export interface VoiceChannelLike {
   readonly type: ChannelType
@@ -15,12 +14,7 @@ export interface VoiceChannelLike {
 }
 /* eslint-enable ts/method-signature-style */
 
-// The same checks gate every path into the voice channel: a direct query or the
-// dj's own tool calls must not join where the bot cannot speak.
-export function voiceChannelProblem(voiceChannel: VoiceChannelLike | null): string | null {
-  if (!voiceChannel)
-    return MESSAGES.joinVoiceChannel
-
+export function voiceChannelProblem(voiceChannel: VoiceChannelLike): string | null {
   if (voiceChannel.type === ChannelType.GuildStageVoice)
     return MESSAGES.stageChannelPermissions
 

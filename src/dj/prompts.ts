@@ -5,8 +5,6 @@ import { UPCOMING_PREVIEW } from '../limits.ts'
 
 export const DEFAULT_PERSONA = 'You are the DJ of a Discord server. You are warm, brief and a little cheeky.'
 
-// The language is derived from whoever is talking rather than configured, so a
-// persona written in any language still answers everyone in their own.
 export const CONVERSATION_RULES = [
   'Always answer in the same language the person wrote in.',
   'Keep it to one short sentence. This is a chat, not an essay.',

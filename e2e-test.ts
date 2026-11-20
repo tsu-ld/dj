@@ -114,7 +114,6 @@ async function playAndProbe(label: string, input: string, ms = 18_000): Promise<
     : fail(label, `audio=${duration}ms status=${playing} song=${currentSong()}`)
 }
 
-// The steps that test stop must see its failure, not swallow it.
 async function stopError(): Promise<string | null> {
   try {
     await music.stop(GUILD, { resetStation: true })
@@ -131,15 +130,13 @@ async function cleanup(): Promise<void> {
   await wait(2_000)
 }
 
-async function fakeContext() {
+function fakeContext() {
   return {
     guildId: GUILD,
     member: me,
     voiceChannel: voice,
     textChannel: text,
     message: null,
-    settings: settings.get(GUILD),
-    queue: music.view(GUILD),
     services: { music, settings, logger: log },
     ui: {
       reply: async () => {},
@@ -215,12 +212,22 @@ size >= 2 ? pass(`queue holds ${size} songs`) : fail('queue holds 2 songs', `got
 console.log('== 6. Skip changes song ==')
 const before = currentSong()
 
-await music.skip(GUILD, { id: 'e2e', name: 'e2e' }).catch((error: unknown) => fail('skip is accepted', errorMessage(error)))
-await wait(6_000)
+const skipped = await music.skip(GUILD, { id: 'e2e', name: 'e2e' }).then(
+  () => true,
+  (error: unknown) => {
+    fail('skip is accepted', errorMessage(error))
 
-const after = currentSong()
+    return false
+  },
+)
 
-before !== after ? pass(`skip moved from "${before}" to "${after}"`) : fail('skip changes song', `stuck on "${after}"`)
+if (skipped) {
+  await wait(6_000)
+
+  const after = currentSong()
+
+  before !== after ? pass(`skip moved from "${before}" to "${after}"`) : fail('skip changes song', `stuck on "${after}"`)
+}
 await cleanup()
 
 console.log('== 7. Clear empties queue ==')
@@ -246,14 +253,14 @@ leaveError === null && stillIn === null
   ? pass('bot leaves voice cleanly')
   : fail('bot leaves voice cleanly', leaveError ?? `still in channel ${stillIn}`)
 
-console.log('== 9. DJ request queues and speaks ==')
+console.log('== 9. DJ request answers, queues and plays ==')
 
 if (!agent) {
   console.log('  SKIP: dj answers in character (language model not configured)')
 }
 else {
   try {
-    const context = await fakeContext()
+    const context = fakeContext()
     const djReply = await agent.ask({ request: 'poneme algo de rock nacional', context })
 
     djReply !== null && djReply.length > 5

@@ -6,9 +6,7 @@ import type { Extractor } from './extraction.ts'
 import { errorMessage } from '../../core/errors.ts'
 import { isRecord } from '../../core/json.ts'
 
-// ffmpeg only gets through the progressive mp4: ask for a muxed format by name.
-const MUXED_FORMAT = 'b[acodec!=none][vcodec!=none]'
-// A googlevideo url dies after a few hours; re-resolve well before it does.
+// googlevideo urls expire after a few hours
 const STREAM_URL_MARGIN_MS = 5 * 60_000
 
 export interface StreamEntry {
@@ -17,14 +15,13 @@ export interface StreamEntry {
 }
 
 export interface StreamResolver {
-  remember: (id: string | null | undefined, formats: unknown) => void
-  forget: (id: string | null | undefined) => void
+  remember: (id: string | null, formats: unknown) => void
+  forget: (id: string) => void
   playableUrl: (song: Song) => Promise<string>
   dispose: () => void
 }
 
-// ffmpeg can only stream YouTube's progressive mp4: the audio-only urls answer
-// 403, and a download handles those (the extractor sends what ffmpeg does not).
+// YouTube answers ffmpeg 403 on audio-only urls; only the progressive mp4 streams.
 export function directStreamUrl(formats: unknown): string | undefined {
   const entries: readonly unknown[] = Array.isArray(formats) ? formats : []
 
@@ -42,22 +39,18 @@ export function directStreamUrl(formats: unknown): string | undefined {
 }
 
 export function isUrlFresh(entry: StreamEntry | undefined, now: number): entry is StreamEntry {
-  if (entry === undefined || entry.url === '')
+  if (entry === undefined)
     return false
 
   return entry.expiresAt - now > STREAM_URL_MARGIN_MS
 }
 
-// googlevideo carries the expiry in seconds; the margin above works in ms.
 export function urlExpiresAt(url: string): number {
   const expire = Number(new URL(url).searchParams.get('expire'))
 
   return Number.isFinite(expire) && expire > 0 ? expire * 1000 : Number.POSITIVE_INFINITY
 }
 
-// The line and the fetch run together, so the line covers the wait. The music
-// still starts only after the line ends, and a song that fails to resolve lets
-// the line finish before the next song takes the connection.
 export async function streamWithDjLine<T>(
   song: T,
   deps: { fetchUrl: (song: T) => Promise<string>, line: (song: T) => Promise<void> },
@@ -97,8 +90,8 @@ export function streamResolver(deps: {
     streamUrls.set(id, { url, expiresAt: urlExpiresAt(url) })
   }
 
-  function remember(id: string | null | undefined, formats: unknown): void {
-    if (id === null || id === undefined || id === '')
+  function remember(id: string | null, formats: unknown): void {
+    if (id === null || id === '')
       return
 
     const url = directStreamUrl(formats)
@@ -120,7 +113,7 @@ export function streamResolver(deps: {
     if (song.url === undefined || song.url === '')
       return null
 
-    const url = await extraction.streamUrl(song.url, MUXED_FORMAT)
+    const url = await extraction.streamUrl(song.url)
 
     if (url === null)
       return null
@@ -167,8 +160,7 @@ export function streamResolver(deps: {
   return {
     remember,
     forget(id) {
-      if (id !== null && id !== undefined && id !== '')
-        streamUrls.delete(id)
+      streamUrls.delete(id)
     },
     playableUrl: resolvePlayableUrl,
     dispose() {

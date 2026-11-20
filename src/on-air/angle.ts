@@ -18,23 +18,16 @@ export interface AngleInput {
 export const DAY_MS = 86_400_000
 const ANNIVERSARY_WINDOW_DAYS = 3
 const NEWS_MAX_AGE_DAYS = 14
-// the request number including this song
 const REQUEST_MILESTONES = new Set([1, 5, 10, 25, 50, 100])
 const RELEASE_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
 
-// Priority order after the welcome; run is always possible. A skip is context
-// in the run, never an angle of its own.
-const ORDER: readonly Angle[] = ['listener', 'anniversary', 'story', 'news', 'fact', 'run']
+const ORDER: readonly Exclude<Angle, 'welcome'>[] = ['listener', 'anniversary', 'story', 'news', 'fact', 'run']
 
 export interface Anniversary {
-  // the exact age on the release day the window holds
   readonly years: number
-  // days from `now` to that release day, negative when it has passed
   readonly days: number
 }
 
-// The release day within three days of today. A year alone cannot place the
-// day, so it never makes an anniversary: "20 years" a month early is false.
 export function anniversaryOf(facts: SongFacts | null, now: number): Anniversary | null {
   const date = RELEASE_DATE.exec(facts?.releaseDate ?? '')
 
@@ -45,8 +38,6 @@ export function anniversaryOf(facts: SongFacts | null, now: number): Anniversary
   const today = new Date(now)
   const todayStart = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
 
-  // The window can cross New Year, so the release day is checked in the
-  // years either side too.
   for (const candidate of [today.getUTCFullYear() - 1, today.getUTCFullYear(), today.getUTCFullYear() + 1]) {
     const days = Math.round((Date.UTC(candidate, month - 1, day) - todayStart) / DAY_MS)
     const years = candidate - year
@@ -77,7 +68,7 @@ function isListenerMilestone(track: Track, listener: ListenerProfile | null): bo
   return artist !== '' && listener.topArtists.some(top => top.trim().toLowerCase() === artist)
 }
 
-function fits(angle: Angle, input: AngleInput): boolean {
+function fits(angle: Exclude<Angle, 'welcome'>, input: AngleInput): boolean {
   const { facts } = input
 
   switch (angle) {
@@ -93,8 +84,6 @@ function fits(angle: Angle, input: AngleInput): boolean {
       return facts !== null && (Boolean(facts.album) || facts.year !== null || Boolean(facts.genre))
     case 'run':
       return true
-    case 'welcome':
-      return false
   }
 }
 

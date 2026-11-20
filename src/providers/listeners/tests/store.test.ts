@@ -1,24 +1,16 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { systemClock } from '../../../core/clock.ts'
 import { isRecord } from '../../../core/json.ts'
-import { silentLog as log } from '../../../tests/fixtures.ts'
+import { silentLog as log, removeTempDirs, tempDir } from '../../../tests/fixtures.ts'
 import { listenersStore } from '../index.ts'
 
-const directories: string[] = []
-
 async function tempFile(name = 'listeners.json'): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'dj-listeners-'))
-  directories.push(directory)
-
-  return join(directory, name)
+  return join(await tempDir(), name)
 }
 
-afterEach(async () => {
-  await Promise.all(directories.splice(0).map(async directory => rm(directory, { recursive: true, force: true })))
-})
+afterEach(removeTempDirs)
 
 async function memberRecord(path: string, id: string): Promise<Record<string, unknown>> {
   const value: unknown = JSON.parse(await readFile(path, 'utf8'))
@@ -130,8 +122,6 @@ describe('listenersStore', () => {
     for (let index = 0; index < 50; index++)
       store.recordRequest('g1', ana, { title: `Old Song ${index}`, artist: null })
 
-    // Refresh one old key: when eviction breaks ties by recency, that key must
-    // survive while another count-1 entry leaves.
     store.recordRequest('g1', ana, { title: 'Old Song 0', artist: null })
 
     for (let index = 0; index < 3; index++)

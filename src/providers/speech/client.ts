@@ -6,12 +6,9 @@ import { MAX_ERROR_BODY } from '../http-failure.ts'
 const API_BASE = 'https://api.elevenlabs.io/v1'
 const OUTPUT_FORMAT = 'mp3_44100_128'
 
-// The API answers {"detail": {"code": ..., "status": ...}} on failures; the
-// codes are the only reliable way to tell a rejected key from an empty quota.
+// The API answers 401 for an exhausted quota too; only these detail codes mean a rejected key.
 const AUTH_FAILURES = new Set(['invalid_api_key', 'authentication_error'])
 
-// Lower stability buys more emotional range; the voice is directed with audio
-// tags in the text, so it does not need a fixed baseline performance.
 const VOICE_SETTINGS = { stability: 0.5, similarity_boost: 0.8 }
 
 export interface SpeechUsage {
@@ -26,11 +23,6 @@ export interface SpeechClientConfig {
   readonly timeoutMs: number
 }
 
-export interface SpeechClient {
-  synthesize: (text: string) => Promise<Uint8Array>
-  fetchUsage: () => Promise<SpeechUsage>
-}
-
 function detailCode(detail: unknown, key: 'code' | 'status'): string | null {
   if (!isRecord(detail))
     return null
@@ -40,15 +32,12 @@ function detailCode(detail: unknown, key: 'code' | 'status'): string | null {
   return typeof value === 'string' ? value : null
 }
 
-// A 401 is not always a bad key: the provider also answers 401 when the quota
-// is gone. Only the codes that mean "this key will never work" latch.
 export function isAuthFailure(status: number, detail: unknown): boolean {
   return status === 403
     || AUTH_FAILURES.has(detailCode(detail, 'code') ?? '')
     || AUTH_FAILURES.has(detailCode(detail, 'status') ?? '')
 }
 
-// The failure is mapped once, here, so the capability never parses a status.
 export function failureFor(status: number, detail: unknown): ProviderFailure {
   if (isAuthFailure(status, detail))
     return 'fatal'
@@ -60,15 +49,12 @@ export function failureFor(status: number, detail: unknown): ProviderFailure {
 }
 
 export class SpeechRequestError extends ProviderError {
-  readonly detail: unknown
-
   constructor(status: number, body: string, detail: unknown) {
     super(`Speech service responded ${status}: ${body.slice(0, MAX_ERROR_BODY)}`, {
       failure: failureFor(status, detail),
       status,
     })
     this.name = 'SpeechRequestError'
-    this.detail = detail
   }
 }
 
@@ -101,7 +87,7 @@ async function request(config: SpeechClientConfig, path: string, init: RequestIn
   return response
 }
 
-async function synthesize(config: SpeechClientConfig, text: string): Promise<Uint8Array> {
+export async function synthesizeSpeech(config: SpeechClientConfig, text: string): Promise<Uint8Array> {
   const response = await request(config, `/text-to-speech/${config.voiceId}?output_format=${OUTPUT_FORMAT}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
@@ -115,23 +101,14 @@ async function synthesize(config: SpeechClientConfig, text: string): Promise<Uin
   return new Uint8Array(await response.arrayBuffer())
 }
 
-async function fetchUsage(config: SpeechClientConfig): Promise<SpeechUsage> {
+export async function fetchSpeechUsage(config: SpeechClientConfig): Promise<SpeechUsage> {
   const response = await request(config, '/user/subscription')
   const payload: unknown = await response.json()
   const used = isRecord(payload) ? payload.character_count : null
   const limit = isRecord(payload) ? payload.character_limit : null
 
-  // An unrecognized shape must not read as an empty quota: the caller only
-  // skips a line on a confirmed shortage.
   if (typeof used !== 'number' || typeof limit !== 'number' || !Number.isFinite(used) || !Number.isFinite(limit))
     throw new Error('Speech service returned a subscription without a usable character count.')
 
   return { used, limit }
-}
-
-export function speechClient(config: SpeechClientConfig): SpeechClient {
-  return {
-    synthesize: async text => synthesize(config, text),
-    fetchUsage: async () => fetchUsage(config),
-  }
 }

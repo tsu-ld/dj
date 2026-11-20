@@ -33,9 +33,6 @@ interface ViewState {
   readonly textChannel: GuildTextBasedChannel
 }
 
-// The now-playing and queue cards are the bot's only long-lived messages. This
-// object owns their ids, their writes and their timers per guild: music events
-// and the message handler only hand it a snapshot.
 export function messageSlot(deps: {
   logger: Logger
   playback: (guildId: string) => PlaybackStatus | null
@@ -77,7 +74,6 @@ export function messageSlot(deps: {
       await deleteCard(message, 'queue message')
   }
 
-  // Assumes the guild's write lock is held.
   async function writeNowPlaying(guildId: string): Promise<void> {
     const state = latest.get(guildId)
 
@@ -90,7 +86,6 @@ export function messageSlot(deps: {
     if (!payload)
       return
 
-    // a long run replaces its card before Discord stops accepting edits to it
     if (isPastEditWindow(nowPlaying.get(guildId)?.message, Date.now()))
       await deleteNowPlaying(guildId)
 
@@ -115,7 +110,6 @@ export function messageSlot(deps: {
     nowPlaying.set(guildId, { message: sent, channelId: state.textChannel.id })
   }
 
-  // Write lock held. A tick only edits the card where it is, never posts one.
   async function repaintNowPlaying(guildId: string): Promise<void> {
     const card = nowPlaying.get(guildId)
     const state = latest.get(guildId)
@@ -145,9 +139,6 @@ export function messageSlot(deps: {
     }
   }
 
-  // The message handler schedules this after a user message, and showing the
-  // queue schedules it too, so the card falls back to the bottom; the timer's
-  // own send never schedules another.
   function scheduleRepost(guildId: string): void {
     if (disposed)
       return
@@ -157,8 +148,6 @@ export function messageSlot(deps: {
       repostTimers.delete(guildId)
 
       void writes.run(guildId, async () => {
-        // Only a card that already exists is moved: showing the queue must not
-        // invent a now-playing card for a queue that never showed one.
         if (!nowPlaying.has(guildId))
           return
 
@@ -168,8 +157,6 @@ export function messageSlot(deps: {
     }, NOW_PLAYING_REPOST_MS))
   }
 
-  // Assumes the guild's write lock is held. The queue order just changed, so the
-  // card goes back to page 1, where the playing song is.
   async function redrawQueueCard(guildId: string): Promise<void> {
     const message = queueCards.get(guildId)
     const state = latest.get(guildId)
@@ -211,7 +198,6 @@ export function messageSlot(deps: {
     }).catch(error => deps.logger.error('discord.now_playing_failed', error))
   }
 
-  // One song added: only a visible queue card changes.
   function queueChanged({ guildId, view }: SlotPayload): void {
     const state = latest.get(guildId)
 
@@ -223,7 +209,6 @@ export function messageSlot(deps: {
       .catch(error => deps.logger.error('discord.queue_card_failed', error))
   }
 
-  // A fresh queue card replaces the old one, then the now-playing card moves below it.
   async function postQueueCard(guildId: string, view: QueueView, textChannel: GuildTextBasedChannel): Promise<void> {
     latest.set(guildId, { view, textChannel })
 
@@ -251,7 +236,7 @@ export function messageSlot(deps: {
     const { guildId, view, textChannel } = payload
     const card = nowPlaying.get(guildId)
 
-    if (!textChannel || disposed || !card || card.channelId !== textChannel.id)
+    if (!textChannel || !card || card.channelId !== textChannel.id)
       return
 
     latest.set(guildId, { view, textChannel })

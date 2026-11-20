@@ -6,11 +6,8 @@ import { isRecord } from '../../core/json.ts'
 import { MAX_PLAYLIST_SONGS } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
 
-// The Spotify package ships CommonJS only, so it builds its songs and playlists
-// from the SDK's CommonJS copy while the engine runs the ESM copy. The engine's
-// `instanceof Playlist` then fails, it queues the whole playlist as one song with
-// no stream, and the first play throws on `song.stream.playFromSource`. This
-// plugin reads what the package returns and rebuilds it in the engine's classes.
+// @distube/spotify ships CommonJS only and builds from distube's CommonJS copy,
+// so the ESM engine's `instanceof Playlist` fails: rebuild in the engine's classes.
 export interface MetadataSource {
   validate: (url: string) => boolean | Promise<boolean>
   resolve: (url: string, options: object) => Promise<unknown>
@@ -85,7 +82,6 @@ export class MetadataCatalog extends InfoExtractorPlugin {
     return new Song<T>({
       plugin: this,
       source: 'spotify',
-      // the engine searches the catalog for a playable copy when it starts
       playFromSource: false,
       id,
       name: textOf(raw.name),

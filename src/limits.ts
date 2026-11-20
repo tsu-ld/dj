@@ -17,9 +17,6 @@ export const RADIO_SILENT_EVERY = 3
 export const RADIO_SPEAK_EVERY = 3
 export const PREPARED_CLIP_TTL_MS = 20 * 60_000
 
-// The queue cap and the one-based position check are the same rule for every
-// caller: the command layer reserves room before playing, the engine enforces
-// it after adding, and the remove command validates the position.
 export function queueRoom(occupied: number): number {
   return Math.max(MAX_QUEUE_SIZE - occupied, 0)
 }

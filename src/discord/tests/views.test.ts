@@ -34,7 +34,6 @@ describe('queueMessage', () => {
     expect(lines).toHaveLength(10)
     expect(lines[0]).toBe('▶ 1. Song 1 · 3:00')
     expect(textMatching(message, /Page 1 of 2/)).toBe('## Queue\n-# 15 songs · 45m · Page 1 of 2')
-    expect(textMatching(message, /15 songs/)).toBe('## Queue\n-# 15 songs · 45m · Page 1 of 2')
 
     const [previous, next] = buttonsOf(message)
 

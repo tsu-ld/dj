@@ -108,12 +108,7 @@ export function upcomingText(view: QueueView): string | null {
     return null
 
   const shown = view.upcoming.slice(0, UPCOMING_ON_CARD)
-  const offset = view.current === null ? 0 : 1
-  const lines = shown.map((track, index) => {
-    const position = offset + index + 1
-
-    return queueLine(track, position, '')
-  })
+  const lines = shown.map((track, index) => queueLine(track, index + 2, ''))
   const hidden = view.upcoming.length - shown.length
 
   if (hidden > 0)

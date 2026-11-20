@@ -1,7 +1,7 @@
 import type { ButtonInteraction, GuildMember, GuildTextBasedChannel, Interaction, InteractionReplyOptions, Message } from 'discord.js'
 import type { CommandBus, CommandContext, CommandUi } from '../commands/spec.ts'
 import type { Logger } from '../core/logger.ts'
-import type { MusicPort, QueueView } from '../ports/music.ts'
+import type { MusicPort } from '../ports/music.ts'
 import type { SettingsPort } from '../ports/settings.ts'
 import type { MessageSlot } from './slot.ts'
 import type { ViewMessage } from './views.ts'
@@ -62,17 +62,15 @@ async function handleNowPlaying(deps: InteractionHandlerDeps, interaction: Butto
     return
   }
 
-  // a timeline button reads np:seek:<seconds>:<song id>
   const [name = '', rawSeconds = '', ...songId] = interaction.customId.slice('np:'.length).split(':')
 
-  // clear is destructive and irreversible: ask before stopping the music
   if (name === 'clear') {
     await interaction.reply(clearConfirmation())
 
     return
   }
 
-  // ack before acting: playback actions can exceed the 3s window
+  // Discord drops an interaction not acknowledged within 3 seconds.
   await interaction.deferUpdate()
 
   if (!NOW_PLAYING_ACTIONS.has(name))
@@ -89,7 +87,7 @@ async function handleNowPlaying(deps: InteractionHandlerDeps, interaction: Butto
 
   const args = name === 'seek' ? { seconds: Number.parseInt(rawSeconds, 10), songId: songId.join(':') } : {}
 
-  await deps.bus.run(name, args, interactionContext(deps, interaction, guildId, member, channel, view))
+  await deps.bus.run(name, args, interactionContext(deps, interaction, guildId, member, channel))
 }
 
 async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction: ButtonInteraction): Promise<void> {
@@ -128,10 +126,9 @@ async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction
     return
   }
 
-  const outcome = await deps.bus.run('clear', {}, interactionContext(deps, interaction, guildId, member, channel, view))
+  const outcome = await deps.bus.run('clear', {}, interactionContext(deps, interaction, guildId, member, channel))
 
   if (outcome.kind !== 'ok') {
-    // The bus already surfaced the error or the refusal; only close the prompt.
     await interaction.editReply({ components: [] })
 
     return
@@ -141,15 +138,12 @@ async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction
     await interaction.editReply({ content: MESSAGES.cleared, components: [] })
   }
   catch (error) {
-    // The clear already happened; an expired prompt is not a failed command.
     deps.logger.warn('discord.clear_feedback_failed', { error: errorMessage(error) })
   }
 }
 
 async function editCard(message: Message, payload: ViewMessage): Promise<void> {
-  // The flag can only be set, and Discord rejects the edit unless the legacy
-  // content and embeds are explicitly cleared; this also upgrades cards left
-  // over from the embed build so their buttons keep working.
+  // Discord rejects the edit unless the legacy content and embeds are explicitly cleared.
   await message.edit({ components: payload.components, flags: payload.flags, allowedMentions: payload.allowedMentions, content: null, embeds: [] })
 }
 
@@ -185,10 +179,8 @@ function interactionContext(
   guildId: string,
   member: GuildMember,
   channel: GuildTextBasedChannel,
-  view: QueueView,
 ): CommandContext {
   const ui: CommandUi = {
-    // In voice the card is the feedback; refusals and errors still follow up.
     reply: async (text) => {
       if (deps.music.status(guildId) === null)
         await interaction.followUp({ content: text, flags: MessageFlags.Ephemeral })
@@ -196,7 +188,6 @@ function interactionContext(
     error: async (message) => {
       await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral })
     },
-    // The interaction is already deferred; the card edit is the feedback.
     ack: async () => {},
     showQueue: async (queueView) => {
       await deps.slot.showQueue(queueView, channel)
@@ -209,8 +200,6 @@ function interactionContext(
     voiceChannel: member.voice.channel,
     textChannel: channel,
     message: null,
-    settings: deps.settings.get(guildId),
-    queue: view,
     services: { music: deps.music, settings: deps.settings, logger: deps.logger },
     ui,
   }

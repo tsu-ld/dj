@@ -9,8 +9,7 @@ const NO_SONGS = 'no songs were given'
 const TYPING_REFRESH_MS = 8_000
 const TYPING_MAX_MS = 60_000
 
-// Discord drops a typing indicator after ten seconds; a search, an extraction
-// and the first line can keep the channel quiet for longer than that.
+// Discord drops a typing indicator after ten seconds.
 function keepTyping(channel: GuildTextBasedChannel): () => void {
   let refresh: ReturnType<typeof setInterval> | null = null
   let deadline: ReturnType<typeof setTimeout> | null = null
@@ -60,7 +59,7 @@ export const addSongs: VoiceSpec = {
     if (!songs.length)
       throw new UserError(NO_SONGS)
 
-    const room = queueRoom(context.queue?.size ?? 0)
+    const room = queueRoom(context.services.music.view(context.guildId)?.size ?? 0)
 
     if (room === 0)
       throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
@@ -94,7 +93,7 @@ export const query: VoiceSpec = {
   async run(args, context) {
     const text = typeof args.query === 'string' ? args.query : ''
 
-    if (queueRoom(context.queue?.size ?? 0) === 0)
+    if (queueRoom(context.services.music.view(context.guildId)?.size ?? 0) === 0)
       throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
 
     const stopTyping = keepTyping(context.textChannel)

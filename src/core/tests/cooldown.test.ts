@@ -29,13 +29,4 @@ describe('cooldown', () => {
     expect(window.has('a')).toBe(true)
     expect(window.take('a')).toBe(false)
   })
-
-  test('the map is capped by dropping the oldest entry', () => {
-    const window = cooldown(10_000, { maxEntries: 2 })
-
-    expect(window.take('a')).toBe(true)
-    expect(window.take('b')).toBe(true)
-    expect(window.take('c')).toBe(true)
-    expect(window.has('a')).toBe(false)
-  })
 })

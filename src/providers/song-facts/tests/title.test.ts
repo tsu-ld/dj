@@ -79,9 +79,12 @@ describe('containsWords', () => {
 })
 
 describe('cacheKey', () => {
-  test('the same song in different casing shares one key', () => {
+  test('the same song in different casing shares one key, another song does not', () => {
     expect(cacheKey({ artist: 'Daft Punk', title: 'One More Time', explicit: true }))
       .toBe(cacheKey({ artist: 'daft punk', title: 'one more time', explicit: true }))
+    expect(cacheKey({ artist: 'Daft Punk', title: 'One More Time', explicit: true }))
+      .not
+      .toBe(cacheKey({ artist: 'Daft Punk', title: 'Digital Love', explicit: true }))
   })
 })
 

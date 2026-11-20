@@ -5,15 +5,11 @@ import { errorMessage } from '../core/errors.ts'
 import { isRecord, parseJson } from '../core/json.ts'
 
 export interface JsonMapFile<T> {
-  // a missing file is empty; a file that is not this map is quarantined
   read: () => Promise<Record<string, T>>
-  // writes run one after another, each through a temporary file
   write: (value: unknown) => Promise<void>
   settled: () => Promise<void>
 }
 
-// A map whose values are objects. One bad entry drops only that key; a map
-// where no value is an object is not this file and comes back null.
 export function normalizeMap<T>(value: unknown, entry: (value: unknown) => T | null): Record<string, T> | null {
   if (!isRecord(value))
     return null
@@ -35,7 +31,6 @@ export function normalizeMap<T>(value: unknown, entry: (value: unknown) => T | n
   return map
 }
 
-// `name` prefixes the log events: `<name>.quarantined`, `<name>.quarantine_failed`.
 export function jsonMapFile<T>(options: { path: string, name: string, logger: Logger, entry: (value: unknown) => T | null }): JsonMapFile<T> {
   const { path, name, logger } = options
   let writes: Promise<void> = Promise.resolve()

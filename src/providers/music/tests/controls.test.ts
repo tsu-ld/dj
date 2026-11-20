@@ -1,4 +1,4 @@
-import type { DisTube } from 'distube'
+import type { DisTube, Song } from 'distube'
 import type { MusicEventMap } from '../../../ports/music.ts'
 import { pathToFileURL } from 'node:url'
 import { AudioPlayerStatus } from '@discordjs/voice'
@@ -12,7 +12,7 @@ import { musicControls } from '../controls.ts'
 import { createEmitter } from '../emitter.ts'
 import {
   capQueue,
-  clearStation,
+  currentForStream,
   queueView,
   removeSongAt,
   shouldCleanupAfterError,
@@ -161,21 +161,40 @@ test('an empty queue has no current song', () => {
   expect(view).toEqual({ current: null, upcoming: [], paused: false, radio: false, size: 0 })
 })
 
-test('an explicit stop reports whether the station resets', async () => {
-  const seen: Array<MusicEventMap['queueCleared']> = []
-  const order: string[] = []
-  const queue = {
-    id: 'guild-1',
-    stop: async () => {
-      order.push('stop')
-    },
-  }
+interface FakeSong {
+  id: string
+  stream: { playFromSource: boolean }
+}
 
-  await clearStation(queue, () => order.push('leave'), payload => seen.push(payload), true)
-  await clearStation(queue, () => order.push('leave'), payload => seen.push(payload), false)
+function song(id: string, playFromSource: boolean): FakeSong {
+  return { id, stream: { playFromSource } }
+}
 
-  expect(order).toEqual(['stop', 'leave', 'stop', 'leave'])
-  expect(seen).toEqual([
+test('the line belongs to the card, not to the stream resolved behind it', () => {
+  const card = song('spotify', false)
+  const resolved = song('youtube', true)
+
+  expect(currentForStream(resolved, { songs: [card] })).toBe(card)
+  expect(currentForStream(card, { songs: [card] })).toBe(card)
+})
+
+test('a stream resolved for another song stays silent', () => {
+  const other = song('other', true)
+  const current = song('current', true)
+
+  expect(currentForStream(other, { songs: [current] })).toBeNull()
+  expect(currentForStream(other, null)).toBeNull()
+  expect(currentForStream(other, { songs: [] })).toBeNull()
+})
+
+test('an explicit stop leaves voice and reports whether the station resets', async () => {
+  const { controls, order, cleared } = station()
+
+  await controls.stop('guild-1', { resetStation: true })
+  await controls.stop('guild-1')
+
+  expect(order).toEqual(['stop', 'leave', 'queueCleared', 'stop', 'leave', 'queueCleared'])
+  expect(cleared).toEqual([
     { guildId: 'guild-1', resetStation: true },
     { guildId: 'guild-1', resetStation: false },
   ])
@@ -190,19 +209,20 @@ test('cleanup only runs when the failed song left the live queue empty', () => {
   expect(shouldCleanupAfterError(queue, undefined)).toBe(false)
 })
 
-function skipStation(): {
+function station(options: { status?: AudioPlayerStatus, songs?: (catalog: MusicCatalog) => Song[] } = {}): {
   controls: ReturnType<typeof musicControls>
   order: string[]
+  seeks: number[]
   skipped: Array<MusicEventMap['trackSkipped']>
+  cleared: Array<MusicEventMap['queueCleared']>
+  setPlaybackTime: (seconds: number) => void
 } {
   const catalog = new MusicCatalog({ extraction: extractionStub(), stream: streamStub(), logger: log })
-  const songs = [
-    catalog.buildSong({ id: 'a', title: 'A', artist: 'Soda Stereo' }, { member: memberOf('200000000000000007', 'tsu') }),
-    catalog.buildSong({ id: 'b', title: 'B' }, {}),
-    catalog.buildSong({ id: 'c', title: 'C' }, {}),
-  ]
+  const songs = options.songs?.(catalog) ?? [catalog.buildSong({ id: 'a', title: 'A' }, {})]
   const order: string[] = []
+  const seeks: number[] = []
   const skipped: Array<MusicEventMap['trackSkipped']> = []
+  const cleared: Array<MusicEventMap['queueCleared']> = []
   const queue = {
     id: 'guild-1',
     songs,
@@ -213,14 +233,29 @@ function skipStation(): {
       order.push('skip')
       songs.shift()
     },
+    async seek(time: number) {
+      seeks.push(time)
+      order.push('seek')
+    },
+    async stop() {
+      order.push('stop')
+    },
   }
-  const voice = { audioPlayer: { state: { status: AudioPlayerStatus.Playing, playbackDuration: 42_000 } }, leave() {} }
+  const voice = {
+    audioPlayer: { state: { status: options.status ?? AudioPlayerStatus.Playing } },
+    playbackTime: 5,
+  }
   const player = { getQueue: () => queue, voices: { get: () => voice } } as unknown as DisTube
   const { emitter } = createEmitter()
 
   emitter.on('trackSkipped', (payload) => {
     order.push('trackSkipped')
     skipped.push(payload)
+  })
+  emitter.on('stateChanged', () => order.push('stateChanged'))
+  emitter.on('queueCleared', (payload) => {
+    order.push('queueCleared')
+    cleared.push(payload)
   })
 
   const controls = musicControls({
@@ -229,73 +264,52 @@ function skipStation(): {
     mutations: keyedQueue(),
     emitter,
     viewOf: current => queueView(current, song => catalog.trackOf(song)),
-    streamReplaced: () => {},
-  })
-
-  return { controls, order, skipped }
-}
-
-function seekStation(options: { status?: AudioPlayerStatus, isLive?: boolean, duration?: number, copyDuration?: number, url?: string } = {}): {
-  controls: ReturnType<typeof musicControls>
-  seeks: number[]
-  order: string[]
-  setPlaybackTime: (seconds: number) => void
-} {
-  const catalog = new MusicCatalog({ extraction: extractionStub(), stream: streamStub(), logger: log })
-  const song = catalog.buildSong({ id: 'a', title: 'A', duration: options.duration ?? 200, is_live: options.isLive ?? false }, {})
-  const url = options.url ?? 'https://rr1.googlevideo.com/videoplayback?id=a'
-
-  // a Spotify song plays the YouTube copy the engine found for it
-  if (options.copyDuration === undefined) {
-    song.stream = { playFromSource: true, url }
-  }
-  else {
-    const copy = catalog.buildSong({ id: 'yt', title: 'A', duration: options.copyDuration }, {})
-
-    copy.stream = { playFromSource: true, url }
-    song.stream = { playFromSource: false, song: copy }
-  }
-
-  const seeks: number[] = []
-  const order: string[] = []
-  const queue = {
-    id: 'guild-1',
-    songs: [song],
-    autoplay: false,
-    paused: false,
-    textChannel: undefined,
-    async seek(time: number) {
-      seeks.push(time)
-      order.push('seek')
-    },
-  }
-  const voice = {
-    audioPlayer: { state: { status: options.status ?? AudioPlayerStatus.Playing, playbackDuration: 5_000 } },
-    playbackTime: 5,
-    leave() {},
-  }
-  const player = { getQueue: () => queue, voices: { get: () => voice } } as unknown as DisTube
-  const { emitter } = createEmitter()
-
-  emitter.on('stateChanged', () => order.push('stateChanged'))
-
-  const controls = musicControls({
-    player,
-    catalog,
-    mutations: keyedQueue(),
-    emitter,
-    viewOf: current => queueView(current, item => catalog.trackOf(item)),
+    leave: () => order.push('leave'),
     streamReplaced: () => order.push('streamReplaced'),
   })
 
   return {
     controls,
-    seeks,
     order,
+    seeks,
+    skipped,
+    cleared,
     setPlaybackTime: (seconds) => {
       voice.playbackTime = seconds
     },
   }
+}
+
+function seekStation(options: { status?: AudioPlayerStatus, isLive?: boolean, duration?: number, copyDuration?: number, url?: string } = {}): ReturnType<typeof station> {
+  return station({
+    status: options.status,
+    songs(catalog) {
+      const song = catalog.buildSong({ id: 'a', title: 'A', duration: options.duration ?? 200, is_live: options.isLive ?? false }, {})
+      const url = options.url ?? 'https://rr1.googlevideo.com/videoplayback?id=a'
+
+      if (options.copyDuration === undefined) {
+        song.stream = { playFromSource: true, url }
+      }
+      else {
+        const copy = catalog.buildSong({ id: 'yt', title: 'A', duration: options.copyDuration }, {})
+
+        copy.stream = { playFromSource: true, url }
+        song.stream = { playFromSource: false, song: copy }
+      }
+
+      return [song]
+    },
+  })
+}
+
+function skipStation(): ReturnType<typeof station> {
+  return station({
+    songs: catalog => [
+      catalog.buildSong({ id: 'a', title: 'A', artist: 'Soda Stereo' }, { member: memberOf('200000000000000007', 'tsu') }),
+      catalog.buildSong({ id: 'b', title: 'B' }, {}),
+      catalog.buildSong({ id: 'c', title: 'C' }, {}),
+    ],
+  })
 }
 
 test('a seek jumps the playing song, watches its new stream and redraws the card', async () => {
@@ -387,6 +401,15 @@ test('a skip reports who skipped the playing song, before skipping', async () =>
   expect(skipped[0]?.track.requesterId).toBe('200000000000000007')
 })
 
+test('removing a position outside the queue is refused and removes nothing', async () => {
+  const { controls, order } = skipStation()
+
+  for (const position of [0, 4, 1.5, Number.NaN])
+    expect(await rejection(async () => controls.remove('guild-1', position, listener))).toBe(MESSAGES.removeOutOfRange)
+
+  expect(order).toEqual([])
+})
+
 test('removing the playing song reports a skip; removing a waiting song does not', async () => {
   const { controls, order, skipped } = skipStation()
 
@@ -394,7 +417,7 @@ test('removing the playing song reports a skip; removing a waiting song does not
   expect(skipped).toHaveLength(0)
 
   expect(await controls.remove('guild-1', 1, listener)).toBe('A')
-  expect(order).toEqual(['trackSkipped', 'skip'])
+  expect(order).toEqual(['stateChanged', 'trackSkipped', 'skip', 'stateChanged'])
   expect(skipped.map(event => [event.track.id, event.by.name])).toEqual([['a', 'ana']])
 })
 
@@ -407,10 +430,6 @@ function voiceChannel({ type = ChannelType.GuildVoice, permissions = { has: () =
   return { type, guild, permissionsFor: () => permissions }
 }
 
-test('playing without a voice channel is rejected', () => {
-  expect(voiceChannelProblem(null)).toBe(MESSAGES.joinVoiceChannel)
-})
-
 test('a stage channel needs speaker permission', () => {
   expect(voiceChannelProblem(voiceChannel({ type: ChannelType.GuildStageVoice }))).toBe(MESSAGES.stageChannelPermissions)
 })
@@ -422,10 +441,4 @@ test('a channel where the bot cannot connect and speak is rejected', () => {
 
 test('a regular voice channel with permissions is fine', () => {
   expect(voiceChannelProblem(voiceChannel())).toBeNull()
-})
-
-test('the guild defaults to the voice channel guild', () => {
-  const channel = { ...voiceChannel(), guild }
-
-  expect(voiceChannelProblem(channel)).toBeNull()
 })

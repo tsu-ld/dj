@@ -13,10 +13,11 @@ const KILL_GRACE_MS = 1_000
 // burst of requests; the plain android client is unaffected and yields a
 // progressive mp4 that ffmpeg can read directly.
 const YOUTUBE_CLIENT_ARGS = ['--extractor-args', 'youtube:player_client=android']
-// YouTube answers 500s on the media URL in bursts; two retries were not enough
-// and the song died after the DJ had already announced it.
+// YouTube answers 500s on the media URL in bursts
 const BASE_ARGS = ['--no-warnings', '--no-progress', '--socket-timeout', '15', '--retries', '10', '--retry-sleep', '2', '--fragment-retries', '5', ...YOUTUBE_CLIENT_ARGS]
 const AUDIO_FORMAT = 'ba/ba*'
+// ffmpeg is refused YouTube's audio-only urls; ask for the progressive muxed mp4
+const MUXED_FORMAT = 'b[acodec!=none][vcodec!=none]'
 const DOWNLOAD_ARGS = ['--max-filesize', '200M', '-f', AUDIO_FORMAT]
 
 export interface ExtractorOutput {
@@ -31,10 +32,8 @@ export interface ExtractorProcess {
 }
 
 export interface Extractor {
-  // The extractor's own wrapper merges stderr into its JSON parse, so this reads
-  // stdout only and suppresses warnings.
   json: (url: string, extraFlags: readonly string[]) => Promise<unknown>
-  streamUrl: (url: string, format: string) => Promise<string | null>
+  streamUrl: (url: string) => Promise<string | null>
   download: (url: string, outputTemplate: string) => Promise<void>
   dispose: () => Promise<void>
 }
@@ -44,8 +43,6 @@ interface RunningProcess {
   readonly stop: (error: Error) => void
 }
 
-// spawn has no timeout option: a timer SIGKILLs a hung process. Output is capped
-// so a live stream or a chatty process cannot grow the bot's memory.
 export function extractorProcess(deps: { command: string, logger: Logger }): ExtractorProcess {
   const running = new Set<RunningProcess>()
   let disposed = false
@@ -55,8 +52,7 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
       throw new Error('The extractor has been disposed.')
 
     return new Promise((resolve, reject) => {
-      // Its own process group: the extractor spawns a downloader for merges and
-      // a plain SIGKILL to the leader would leave that child running.
+      // yt-dlp spawns a downloader for merges; killing only the leader leaves it running
       const detached = process.platform !== 'win32'
       const child = spawn(deps.command, [...args], { stdio: ['ignore', 'pipe', 'pipe'], detached })
       const stdout = child.stdout
@@ -87,9 +83,7 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
           resolve({ code, stdout: out, stderr: err })
       }
 
-      // A killed extractor can leave a grandchild holding its stdio pipes, so
-      // 'close' may never arrive. Settle shortly after the kill instead of
-      // leaving the caller waiting on a process that is already dead.
+      // a killed extractor's grandchild can hold its stdio pipes, so 'close' may never arrive
       const stop = (error: Error): void => {
         if (failure === null)
           failure = error
@@ -143,7 +137,7 @@ export function extractorProcess(deps: { command: string, logger: Logger }): Ext
 
       child.on('error', error => finish(error, null))
       child.on('close', (code) => {
-        // A spawn failure emits error and close; finish keeps the first outcome.
+        // Node emits both error and close on a spawn failure
         finish(failure, code)
       })
     })
@@ -199,8 +193,8 @@ export function extractor(deps: { command: string, logger: Logger }): Extractor 
     return parsed
   }
 
-  async function streamUrl(url: string, format: string): Promise<string | null> {
-    const { code, stdout } = await process.run([...BASE_ARGS, '-f', format, '-g', url], METADATA_TIMEOUT_MS)
+  async function streamUrl(url: string): Promise<string | null> {
+    const { code, stdout } = await process.run([...BASE_ARGS, '-f', MUXED_FORMAT, '-g', url], METADATA_TIMEOUT_MS)
     const line = stdout.split('\n').map(entry => entry.trim()).find(entry => entry.startsWith('https://'))
 
     if (code !== 0 || line === undefined)

@@ -18,11 +18,6 @@ export interface SkippableQueue extends TrackQueue {
   skip: () => Promise<unknown>
 }
 
-export interface StoppableQueue {
-  readonly id: string
-  stop: () => Promise<void>
-}
-
 export type MusicEmitter = {
   readonly on: <K extends keyof MusicEventMap>(event: K, listener: (payload: MusicEventMap[K]) => void) => () => void
 } & { readonly [K in keyof MusicEventMap]: (payload: MusicEventMap[K]) => void }

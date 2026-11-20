@@ -1,14 +1,5 @@
-# dependencies
 node_modules
-
-# caches written at runtime (.cache/players)
 .cache
-
-# runtime data
 data/
-
-# agent findings
 FINDINGS.md
-
-# binary assets
 /assets/

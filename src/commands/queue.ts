@@ -41,7 +41,7 @@ export const remove: QueueSpec = {
 
     const position = Number.parseInt(raw, 10)
 
-    return isPositionInQueue(context.queue?.size ?? 0, position) ? { position } : null
+    return isPositionInQueue(context.services.music.view(context.guildId)?.size ?? 0, position) ? { position } : null
   },
   async run(args, context) {
     const raw = args.position
@@ -61,8 +61,6 @@ export const clear: QueueSpec = {
   description: 'Stop the music, clear the queue and leave the voice channel. Users say: cortala, limpiá la cola, cortá todo, pará todo, clear, stop the music, stop everything, leave, chau.',
   parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
-  // The button path renders its own confirmation; a text path needs an answer
-  // more explicit than the generic ack reaction.
   authorize: requireSameVoiceChannel,
   confirm: (_data, context) => context.message === null ? null : MESSAGES.cleared,
   async run(_args, context) {

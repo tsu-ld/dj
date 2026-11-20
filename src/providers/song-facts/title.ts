@@ -1,14 +1,9 @@
 export interface ParsedTitle {
   readonly artist: string | null
   readonly title: string
-  // True when the title itself carried "Artist - Track". Only then may the
-  // parsed artist be used for facts that Deezer did not confirm.
   readonly explicit: boolean
 }
 
-// Uploaders decorate the same song in a dozen ways. Parenthesized or bracketed
-// production notes are dropped, but a song whose own name is in brackets (for
-// example "Video Games") survives because only the listed phrases match.
 const DECORATION = /\s*[([][^)\]]*\b(?:official\s*(?:music\s*)?video|official\s*audio|audio|lyrics?|remaster(?:ed)?(?:\s+\d{4})?|hd|4k|visuali[sz]er)\b[^)\]]*[)\]]/gi
 const CREDIT_BRACKET = /\s*[([][^)\]]*\b(?:ft|feat)\.?\s[^)\]]*[)\]]/gi
 const CREDIT_TAIL = /\s(?:ft|feat)\.?\s.*$/i
@@ -23,8 +18,6 @@ export function normalizeName(value: string): string {
     .trim()
 }
 
-// Whole words over the folded text: "Air" must not match "Airbourne", nor
-// "Sia" "Siamese". Padding the haystack is what makes the boundary real.
 export function containsWords(text: string, phrase: string): boolean {
   const folded = normalizeName(text)
   const needle = normalizeName(phrase)
@@ -35,12 +28,6 @@ export function containsWords(text: string, phrase: string): boolean {
   return ` ${folded} `.includes(` ${needle} `)
 }
 
-// Deezer and the title rarely agree on accents or on the exact billing:
-// "Beyonce" is still "Beyoncé", and "Calvin Harris feat. Rihanna" is still the
-// same act. Either name containing the other is the same artist; a different
-// one is a mismatch and the facts are refused. Titles work the same way: a
-// remaster suffix ("The Chain (2004 Remaster)") may wrap the hit's own name,
-// but a different song by the same artist must not pass.
 export function eitherContains(left: string, right: string): boolean {
   return containsWords(left, right) || containsWords(right, left)
 }
@@ -56,9 +43,6 @@ export function stripDecorations(raw: string): string {
     .trim()
 }
 
-// A YouTube title is either "Artist - Track" plus decoration, or a bare track
-// that needs the caller's artist. The billing side is kept as written: it is
-// only ever compared, never shown as the artist's name.
 export function parseTitle(title: string, artist: string | null): ParsedTitle {
   const cleaned = stripDecorations(title)
   const separator = SEPARATOR.exec(cleaned)

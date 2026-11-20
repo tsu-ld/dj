@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { djReplies } from '../replies.ts'
 import {
-  captureLogger,
+  captureLog,
   scriptedModel,
   silentLog,
   testChannel,
@@ -44,7 +44,7 @@ describe('djReplies', () => {
   test('say falls back to the plain text when the model fails', async () => {
     const channel = testChannel()
     const { message, replies } = testMessage(channel.channel)
-    const logs = captureLogger()
+    const logs = captureLog()
     const model = scriptedModel([() => {
       throw new Error('upstream exploded')
     }])
@@ -69,7 +69,7 @@ describe('djReplies', () => {
 
   test('announce falls back to the plain text when the model fails', async () => {
     const channel = testChannel()
-    const logs = captureLogger()
+    const logs = captureLog()
     const model = scriptedModel([() => {
       throw new Error('upstream exploded')
     }])
@@ -115,7 +115,7 @@ describe('djReplies', () => {
 
   test('a failed announcement is logged and does not throw', async () => {
     const channel = testChannel({ failSend: true })
-    const logs = captureLogger()
+    const logs = captureLog()
     const model = scriptedModel([() => textReply('listo')])
     const port = djReplies({ model, logger: logs.logger })
 

@@ -1,22 +1,14 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'bun:test'
-import { silentLog as log } from '../../../tests/fixtures.ts'
+import { silentLog as log, removeTempDirs, tempDir } from '../../../tests/fixtures.ts'
 import { settingsStore } from '../index.ts'
 
-const directories: string[] = []
-
 async function tempFile(name = 'guilds.json'): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'dj-settings-'))
-  directories.push(directory)
-
-  return join(directory, name)
+  return join(await tempDir(), name)
 }
 
-afterEach(async () => {
-  await Promise.all(directories.splice(0).map(async directory => rm(directory, { recursive: true, force: true })))
-})
+afterEach(removeTempDirs)
 
 describe('settingsStore', () => {
   test('a missing file starts empty and returns defaults', async () => {

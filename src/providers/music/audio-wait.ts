@@ -3,8 +3,6 @@ import { AudioPlayerStatus, VoiceConnectionStatus } from '@discordjs/voice'
 
 type AudioOutcome = 'idle' | 'error' | 'destroyed' | 'timeout' | 'aborted'
 
-// A player holds the connection until it reaches idle, fails, the connection
-// dies, or the caller's abort/timeout fires. Every exit removes its listeners.
 export async function waitForAudio(
   player: AudioPlayerLike,
   connection: VoiceConnectionLike,

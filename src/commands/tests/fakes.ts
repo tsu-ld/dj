@@ -1,5 +1,5 @@
 import type { GuildMember, GuildTextBasedChannel, Message, VoiceBasedChannel } from 'discord.js'
-import type { MusicPort, QueueView } from '../../ports/music.ts'
+import type { MusicPort, PlayRequest, PlayResult, QueueView } from '../../ports/music.ts'
 import type { GuildSettings, SettingsPort } from '../../ports/settings.ts'
 import type { CommandContext, CommandServices, CommandUi, QueueContext, VoiceContext } from '../spec.ts'
 import { silentLog, testTrack, testView } from '../../tests/fixtures.ts'
@@ -94,6 +94,17 @@ export function fakeMusic(overrides: Partial<MusicPort> = {}): MusicRecorder {
   return { ...music, calls, ...overrides }
 }
 
+export function collector(requests: PlayRequest[], result: Partial<PlayResult> = {}, overrides: Partial<MusicPort> = {}): MusicRecorder {
+  return fakeMusic({
+    ...overrides,
+    async play(request) {
+      requests.push(request)
+
+      return { added: 1, first: 'a', dropped: 0, ...result }
+    },
+  })
+}
+
 export interface SettingsRecorder extends SettingsPort {
   readonly updates: [string, Partial<GuildSettings>][]
 }
@@ -152,8 +163,6 @@ export interface ContextOptions {
   voiceChannel?: VoiceBasedChannel | null
   textChannel?: GuildTextBasedChannel
   message?: Message | null
-  settings?: GuildSettings
-  queue?: QueueView | null
   services?: Partial<CommandServices>
   ui?: CommandUi
 }
@@ -165,14 +174,11 @@ export function fakeContext(options: ContextOptions = {}): CommandContext {
     voiceChannel: options.voiceChannel === undefined ? fakeVoice() : options.voiceChannel,
     textChannel: options.textChannel ?? fakeTextChannel(),
     message: options.message ?? null,
-    settings: options.settings ?? { textChannelId: null, persona: null },
-    queue: options.queue ?? null,
     services: { music: fakeMusic(), settings: fakeSettings(), logger: silentLog, ...options.services },
     ui: options.ui ?? fakeUi(),
   }
 }
 
-// Contexts that already passed the bus precondition, for calling run directly.
 export function queueContext(options: ContextOptions & { queue?: QueueView } = {}): QueueContext {
   return { ...fakeContext(options), queue: options.queue ?? testView() }
 }

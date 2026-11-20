@@ -9,34 +9,8 @@ import { Events } from 'distube'
 import { logger } from '../../../core/logger.ts'
 import { audioHealth } from '../audio-health.ts'
 import { createEmitter } from '../emitter.ts'
-import { currentForStream, musicEvents } from '../events.ts'
+import { musicEvents } from '../events.ts'
 import { track } from './fakes.ts'
-
-interface FakeSong {
-  id: string
-  stream: { playFromSource: boolean }
-}
-
-function song(id: string, playFromSource: boolean): FakeSong {
-  return { id, stream: { playFromSource } }
-}
-
-test('the line belongs to the card, not to the stream resolved behind it', () => {
-  const card = song('spotify', false)
-  const resolved = song('youtube', true)
-
-  expect(currentForStream(resolved, { songs: [card] })).toBe(card)
-  expect(currentForStream(card, { songs: [card] })).toBe(card)
-})
-
-test('a stream resolved for another song stays silent', () => {
-  const other = song('other', true)
-  const current = song('current', true)
-
-  expect(currentForStream(other, { songs: [current] })).toBeNull()
-  expect(currentForStream(other, null)).toBeNull()
-  expect(currentForStream(other, { songs: [] })).toBeNull()
-})
 
 class FakeStream extends EventEmitter {
   killed = 0
@@ -46,7 +20,6 @@ class FakeStream extends EventEmitter {
   }
 }
 
-// The engine's voice: an emitter that re-emits its stream's errors.
 class FakeVoice extends EventEmitter {
   constructor(public stream: FakeStream, readonly connection = { ping: { ws: 44 as number | undefined, udp: 58 as number | undefined } }) {
     super()
@@ -69,7 +42,6 @@ function fakeQueue(stream: FakeStream): FakeQueue {
   }
 }
 
-// The parts of the engine the event wiring reads, with the same event names.
 function fakePlayer(queue: FakeQueue) {
   const bus = new EventEmitter()
   const player = {
@@ -110,7 +82,7 @@ function fakeHealth() {
   return { health, started, ended }
 }
 
-function wiring(queue: FakeQueue, player: ReturnType<typeof fakePlayer>, realHealth?: AudioHealth) {
+function wiring(player: ReturnType<typeof fakePlayer>, realHealth?: AudioHealth) {
   const lines: Array<{ event: string, fields: Record<string, unknown> }> = []
   const log: Logger = logger({
     level: 'debug',
@@ -135,7 +107,6 @@ function wiring(queue: FakeQueue, player: ReturnType<typeof fakePlayer>, realHea
     catalog: { trackOf: (value: { id: string, name?: string }) => track({ id: value.id, title: value.name ?? value.id }) } as never,
     cache: { prefetch: () => {} } as never,
     emitter,
-    beforeStream: async () => {},
     forgetStream: () => {},
     leave: () => {},
     viewOf: () => ({}) as QueueView,
@@ -153,12 +124,9 @@ function wiring(queue: FakeQueue, player: ReturnType<typeof fakePlayer>, realHea
     ended,
     has: (event: string): boolean => lines.some(line => line.event === event),
     orphans: (): number => lines.filter(line => line.event === 'music.orphan_stream_failed').length,
-    summary: () => lines.find(line => line.event === 'music.audio_health')?.fields,
-    queue,
   }
 }
 
-// The error the stream raises when ffmpeg gives up on its own input.
 function ffmpegExited(): Error {
   const error = new Error('ffmpeg exited with code 8')
 
@@ -175,9 +143,8 @@ test('an ffmpeg exit that lost its listener is logged, not reported twice, and n
   const stream = new FakeStream()
   const queue = fakeQueue(stream)
   const player = fakePlayer(queue)
-  const harness = wiring(queue, player)
+  const harness = wiring(player)
 
-  // The engine's own listener is attached while the song starts, ours alongside.
   let engineSaw = 0
   const engineHandler = (): void => {
     engineSaw += 1
@@ -186,18 +153,12 @@ test('an ffmpeg exit that lost its listener is logged, not reported twice, and n
   stream.on('error', engineHandler)
   play(queue, player)
 
-  // Then the next song takes the engine's single listener away, and this ffmpeg
-  // is left running with no one to hear its exit.
   queue.voice.stream = new FakeStream()
   stream.off('error', engineHandler)
 
   expect(() => stream.emit('error', ffmpegExited())).not.toThrow()
   expect(engineSaw).toBe(0)
 
-  // The orphan belongs to a song the engine already reported: naming it is all
-  // that is left to do. A playbackError here would tell the channel about a
-  // failure it has already been told about, and ending the session would cut
-  // the summary of the song now playing.
   expect(harness.lines.find(line => line.event === 'music.orphan_stream_failed')?.fields.level).toBe('warn')
   expect(harness.failures).toEqual([])
   expect(harness.has('music.playback_error')).toBe(false)
@@ -209,7 +170,7 @@ test('an orphan error leaves the song now playing with its session running', () 
   const stream = new FakeStream()
   const queue = fakeQueue(stream)
   const player = fakePlayer(queue)
-  const harness = wiring(queue, player)
+  const harness = wiring(player)
 
   play(queue, player)
   queue.voice.stream = new FakeStream()
@@ -225,7 +186,7 @@ test('an error on the stream the engine still listens to is not reported twice',
   const stream = new FakeStream()
   const queue = fakeQueue(stream)
   const player = fakePlayer(queue)
-  const harness = wiring(queue, player)
+  const harness = wiring(player)
 
   let engineSaw = 0
 
@@ -270,16 +231,12 @@ test('a stop clears the session, so the sample timer stops without a skip', () =
       }
     },
   })
-  const harness = wiring(queue, player, health)
+  const harness = wiring(player, health)
   const live = (): number => scheduled.filter(entry => !entry.cancelled).length
 
   play(queue, player)
   expect(live()).toBe(1)
 
-  // /stop: queue.stop() deletes the queue and detaches the engine's listeners,
-  // so neither FINISH_SONG nor DISCONNECT ever arrives. The emitter's clear is
-  // all that is left to end the session before a sample pings a dead connection,
-  // and no skip happened, so the summary cannot claim one.
   harness.emitter.queueCleared({ guildId: 'g1', resetStation: true })
 
   expect(live()).toBe(0)
@@ -290,19 +247,16 @@ test('a finished, cleared or disconnected queue prunes its streams but keeps lis
   const stream = new FakeStream()
   const queue = fakeQueue(stream)
   const player = fakePlayer(queue)
-  const harness = wiring(queue, player)
+  const harness = wiring(player)
 
   play(queue, player)
   expect(stream.listenerCount('error')).toBe(1)
 
-  // The entry is gone, so the stream the queue still shows is no longer watched:
-  // its exit is an orphan now, heard and named instead of thrown.
   player.emit(Events.FINISH, queue)
   expect(() => stream.emit('error', ffmpegExited())).not.toThrow()
   expect(harness.orphans()).toBe(1)
   expect(harness.failures).toEqual([])
 
-  // The listener outlives the map: it holds nothing the map could grow with.
   expect(stream.listenerCount('error')).toBe(1)
 
   play(queue, player)
@@ -321,11 +275,10 @@ test('a finished, cleared or disconnected queue prunes its streams but keeps lis
 test('a playback error names the song that failed', () => {
   const queue = fakeQueue(new FakeStream())
   const player = fakePlayer(queue)
-  const harness = wiring(queue, player)
+  const harness = wiring(player)
 
   play(queue, player)
   player.emit(Events.ERROR, new Error('boom'), queue, { id: 'song-2' })
-  // without a song from the engine, the one that was playing failed
   player.emit(Events.ERROR, new Error('boom'), queue, undefined)
 
   expect(harness.failedSongs).toEqual(['song-2', 'song-1'])
@@ -334,7 +287,7 @@ test('a playback error names the song that failed', () => {
 test('a playback error before any song started names none', () => {
   const queue = fakeQueue(new FakeStream())
   const player = fakePlayer(queue)
-  const harness = wiring(queue, player)
+  const harness = wiring(player)
 
   player.emit(Events.ERROR, new Error('boom'), queue, undefined)
 
@@ -344,11 +297,10 @@ test('a playback error before any song started names none', () => {
 test('a voice error after the engine dropped its listeners is logged, never thrown', () => {
   const queue = fakeQueue(new FakeStream())
   const player = fakePlayer(queue)
-  const harness = wiring(queue, player)
+  const harness = wiring(player)
 
   play(queue, player)
   play(queue, player)
-  // queue.remove() detaches the engine's voice listeners; ours stays, once
   expect(queue.voice.listenerCount('error')).toBe(1)
 
   expect(() => queue.voice.emit('error', ffmpegExited())).not.toThrow()
@@ -360,7 +312,7 @@ test('a finished song logs its audio summary, with the ping the connection repor
   const stream = new FakeStream()
   const queue = fakeQueue(stream)
   const player = fakePlayer(queue)
-  const harness = wiring(queue, player)
+  const harness = wiring(player)
 
   play(queue, player)
   expect(harness.started).toHaveLength(1)

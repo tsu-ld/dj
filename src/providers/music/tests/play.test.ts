@@ -1,20 +1,19 @@
-import type { GuildMember, GuildTextBasedChannel, VoiceBasedChannel } from 'discord.js'
+import type { GuildTextBasedChannel, VoiceBasedChannel } from 'discord.js'
 import type { DisTube } from 'distube'
 import { expect, test } from 'bun:test'
 import { ChannelType } from 'discord.js'
 import { keyedQueue } from '../../../core/async.ts'
+import { MAX_QUEUE_SIZE } from '../../../limits.ts'
 import { MESSAGES } from '../../../messages.ts'
 import { MusicCatalog } from '../catalog.ts'
 import { musicPlay } from '../play.ts'
 import { assertYoutubeUrl } from '../policy.ts'
 import { extractionStub, log, memberOf, rejection, streamStub } from './fakes.ts'
 
-function station(resolve: (input: string) => void): { play: ReturnType<typeof musicPlay>, calls: string[] } {
+function station(resolve: (input: string) => void, queued = 0): { play: ReturnType<typeof musicPlay>, calls: string[] } {
   const calls: string[] = []
-  // Test double for the SDK's player: the SDK rethrows what a plugin's resolve()
-  // throws, so play() stands in for the catalog's resolve.
   const player = {
-    getQueue: () => undefined,
+    getQueue: () => queued === 0 ? undefined : { songs: Array.from({ length: queued }) },
     async play(_channel: unknown, input: string) {
       calls.push('play')
       resolve(input)
@@ -37,14 +36,12 @@ function station(resolve: (input: string) => void): { play: ReturnType<typeof mu
 
 function request(value: string): Parameters<ReturnType<typeof musicPlay>>[0] {
   const guild = { id: 'g1', members: { me: { voice: null } } }
-  // Test double for the SDK's channels: play() reads the type, the permissions
-  // and the guild.
   const voiceChannel = { type: ChannelType.GuildVoice, guild, permissionsFor: () => ({ has: () => true }) } as unknown as VoiceBasedChannel
 
   return {
     kind: 'text',
     value,
-    member: memberOf('200000000000000001', 'ana') satisfies GuildMember,
+    member: memberOf('200000000000000001', 'ana'),
     voiceChannel,
     textChannel: {} as unknown as GuildTextBasedChannel,
   }
@@ -61,5 +58,12 @@ test('a link outside the music hosts is refused before the bot joins', async () 
   const { play, calls } = station(() => {})
 
   expect(await rejection(async () => play(request('https://example.com/song.mp3')))).toBe(MESSAGES.unsupportedUrl)
+  expect(calls).toEqual([])
+})
+
+test('a full queue is refused before the bot joins', async () => {
+  const { play, calls } = station(() => {}, MAX_QUEUE_SIZE)
+
+  expect(await rejection(async () => play(request('cumbia')))).toBe(MESSAGES.queueFull(MAX_QUEUE_SIZE))
   expect(calls).toEqual([])
 })

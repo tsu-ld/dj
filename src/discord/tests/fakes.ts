@@ -74,7 +74,6 @@ export interface IncomingOptions {
   content?: string
   guildId?: string | null
   channelId?: string
-  textBased?: boolean
   bot?: boolean
   authorId?: string
   member?: GuildMember | null
@@ -103,7 +102,7 @@ export function fakeIncomingMessage(options: IncomingOptions = {}): IncomingMess
     channelId,
     author: { bot: options.bot ?? false, id: options.authorId ?? 'user-1' },
     client: { user: { id: botId } },
-    channel: { id: channelId, isTextBased: () => options.textBased ?? true, sendTyping: async () => {} },
+    channel: { id: channelId, sendTyping: async () => {} },
     member: 'member' in options ? options.member : fakeMember(),
     mentions: {
       users: options.users ?? new Map<string, unknown>(),

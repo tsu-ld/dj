@@ -9,6 +9,7 @@ import { DisTube } from 'distube'
 import { keyedQueue } from '../../core/async.ts'
 import { errorMessage } from '../../core/errors.ts'
 import { audioHealth } from './audio-health.ts'
+import { audioOverMusic } from './audio-over-music.ts'
 import { audioCache } from './cache.ts'
 import { MusicCatalog } from './catalog.ts'
 import { musicControls } from './controls.ts'
@@ -17,9 +18,8 @@ import { musicEvents } from './events.ts'
 import { extractor } from './extraction.ts'
 import { MetadataCatalog } from './metadata.ts'
 import { musicPlay } from './play.ts'
-import { queueView } from './queue.ts'
+import { currentForStream, queueView } from './queue.ts'
 import { streamResolver } from './stream.ts'
-import { audioOverMusic } from './welcome.ts'
 
 interface MusicEngineDeps {
   client: Client
@@ -39,15 +39,8 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
     extraction,
     logger,
   })
-  let beforeStreamFor: (song: Song) => Promise<void> = async () => {}
 
-  const stream = streamResolver({
-    cache,
-    extraction,
-    clock: deps.clock,
-    logger,
-    beforeStream: async song => beforeStreamFor(song),
-  })
+  const stream = streamResolver({ cache, extraction, clock: deps.clock, logger, beforeStream: beforeStreamFor })
   const catalog = new MusicCatalog({ extraction, stream, logger })
 
   const player = new DisTube(deps.client, {
@@ -104,13 +97,35 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
     player.voices.get(guildId)?.leave()
   }
 
+  function queueForSong(song: Song): Queue | null {
+    const guildId = song.member?.guild?.id
+
+    if (guildId !== undefined)
+      return player.getQueue(guildId) ?? null
+
+    for (const queue of player.queues.collection.values()) {
+      if (queue.songs[0] === song)
+        return queue
+    }
+
+    return null
+  }
+
+  async function beforeStreamFor(song: Song): Promise<void> {
+    const queue = queueForSong(song)
+
+    if (!queue || !currentForStream(song, queue))
+      return
+
+    await deps.beforeStream({ guildId: queue.id, view: viewOf(queue) })
+  }
+
   const events = musicEvents({
     player,
     client: deps.client,
     catalog,
     cache,
     emitter,
-    beforeStream: deps.beforeStream,
     forgetStream: songId => stream.forget(songId),
     leave,
     viewOf,
@@ -118,11 +133,8 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
     logger,
   })
 
-  beforeStreamFor = events.beforeStreamFor
-
   const play = musicPlay({ player, catalog, audio, mutations, logger })
-  // A seek replaces the song's ffmpeg stream without a new song event.
-  const controls = musicControls({ player, catalog, mutations, emitter, viewOf, streamReplaced: events.watchStream })
+  const controls = musicControls({ player, catalog, mutations, emitter, viewOf, leave, streamReplaced: events.watchStream })
 
   return {
     play,

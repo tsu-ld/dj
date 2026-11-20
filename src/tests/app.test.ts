@@ -1,19 +1,13 @@
 import type { AppConfig } from '../config.ts'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, test } from 'bun:test'
+import { afterEach, expect, test } from 'bun:test'
 import { createApp } from '../app.ts'
+import { removeTempDirs, tempDir } from './fixtures.ts'
 
-const directories: string[] = []
-
-afterEach(async () => {
-  await Promise.all(directories.splice(0).map(async directory => rm(directory, { recursive: true, force: true })))
-})
+afterEach(removeTempDirs)
 
 async function config(): Promise<AppConfig> {
-  const directory = await mkdtemp(join(tmpdir(), 'dj-app-'))
-  directories.push(directory)
+  const directory = await tempDir()
 
   return {
     discord: { token: 'test-token' },
@@ -34,11 +28,9 @@ async function config(): Promise<AppConfig> {
   }
 }
 
-// Building wires every capability without a Discord login; stop must settle
-// and a second stop must return instead of tearing the app down again.
 test('the composition root builds and stops twice without throwing', async () => {
   const app = await createApp(await config())
 
-  await app.stop()
-  await app.stop()
+  await expect(app.stop()).resolves.toBeUndefined()
+  await expect(app.stop()).resolves.toBeUndefined()
 })

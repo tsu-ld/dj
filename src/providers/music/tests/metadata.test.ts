@@ -9,8 +9,6 @@ import { extractionStub, log, rejection, streamStub } from './fakes.ts'
 
 const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M'
 
-// The real Spotify plugin with its scrape fallback's answer: a 120-track list
-// built from the SDK copy the plugin loads, with no network.
 function scrapedSpotify(count: number): SpotifyPlugin {
   const plugin = new SpotifyPlugin()
 
@@ -43,8 +41,6 @@ test('a spotify playlist reaches the engine as a playlist of playable songs, cap
   const player = engineWith(async () => ({}))
   const resolved = await player.handler.resolve(PLAYLIST_URL)
 
-  // the engine queues anything that is not its own Playlist as one song, and
-  // that "song" has no stream: song.stream.playFromSource throws on play
   expect(resolved).toBeInstanceOf(Playlist)
 
   if (!(resolved instanceof Playlist))

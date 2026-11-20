@@ -9,8 +9,6 @@ interface Entry<V> {
   expiresAt: number
 }
 
-// Ephemeral per-guild and per-user state must not grow forever. One owner for
-// the TTL and the cap keeps conversations, cooldowns and prepared clips honest.
 export function ttlMap<K, V>(options: { ttlMs: number, max: number, now?: () => number }): TtlMap<K, V> {
   const now = options.now ?? (() => Date.now())
   const entries = new Map<K, Entry<V>>()

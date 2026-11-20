@@ -1,6 +1,6 @@
 import { spyOn } from 'bun:test'
 
-export type FetchHandler = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+type FetchHandler = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 
 export interface FetchCalls {
   count: () => number
@@ -37,12 +37,11 @@ export function stubFetch(handler: FetchHandler): FetchCalls {
   }
 }
 
-// Call from afterEach so the next test meets the real fetch.
 export function restoreFetch(): void {
   while (restores.length > 0)
     restores.pop()?.()
 }
 
-export function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+export function json(body: unknown): Response {
+  return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
 }

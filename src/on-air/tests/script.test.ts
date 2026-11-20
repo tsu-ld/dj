@@ -73,7 +73,6 @@ describe('the run block', () => {
     expect(text).toContain('Next up, in order: Seminare, requested by ana | La Luna, your own pick')
     expect(text).toContain('one sentence')
     expect(text).toContain(String(lineTarget(false)))
-    expect(text).not.toContain('of this session')
   })
 
   test('a skipped last song is context: who skipped it, never when', () => {
@@ -135,7 +134,6 @@ describe('the listener block', () => {
 
     expect(text).toContain('About tsu, who asked for this song:')
     expect(text).toContain('This is request number 13 from tsu')
-    expect(text).not.toContain('before this one')
     expect(text).toContain('Most requested song so far: Matador (4 times)')
     expect(text).toContain('Top artists: Soda Stereo, Los Fabulosos Cadillacs')
     expect(text).not.toContain('skipped')

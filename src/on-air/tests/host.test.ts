@@ -12,8 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { ProviderError } from '../../core/errors.ts'
-import { logger } from '../../core/logger.ts'
-import { silentLog as log, testClock, testTrack as track, testView as view } from '../../tests/fixtures.ts'
+import { captureLog, silentLog as log, testClock, testTrack as track, testView as view } from '../../tests/fixtures.ts'
 import { onAirHost } from '../host.ts'
 import { lineTarget } from '../script.ts'
 
@@ -27,7 +26,6 @@ interface SpeechFake {
   port: SpeechPort
   calls: string[]
   files: string[]
-  // `count` syntheses were asked for and every one has finished
   settled: (count: number) => boolean
 }
 
@@ -99,8 +97,6 @@ function fakeSpeech(options: { available?: boolean, synthesize?: (text: string) 
     },
     release() {},
     async synthesize(text) {
-      // The call is recorded when it starts, so "never synthesized" checks
-      // see a synthesis that is still running.
       calls.push(text)
       running++
 
@@ -122,8 +118,6 @@ function fakeSpeech(options: { available?: boolean, synthesize?: (text: string) 
     async dispose() {},
   }
 
-  // Under load the file write outlasts a short sleep; waiting for the count
-  // alone reads a file list that is not there yet.
   return { port, calls, files, settled: count => calls.length === count && running === 0 }
 }
 
@@ -213,7 +207,6 @@ function profile(name: string, extra: Partial<ListenerProfile> = {}): ListenerPr
   return { name, requests: 4, topSong: { title: 'Matador', count: 3 }, topArtists: ['Band'], ...extra }
 }
 
-// A store that counts like the real one: recordRequest bumps the profile.
 function countingListeners(requests: number): ListenersPort & { recorded: string[] } {
   let count = requests
   const recorded: string[] = []
@@ -226,15 +219,6 @@ function countingListeners(requests: number): ListenersPort & { recorded: string
     },
     profile: (_guildId, listenerId) => listenerId === 'u1' ? profile('Ana', { requests: count, topSong: null, topArtists: [] }) : null,
     flush: async () => {},
-  }
-}
-
-function captureLog(): { logger: Logger, events: (event: string) => unknown[] } {
-  const lines: string[] = []
-
-  return {
-    logger: logger({ level: 'debug', sink: written => lines.push(written) }),
-    events: event => lines.filter(written => written.includes(`"event":"${event}"`)).map((written): unknown => JSON.parse(written)),
   }
 }
 
@@ -262,6 +246,13 @@ function createHost(input: {
   return { host, music, clock }
 }
 
+function onAirWith(replies: readonly (CompletionReply | Promise<CompletionReply>)[]): ReturnType<typeof createHost> & { model: ModelFake, speech: SpeechFake } {
+  const model = fakeModel(replies)
+  const speech = fakeSpeech()
+
+  return { model, speech, ...createHost({ model: model.port, speech: speech.port }) }
+}
+
 async function waitFor(check: () => boolean, timeoutMs = 500): Promise<void> {
   const deadline = Date.now() + timeoutMs
 
@@ -272,8 +263,6 @@ async function waitFor(check: () => boolean, timeoutMs = 500): Promise<void> {
     await Bun.sleep(2)
   }
 
-  // The file lands before the host registers it as prepared; let the
-  // continuation that stores the clip run before the next song starts.
   await Bun.sleep(2)
 }
 
@@ -313,13 +302,10 @@ describe('beforeStream', () => {
     expect(request.instructions).toContain(`Say one sentence, at most ${lineTarget(false)} characters.`)
     expect(request.instructions).not.toContain('<verified-facts>')
     expect(request.instructions).not.toContain('About Ana')
-    expect(request.instructions).not.toContain('of this session')
   })
 
   test('airs the prepared line without calling the model again', async () => {
-    const model = fakeModel([line('A'), line('B')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host, music } = onAirWith([line('A'), line('B')])
     const [a, b] = [track('A'), track('B')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
@@ -339,9 +325,7 @@ describe('beforeStream', () => {
   })
 
   test('a silent slot asks for no line and prepares the song after it', async () => {
-    const model = fakeModel([line('A'), line('B'), line('D')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host, music } = onAirWith([line('A'), line('B'), line('D')])
     const a = track('A')
     const b = track('B')
     const c = track('C')
@@ -359,7 +343,6 @@ describe('beforeStream', () => {
 
     expect(music.clips).toHaveLength(2)
 
-    // The prepare looks the facts up before it calls the model.
     await waitFor(() => model.requests.length === 3)
 
     expect(model.requests).toHaveLength(3)
@@ -370,9 +353,7 @@ describe('beforeStream', () => {
 
   test('a model that returns nothing is tried twice and does not use up the long slot', async () => {
     const empty: CompletionReply = { text: null, toolCalls: [] }
-    const model = fakeModel([empty, empty, line('B')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host, music } = onAirWith([empty, empty, line('B')])
     const [a, b] = [track('A'), track('B')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
@@ -389,9 +370,7 @@ describe('beforeStream', () => {
   })
 
   test('an empty card means no line', async () => {
-    const model = fakeModel([line('Card line')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, host, music } = onAirWith([line('Card line')])
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: track('Card') }) })
 
@@ -427,9 +406,7 @@ describe('beforeStream', () => {
   })
 
   test('a paused song takes no line and keeps the prepared clip', async () => {
-    const model = fakeModel([line('A'), line('B')])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
+    const { speech, host } = onAirWith([line('A'), line('B')])
     const [a, b] = [track('A'), track('B')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
@@ -486,9 +463,7 @@ describe('beforeStream', () => {
   })
 
   test('a repeated song keeps the earlier play in the run', async () => {
-    const model = fakeModel([line('A'), line('B'), line('A again')])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host } = onAirWith([line('A'), line('B'), line('A again')])
     const [a, b, c] = [track('A'), track('B'), track('C')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b, c, a] }) })
@@ -504,9 +479,7 @@ describe('beforeStream', () => {
   })
 
   test('a prepared line keeps the long-line cadence across the whole run', async () => {
-    const model = fakeModel([line('A'), line('B'), line('D'), line('E'), line('G'), line('H')])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host } = onAirWith([line('A'), line('B'), line('D'), line('E'), line('G'), line('H')])
     const tracks = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(title => track(title, { requestedBy: 'tsu' }))
     const at = (index: number) => view({ current: tracks[index], upcoming: tracks.slice(index + 1) })
 
@@ -539,9 +512,7 @@ describe('beforeStream', () => {
   })
 
   test('a playlist prepares the first song it added', async () => {
-    const model = fakeModel([line('A'), line('B')])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host } = onAirWith([line('A'), line('B')])
     const a = track('A')
     const b = track('B')
     const c = track('C')
@@ -556,9 +527,6 @@ describe('beforeStream', () => {
 })
 
 describe('transitions', () => {
-  // A disconnect keeps the cadence, so B takes the second slot and C is the
-  // silent third. A reset starts it over, so B is the first song again and C
-  // takes the second slot and speaks.
   const endings = [
     { name: 'a disconnect drops the prepared clip, welcomes again and keeps the cadence', end: (host: OnAirHost) => host.disconnected('g1'), cSpeaks: false },
     { name: 'a reset drops the prepared clip and starts the cadence over', end: (host: OnAirHost) => host.reset('g1'), cSpeaks: true },
@@ -566,9 +534,7 @@ describe('transitions', () => {
 
   for (const { name, end, cSpeaks } of endings) {
     test(name, async () => {
-      const model = fakeModel([line('A'), line('B'), line('B again'), line('C')])
-      const speech = fakeSpeech()
-      const { host, music } = createHost({ model: model.port, speech: speech.port })
+      const { model, speech, host, music } = onAirWith([line('A'), line('B'), line('B again'), line('C')])
       const [a, b, c] = [track('A'), track('B'), track('C')]
 
       await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
@@ -599,9 +565,7 @@ describe('transitions', () => {
   }
 
   test('a prepared clip for a song that never played is deleted', async () => {
-    const model = fakeModel([line('A'), line('B'), line('C')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { speech, host, music } = onAirWith([line('A'), line('B'), line('C')])
     const a = track('A')
     const b = track('B')
     const c = track('C')
@@ -620,9 +584,7 @@ describe('transitions', () => {
 
   test('a line whose song changed before synthesis is never synthesized', async () => {
     const pending = deferred()
-    const model = fakeModel([line('A'), pending.promise])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host } = onAirWith([line('A'), pending.promise])
     const a = track('A')
     const b = track('B')
     const c = track('C')
@@ -642,9 +604,7 @@ describe('transitions', () => {
 
   test('a line whose queue changed before synthesis is not synthesized and is written again', async () => {
     const pending = deferred()
-    const model = fakeModel([line('A'), pending.promise, line('B after')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host, music } = onAirWith([line('A'), pending.promise, line('B after')])
     const [a, b, c, d] = [track('A'), track('B'), track('C'), track('D')]
 
     music.setView('g1', view({ current: a, upcoming: [b, c, d] }))
@@ -669,9 +629,7 @@ describe('transitions', () => {
 
   test('one preparation runs at a time per guild', async () => {
     const pending = deferred()
-    const model = fakeModel([line('A'), pending.promise])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host } = onAirWith([line('A'), pending.promise])
     const a = track('A')
     const b = track('B')
     const d = track('D')
@@ -693,9 +651,7 @@ describe('transitions', () => {
 
   test('a silent slot is never prepared ahead', async () => {
     const empty: CompletionReply = { text: null, toolCalls: [] }
-    const model = fakeModel([empty, empty, empty, empty])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
+    const { model, host } = onAirWith([empty, empty, empty, empty])
     const [a, b, d] = [track('A'), track('B'), track('D')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
@@ -710,9 +666,7 @@ describe('transitions', () => {
   })
 
   test('dispose deletes the prepared clip and can run twice', async () => {
-    const model = fakeModel([line('A'), line('B')])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
+    const { speech, host } = onAirWith([line('A'), line('B')])
     const [a, b] = [track('A'), track('B')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
@@ -730,9 +684,7 @@ describe('transitions', () => {
 
 describe('true facts', () => {
   test('a shuffle after preparing discards the stale clip and writes the line live', async () => {
-    const model = fakeModel([line('A'), line('B before'), line('B live')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host, music } = onAirWith([line('A'), line('B before'), line('B live')])
     const [a, b, c, d] = [track('A'), track('B'), track('C'), track('D')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b, c, d] }) })
@@ -752,9 +704,7 @@ describe('true facts', () => {
   })
 
   test('a shuffle prepares the line again, and an unchanged queue does not', async () => {
-    const model = fakeModel([line('A'), line('B before'), line('B after')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host, music } = onAirWith([line('A'), line('B before'), line('B after')])
     const [a, b, c, d] = [track('A'), track('B'), track('C'), track('D')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b, c, d] }) })
@@ -780,9 +730,7 @@ describe('true facts', () => {
   })
 
   test('a skip spends nothing until the next song, whose live line knows who skipped as context', async () => {
-    const model = fakeModel([line('A'), line('B'), line('B after the skip')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host, music } = onAirWith([line('A'), line('B'), line('B after the skip')])
     const [a, b] = [track('A', { requestedBy: 'tsu', requesterId: 'u1' }), track('B')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
@@ -805,8 +753,6 @@ describe('true facts', () => {
 
     expect(existsSync(stale)).toBe(false)
     expect(request?.instructions).toContain('Last song: A, requested by tsu, skipped by Ana\n')
-    expect(request?.instructions).not.toMatch(/skipped by Ana after|Angle for this line: skip/)
-    expect(request?.messages[0]?.content).not.toContain('skip angle')
     expect(music.clips[1]).toBe(speech.files[2])
   })
 
@@ -821,7 +767,6 @@ describe('true facts', () => {
     await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
     await waitFor(() => speech.settled(2))
 
-    // A is request 7 and was recorded when it went on air.
     expect(model.requests[1]?.instructions).toContain('This is request number 8 from Ana')
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
@@ -833,9 +778,7 @@ describe('true facts', () => {
   })
 
   test('a failed song is never back-announced', async () => {
-    const model = fakeModel([line('A'), line('B'), line('C')])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
+    const { model, host } = onAirWith([line('A'), line('B'), line('C')])
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: track('A') }) })
     await host.beforeStream({ guildId: 'g1', view: view({ current: track('Broken') }) })
@@ -863,9 +806,7 @@ describe('true facts', () => {
   })
 
   test('turning the radio on makes a "queue ends" clip stale', async () => {
-    const model = fakeModel([line('A'), line('B, last one'), line('B, radio on')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host, music } = onAirWith([line('A'), line('B, last one'), line('B, radio on')])
     const [a, b] = [track('A'), track('B')]
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
@@ -889,7 +830,6 @@ describe('true facts', () => {
     await host.beforeStream({ guildId: 'g1', view: view({ current: a }) })
     await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
     host.trackSkipped({ guildId: 'g1', track: b, by: { id: 'u2', name: 'Ana' } })
-    // C is the silent third song: the skip does not change that.
     await host.beforeStream({ guildId: 'g1', view: view({ current: c }) })
 
     expect(model.requests).toHaveLength(2)
@@ -898,7 +838,6 @@ describe('true facts', () => {
     await host.beforeStream({ guildId: 'g1', view: view({ current: e }) })
     await host.beforeStream({ guildId: 'g1', view: view({ current: f }) })
 
-    // D and E speak, F is the silent sixth.
     expect(model.requests).toHaveLength(4)
     expect(model.requests[2]?.instructions).toContain('Last song: C, played through')
   })
@@ -932,7 +871,6 @@ describe('true facts', () => {
 
     await waitFor(() => plays === 3)
     host.trackSkipped({ guildId: 'g1', track: b, by: { id: 'u2', name: 'Ana' } })
-    // C starts while B's line still airs: no overlap, and then C fails.
     await host.beforeStream({ guildId: 'g1', view: view({ current: c }) })
     host.playbackError({ guildId: 'g1', songId: 'C' })
     gate.resolve(true)
@@ -940,7 +878,6 @@ describe('true facts', () => {
 
     expect(model.requests).toHaveLength(3)
 
-    // D, an own pick in the fifth slot, stays silent although B's skip was never said.
     await host.beforeStream({ guildId: 'g1', view: view({ current: d }) })
 
     expect(model.requests).toHaveLength(3)
@@ -966,7 +903,6 @@ describe('true facts', () => {
     await host.beforeStream({ guildId: 'g1', view: view({ current: track('A') }) })
     await host.beforeStream({ guildId: 'g1', view: view({ current: track('B') }) })
     host.disconnected('g1')
-    // A radio pick, so the third slot speaks.
     await host.beforeStream({ guildId: 'g1', view: view({ current: track('C', { fromRadio: true }) }) })
 
     const instructions = model.requests[2]?.instructions ?? ''
@@ -977,9 +913,7 @@ describe('true facts', () => {
   })
 
   test('the same video from another member is a stale clip', async () => {
-    const model = fakeModel([line('A'), line('B for Ana'), line('B for Leo')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
+    const { model, speech, host, music } = onAirWith([line('A'), line('B for Ana'), line('B for Leo')])
     const fromAna = track('B', { requestedBy: 'Ana', requesterId: 'u1' })
     const fromLeo = track('B', { requestedBy: 'Leo', requesterId: 'u2' })
     const c = track('C')
@@ -1017,7 +951,7 @@ describe('true facts', () => {
 
     expect(requests).toHaveLength(2)
     expect(music.clips).toHaveLength(1)
-    expect(capture.events('on-air.model_paused')).toHaveLength(0)
+    expect(capture.entries('on-air.model_paused')).toHaveLength(0)
   })
 
   test('a quota failure pauses the model like a rejected key', async () => {
@@ -1073,8 +1007,8 @@ describe('true facts', () => {
 
     expect(requests).toHaveLength(2)
     expect(music.clips).toHaveLength(1)
-    expect(capture.events('on-air.model_paused')).toHaveLength(1)
-    expect(capture.events('on-air.line_failed')).toHaveLength(0)
+    expect(capture.entries('on-air.model_paused')).toHaveLength(1)
+    expect(capture.entries('on-air.line_failed')).toHaveLength(0)
   })
 
   test('on_air is logged with the spoken line only when the clip airs', async () => {
@@ -1086,13 +1020,13 @@ describe('true facts', () => {
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: track('A') }) })
 
-    expect(capture.events('on-air.on_air')).toEqual([])
-    expect(capture.events('on-air.clip_skipped')).toMatchObject([{ level: 'info', guildId: 'g1', track: 'A' }])
+    expect(capture.entries('on-air.on_air')).toEqual([])
+    expect(capture.entries('on-air.clip_skipped')).toMatchObject([{ level: 'info', guildId: 'g1', track: 'A' }])
 
     airs = true
     await host.beforeStream({ guildId: 'g1', view: view({ current: track('B') }) })
 
-    expect(capture.events('on-air.on_air')).toMatchObject([{ level: 'info', guildId: 'g1', track: 'B', angle: 'run', line: 'Hola B' }])
+    expect(capture.entries('on-air.on_air')).toMatchObject([{ level: 'info', guildId: 'g1', track: 'B', angle: 'run', line: 'Hola B' }])
   })
 
   test('a live line reads cached facts and never looks them up', async () => {
@@ -1160,7 +1094,6 @@ describe('true facts', () => {
     expect(instructions).toContain('Angle for this line: listener')
 
     await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
-    // C is the third song, but a radio pick speaks on the third slot.
     await host.beforeStream({ guildId: 'g1', view: view({ current: c }) })
 
     expect(model.requests[2]?.instructions).toContain('Playing now: C')

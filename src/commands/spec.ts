@@ -3,7 +3,7 @@ import type { Logger } from '../core/logger.ts'
 import type { ToolSpec } from '../ports/conversation.ts'
 import type { DecisionOption } from '../ports/decision.ts'
 import type { MusicPort, QueueView } from '../ports/music.ts'
-import type { GuildSettings, SettingsPort } from '../ports/settings.ts'
+import type { SettingsPort } from '../ports/settings.ts'
 
 export interface CommandUi {
   reply: (text: string) => Promise<void>
@@ -24,15 +24,12 @@ export interface CommandContext {
   readonly voiceChannel: VoiceBasedChannel | null
   readonly textChannel: GuildTextBasedChannel
   readonly message: Message | null
-  readonly settings: GuildSettings
-  readonly queue: QueueView | null
   readonly services: CommandServices
   readonly ui: CommandUi
 }
 
 export type CommandData = Record<string, unknown> | undefined
 
-// The bus checks a spec's precondition once and hands run the narrowed context.
 export interface QueueContext extends CommandContext {
   readonly queue: QueueView
 }

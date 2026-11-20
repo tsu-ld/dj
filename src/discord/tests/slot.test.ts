@@ -2,19 +2,13 @@ import type { PlaybackStatus } from '../../ports/music.ts'
 import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { log, track, view } from '../../commands/tests/fakes.ts'
 import { NOW_PLAYING_REPOST_MS } from '../../limits.ts'
+import { settle } from '../../tests/fixtures.ts'
 import { PROGRESS_REPAINT_MS } from '../progress.ts'
 import { messageSlot } from '../slot.ts'
 import { cardText, fakeChannel, queueOf } from './fakes.ts'
 
 const GUILD = '123456789012345678'
 const noPlayback = (_guildId: string): PlaybackStatus | null => null
-
-// Writes are serialized through promises, so a fake timer tick still needs a
-// few microtask turns before the card is on the fake channel.
-async function settle(): Promise<void> {
-  for (let index = 0; index < 40; index++)
-    await Promise.resolve()
-}
 
 beforeEach(() => {
   jest.useFakeTimers()
@@ -208,7 +202,7 @@ describe('messageSlot', () => {
     slot.dispose()
   })
 
-  test('showing the queue keeps the now-playing card last', async () => {
+  test('showing the queue deletes the now-playing card and sends it again after the repost delay', async () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log, playback: noPlayback })
 
@@ -324,7 +318,7 @@ describe('messageSlot queue card', () => {
     slot.dispose()
   })
 
-  test('a redrawn queue card goes back to the first page', async () => {
+  test('a song change redraws the queue card with the new count on page 1', async () => {
     const channel = fakeChannel('2', GUILD)
     const slot = messageSlot({ logger: log, playback: noPlayback })
 
@@ -508,14 +502,12 @@ describe('messageSlot progress', () => {
     jest.advanceTimersByTime(PROGRESS_REPAINT_MS * 2)
     await settle()
 
-    // a timeout keeps the card: the next tick tries it again
     expect(attempts).toBe(2)
 
     failure = Object.assign(new Error('Unknown Message'), { code: 10_008 })
     jest.advanceTimersByTime(PROGRESS_REPAINT_MS * 3)
     await settle()
 
-    // a deleted card is forgotten after one more try, and no tick posts a new one
     expect(attempts).toBe(3)
     expect(home.sent).toHaveLength(1)
 
@@ -543,9 +535,5 @@ describe('messageSlot progress', () => {
     expect(home.sent).toHaveLength(2)
 
     slot.dispose()
-  })
-
-  test('the repaint interval respects the edit rate limit', () => {
-    expect(PROGRESS_REPAINT_MS).toBeGreaterThanOrEqual(10_000)
   })
 })

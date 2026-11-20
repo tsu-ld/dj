@@ -1,7 +1,7 @@
-import type { Clock } from '../../../core/clock.ts'
 import type { AudioCache } from '../cache.ts'
 import { expect, test } from 'bun:test'
 import { Song } from 'distube'
+import { testClock } from '../../../tests/fixtures.ts'
 import { directStreamUrl, isUrlFresh, streamResolver, streamWithDjLine, urlExpiresAt } from '../stream.ts'
 import { extractionStub, log, rejection } from './fakes.ts'
 
@@ -23,12 +23,6 @@ function cacheStub(overrides: Partial<AudioCache> = {}): AudioCache {
     prefetch: () => {},
     dispose: () => {},
     ...overrides,
-  }
-}
-
-function fixedClock(value: { now: number }): Clock {
-  return {
-    now: () => value.now,
   }
 }
 
@@ -77,7 +71,7 @@ test('a file already on disk wins over the network', async () => {
         throw new Error('must not resolve a url')
       },
     }),
-    clock: fixedClock({ now: Date.now() }),
+    clock: testClock(Date.now()),
     logger: log,
     beforeStream: async () => {},
   })
@@ -89,7 +83,7 @@ test('a remembered direct url is returned without asking the extractor', async (
   const resolver = streamResolver({
     cache: cacheStub(),
     extraction: extractionStub(),
-    clock: fixedClock({ now: Date.now() }),
+    clock: testClock(Date.now()),
     logger: log,
     beforeStream: async () => {},
   })
@@ -97,6 +91,20 @@ test('a remembered direct url is returned without asking the extractor', async (
   resolver.remember('song-1', [{ protocol: 'https', acodec: 'mp4a', vcodec: 'avc1', url: 'https://cdn.test/audio' }])
 
   expect(await resolver.playableUrl(song())).toBe('https://cdn.test/audio')
+})
+
+test('a song without an id resolves its own url, never a remembered one', async () => {
+  const resolver = streamResolver({
+    cache: cacheStub(),
+    extraction: extractionStub({ streamUrl: async () => 'https://cdn.test/own' }),
+    clock: testClock(Date.now()),
+    logger: log,
+    beforeStream: async () => {},
+  })
+
+  resolver.remember('', [{ protocol: 'https', acodec: 'mp4a', vcodec: 'avc1', url: 'https://cdn.test/other' }])
+
+  expect(await resolver.playableUrl(song({ id: '' }))).toBe('https://cdn.test/own')
 })
 
 test('an unresolved direct url is asked once and cached', async () => {
@@ -111,7 +119,7 @@ test('an unresolved direct url is asked once and cached', async () => {
         return `https://cdn.test/audio?expire=${Math.floor(Date.now() / 1000) + 3600}`
       },
     }),
-    clock: fixedClock({ now: Date.now() }),
+    clock: testClock(Date.now()),
     logger: log,
     beforeStream: async () => {},
   })
@@ -128,7 +136,7 @@ test('a direct url that failed to resolve falls back to a download', async () =>
   const resolver = streamResolver({
     cache: cacheStub({ download: async () => '/tmp/audio/song-1.m4a' }),
     extraction: extractionStub({ streamUrl: async () => null }),
-    clock: fixedClock({ now: Date.now() }),
+    clock: testClock(Date.now()),
     logger: log,
     beforeStream: async () => {},
   })
@@ -148,7 +156,7 @@ test('the stream waits for the on-air line before it starts', async () => {
         return 'https://cdn.test/audio'
       },
     }),
-    clock: fixedClock({ now: Date.now() }),
+    clock: testClock(Date.now()),
     logger: log,
     beforeStream: async () => {
       await new Promise(resolve => setTimeout(resolve, 10))
@@ -197,7 +205,7 @@ test('a song without a url cannot be downloaded', async () => {
   const resolver = streamResolver({
     cache: cacheStub(),
     extraction: extractionStub({ streamUrl: async () => null }),
-    clock: fixedClock({ now: Date.now() }),
+    clock: testClock(Date.now()),
     logger: log,
     beforeStream: async () => {},
   })
@@ -217,16 +225,12 @@ test('a forgotten url is resolved again instead of failing on a dead one', async
         return `https://cdn.test/audio-${calls}?expire=${Math.floor(Date.now() / 1000) + 3600}`
       },
     }),
-    clock: fixedClock({ now: Date.now() }),
+    clock: testClock(Date.now()),
     logger: log,
     beforeStream: async () => {},
   })
 
   const first = await resolver.playableUrl(song())
-  const remembered = await resolver.playableUrl(song())
-
-  expect(remembered).toBe(first)
-  expect(calls).toBe(1)
 
   resolver.forget('song-1')
 

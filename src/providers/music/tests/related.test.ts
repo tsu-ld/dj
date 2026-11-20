@@ -31,10 +31,8 @@ test('autoplay skips remasters and re-uploads of a song the guild just heard', a
   const played = catalog.buildSong({ id: 'chain', title: 'The Chain' }, { member })
 
   await catalog.getStreamURL(played)
-  // the radio moved on to another song, whose mix still offers The Chain
   const related = await catalog.getRelatedSongs({ id: 'other', name: 'Rhiannon', member })
 
-  // the engine plays the first entry; heard ones only stay as a last resort
   expect(related.map(song => song.id)).toEqual(['queued', 'dreams', 'remaster', 'reupload', 'video'])
 })
 
@@ -76,7 +74,6 @@ test('heard entries stay behind the fresh ones, so the engine still finds a song
   await catalog.getStreamURL(catalog.buildSong({ id: 'chain', title: 'The Chain' }, { member }))
 
   const related = await catalog.getRelatedSongs({ id: 'x', name: 'Landslide', member })
-  // the engine's own rule: drop every id that already played, take the first
   const playedThisSession = new Set(['queued', 'dreams'])
 
   expect(related.find(song => !playedThisSession.has(song.id))?.id).toBe('remaster')

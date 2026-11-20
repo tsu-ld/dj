@@ -23,7 +23,7 @@ export interface MessageHandlerDeps {
   readonly settings: SettingsPort
   readonly replies: RepliesPort
   readonly slot: MessageSlot
-  readonly decision: DecisionPort | null
+  readonly decision: DecisionPort
   readonly agent: DjAgent | null
   readonly logger: Logger
   readonly cooldowns: { readonly plainRequestMs: number, readonly djRequestMs: number }
@@ -44,8 +44,6 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
   const djRequests = cooldown(deps.cooldowns.djRequestMs)
   const djInFlight = new Set<string>()
 
-  // While the bot is in voice the cards and the radio voice are the feedback:
-  // chatter becomes a reaction, refusals and errors still answer in text.
   const inVoice = (guildId: string): boolean => deps.music.status(guildId) !== null
 
   async function ack(message: Message): Promise<void> {
@@ -68,24 +66,16 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
       voiceChannel: member.voice.channel,
       textChannel: message.channel,
       message,
-      settings,
-      queue: deps.music.view(message.guildId),
       services: { music: deps.music, settings: deps.settings, logger: deps.logger },
       ui: uiFor(message, settings),
     }
   }
 
-  // A mention falls back to the DJ; a plain message falls back to a search.
-  // Both use the same deterministic routes, so a confused classifier never
-  // blocks a command or a song.
   async function decide(
     text: string,
     context: CommandContext,
     options: readonly DecisionOption[],
   ): Promise<string | null> {
-    if (!deps.decision)
-      return null
-
     try {
       return await deps.decision.choose({
         text,
@@ -95,8 +85,6 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
       })
     }
     catch (error) {
-      // The fast router is not a requirement: a bad decision call falls back to
-      // the DJ's own tool choice or to the plain search.
       deps.logger.error('discord.decision_failed', error)
 
       return null
@@ -132,9 +120,6 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
         },
       })
 
-      // A null reply means the model never said anything; say so instead of
-      // leaving a bare reaction the person has to interpret. An answer that
-      // explains a refused action is an error, so it stays text in voice.
       if (reply === null)
         await message.reply(MESSAGES.djNoAnswer)
       else if (inVoice(message.guildId) && !refused)
@@ -156,7 +141,6 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
     await deps.bus.run('query', { query: text }, context)
   }
 
-  // The bus refuses a queue command with nothing playing; no route falls back.
   async function runRoute(text: string, choice: string | null, context: CommandContext, fallback: () => Promise<void>): Promise<void> {
     const route = chooseRoute(deps.bus, text, choice, context)
 
@@ -168,24 +152,13 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
 
   async function handleMention(message: Message<true>, member: GuildMember, settings: GuildSettings, text: string): Promise<void> {
     const choice = await decide(text, contextFor(message, member, settings), [...deps.bus.routes, DJ_OPTION])
-
-    // The decision can take a few hundred milliseconds; re-read the live queue
-    // so a song that ended in the meantime does not leave a stale queue behind.
     const context = contextFor(message, member, settings)
 
     await runRoute(text, choice, context, async () => askDj(message, text, context))
   }
 
-  // A plain message in the listening channel is a request, not necessarily a
-  // search: Jev decides between a control, a song and the DJ. Without a
-  // confident choice the message is most likely a song, so it is searched.
   async function handlePlain(message: Message<true>, member: GuildMember, settings: GuildSettings, text: string): Promise<void> {
-    const choice = await decide(text, contextFor(message, member, settings), [
-      ...deps.bus.routes,
-      QUERY_OPTION,
-      DJ_OPTION,
-    ])
-
+    const choice = await decide(text, contextFor(message, member, settings), [...deps.bus.routes, QUERY_OPTION, DJ_OPTION])
     const context = contextFor(message, member, settings)
 
     if (choice === null || choice === 'query') {
@@ -206,16 +179,11 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
       return
     }
 
-    // A confident route with arguments the text did not carry ("sacá la
-    // tercera") is a conversation, not a search.
     await runRoute(text, choice, context, async () => deps.agent ? askDj(message, text, context) : playQuery(text, context))
   }
 
   return async (message) => {
     if (message.author.bot || !message.inGuild())
-      return
-
-    if (!message.channel.isTextBased())
       return
 
     try {
@@ -242,10 +210,7 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
         }
       }
       else if (isChannelConfiguration(mention.text, mention.channelMentions)) {
-        const target = mention.channelMentions[0]
-
-        if (target)
-          await deps.bus.run('set_channel', { channelId: target.id }, contextFor(message, member, settings))
+        await deps.bus.run('set_channel', {}, contextFor(message, member, settings))
       }
       else if (!listening) {
         await message.reply(settings.textChannelId !== null && settings.textChannelId !== '' ? MESSAGES.wrongChannel(settings.textChannelId) : MESSAGES.emptyMention)
@@ -262,8 +227,6 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
       await message.reply(MESSAGES.genericError).catch(() => {})
     }
 
-    // Bot messages return above: rescheduling from our own now-playing repost
-    // would keep deleting and resending it forever.
     const view = deps.music.view(message.guildId)
 
     if (view)
@@ -272,7 +235,7 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
 }
 
 function decisionState(context: CommandContext): Record<string, unknown> {
-  const queue = context.queue
+  const queue = context.services.music.view(context.guildId)
 
   return {
     author_in_voice: context.voiceChannel !== null,

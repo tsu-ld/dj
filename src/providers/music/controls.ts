@@ -7,9 +7,8 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { AudioPlayerStatus } from '@discordjs/voice'
 import { UserError } from '../../core/errors.ts'
-import { isPositionInQueue } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
-import { clearStation, removeSongAt, skipSong } from './queue.ts'
+import { removeSongAt, skipSong } from './queue.ts'
 
 type Controls = Pick<MusicPort, 'pause' | 'resume' | 'toggle' | 'skip' | 'stop' | 'shuffle' | 'remove' | 'radio' | 'seek' | 'view' | 'status'>
 
@@ -19,9 +18,10 @@ export function musicControls(deps: {
   mutations: KeyedQueue
   emitter: MusicEmitter
   viewOf: (queue: Queue) => QueueView
+  leave: (guildId: string) => void
   streamReplaced: (queue: Queue) => void
 }): Controls {
-  const { player, catalog, mutations, emitter, viewOf, streamReplaced } = deps
+  const { player, catalog, mutations, emitter, viewOf, leave, streamReplaced } = deps
 
   function requireQueue(guildId: string): Queue {
     const queue = player.getQueue(guildId)
@@ -49,9 +49,8 @@ export function musicControls(deps: {
     const status = voice.audioPlayer.state.status
     const playing = status === AudioPlayerStatus.Playing
     const paused = status === AudioPlayerStatus.Paused || status === AudioPlayerStatus.AutoPaused
-    // The engine's time adds the seek offset to the resource's own clock; a
-    // sought song buffers at that offset, and an idle player still holds the
-    // last song's stream, which is no position at all.
+    // the SDK's playbackTime includes the seek offset while buffering, and an
+    // idle player still reports the last song's stream
     const onAir = playing || paused || status === AudioPlayerStatus.Buffering
 
     return {
@@ -60,11 +59,8 @@ export function musicControls(deps: {
     }
   }
 
-  // Checked under the guild's lock, where the song cannot change underneath.
-  // Only a playing song seeks: one still buffering may be waiting on its spoken
-  // line, which a seek would resolve a second time, and a paused one would keep
-  // the new stream staged past a skip and play the skipped song on resume. A
-  // Spotify song plays a YouTube copy whose length is the one that counts.
+  // A seek on a buffering song makes the SDK resolve its stream again, and on a
+  // paused one it stages the new stream past a skip and plays the skipped song on resume.
   function seekableLength(guildId: string, queue: Queue, songId: string): number {
     const song = queue.songs[0]
 
@@ -81,9 +77,7 @@ export function musicControls(deps: {
     return length
   }
 
-  // A seek reopens the song's source. The cache may have evicted a playing file
-  // (ffmpeg keeps reading its open copy), and reopening it would fail and drop
-  // the song.
+  // ffmpeg keeps reading an evicted file it has open, but a seek reopens the source.
   function reopenable(url: string | undefined): boolean {
     if (url === undefined)
       return false
@@ -91,7 +85,6 @@ export function musicControls(deps: {
     return !url.startsWith('file://') || existsSync(fileURLToPath(url))
   }
 
-  // Reported before the skip, while the song still exists.
   function emitSkipped(queue: Queue, by: Listener): void {
     const current = queue.songs[0]
 
@@ -106,12 +99,10 @@ export function musicControls(deps: {
   }
 
   async function clear(queue: Queue, resetStation: boolean): Promise<void> {
-    await clearStation(
-      queue,
-      () => player.voices.get(queue.id)?.leave(),
-      payload => emitter.queueCleared(payload),
-      resetStation,
-    )
+    // the SDK's queue.stop() neither disconnects nor emits FINISH
+    await queue.stop()
+    leave(queue.id)
+    emitter.queueCleared({ guildId: queue.id, resetStation })
   }
 
   return {
@@ -171,9 +162,6 @@ export function musicControls(deps: {
     async remove(guildId, position, by) {
       return mutations.run(guildId, async () => {
         const queue = requireQueue(guildId)
-
-        if (!Number.isInteger(position) || !isPositionInQueue(queue.songs.length, position))
-          throw new UserError(MESSAGES.removeOutOfRange)
 
         const song = queue.songs[position - 1]
 

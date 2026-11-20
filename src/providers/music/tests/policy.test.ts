@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { isRecord } from '../../../core/json.ts'
 import { MESSAGES } from '../../../messages.ts'
-import { assertSupportedMusicUrl, assertYoutubeUrl, isSupportedMusicUrl, isUrlLike, isYoutubeUrl, liveError } from '../policy.ts'
+import { assertYoutubeUrl, isSupportedMusicUrl, isUrlLike, isYoutubeUrl, liveError } from '../policy.ts'
 
 const SUPPORTED_URLS = [
   'https://youtube.com/watch?v=dQw4w9WgXcQ',
@@ -44,22 +44,18 @@ test('youtube and spotify links are supported', () => {
   for (const url of SUPPORTED_URLS) {
     expect(isUrlLike(url)).toBe(true)
     expect(isSupportedMusicUrl(url)).toBe(true)
-    expect(() => assertSupportedMusicUrl(url)).not.toThrow()
   }
 })
 
 test('private hosts, other sites and file urls are rejected', () => {
   for (const url of REJECTED_URLS) {
     expect(isSupportedMusicUrl(url)).toBe(false)
-    expect(() => assertSupportedMusicUrl(url)).toThrow(MESSAGES.unsupportedUrl)
-    expect(thrownCode(() => assertSupportedMusicUrl(url))).toBe('UNSUPPORTED_URL')
   }
 })
 
 test('plain search text is not a url and passes through', () => {
   for (const text of ['never gonna give you up', 'cumbia 2020', 'youtube.com/watch?v=dQw4w9WgXcQ']) {
     expect(isUrlLike(text)).toBe(false)
-    expect(() => assertSupportedMusicUrl(text)).not.toThrow()
   }
 })
 

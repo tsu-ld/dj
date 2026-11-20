@@ -32,8 +32,6 @@ export const resume: QueueSpec = {
   },
 }
 
-// Button-only: a blind toggle is fine for the now-playing row, but the model
-// must name the outcome.
 export const toggle: QueueSpec = {
   name: 'toggle',
   description: 'Pause or resume whatever is playing.',
@@ -50,8 +48,6 @@ export const toggle: QueueSpec = {
   },
 }
 
-// Button-only: the card's timeline names the song it was drawn for, and the
-// engine refuses it once another song is playing.
 export const seek: QueueSpec = {
   name: 'seek',
   description: 'Jump to a point of the song that is playing.',

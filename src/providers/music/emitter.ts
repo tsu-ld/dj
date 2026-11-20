@@ -27,8 +27,6 @@ function channel<T>(): Channel<T> {
   }
 }
 
-// The SDK's events are translated once, here, into the small event map the app
-// consumes. Features never import the SDK.
 export function createEmitter(): { emitter: MusicEmitter, clear: () => void } {
   const channels: { readonly [K in keyof MusicEventMap]: Channel<MusicEventMap[K]> } = {
     trackQueued: channel<MusicEventMap['trackQueued']>(),

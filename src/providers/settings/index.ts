@@ -6,8 +6,6 @@ import { jsonMapFile } from '../json-file.ts'
 
 type StoredSettings = Record<string, GuildSettings>
 
-// A guild entry only carries the fields that differ from the defaults. Missing
-// fields mean defaults, never a corrupt file.
 function normalizeSettings(value: unknown): GuildSettings | null {
   if (!isRecord(value))
     return null
@@ -26,8 +24,6 @@ function normalizeSettings(value: unknown): GuildSettings | null {
   }
 }
 
-// The file is a flat guild map; a file where no entry is an object is not a
-// settings file and gets quarantined.
 export async function settingsStore(options: { path: string, logger: Logger }): Promise<SettingsPort> {
   const store = jsonMapFile({ path: options.path, name: 'settings', logger: options.logger, entry: normalizeSettings })
   let file: StoredSettings = await store.read()

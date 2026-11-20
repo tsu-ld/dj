@@ -8,12 +8,8 @@ const SOURCE = /<source[^>]*>([\s\S]*?)<\/source>/
 const MAX_ITEMS = 3
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 
-// A one-word billing is also an ordinary word, and the feed keeps answering it:
-// "Queen" a monarch, "Chicago" a city, "Air" a gas, "Kiss" a gesture. For such
-// a name only a headline that speaks about music itself can be about the act;
-// a distinctive multi-word billing ("Daft Punk") stands on its own. A doubtful
-// headline costs less than a made-up fact, so it is dropped. Words with an
-// everyday sense (tour, single, track, rock, pop, festival) prove nothing.
+// Google News answers a one-word name in its everyday sense ("Queen" a monarch, "Air" a gas),
+// so such a name needs one of these words in the headline.
 const MUSIC_WORDS = new Set([
   'album',
   'albums',
@@ -74,14 +70,11 @@ function escapePattern(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// A feed can carry a broken entity (&#99999999;); String.fromCodePoint throws on
-// it and would take every headline down. Drop the offending entity instead.
+// Feeds carry broken entities (&#99999999;) that String.fromCodePoint throws on.
 function fromCodePoint(code: number): string {
   return Number.isInteger(code) && code > 0 && code <= 0x10FFFF ? String.fromCodePoint(code) : ''
 }
 
-// Titles and sources arrive as XML text, sometimes inside CDATA and always with
-// entities: the host reads these strings out loud, so they must be plain text.
 function decodeEntities(raw: string): string {
   return raw
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
@@ -101,9 +94,7 @@ function textOf(block: string, pattern: RegExp): string | null {
   return value === undefined ? null : decodeEntities(value).trim()
 }
 
-// The outlet is repeated at the end of the title, so a masthead that carries
-// the artist's name ("Chicago Tribune") would otherwise pass on the masthead
-// alone after the name itself was no longer in the headline.
+// Google News appends " - <outlet>" to every title.
 function withoutSource(title: string, source: string | null): string {
   const suffix = source === null ? '' : ` - ${source}`
 
@@ -114,13 +105,8 @@ function hasMusicWord(title: string): boolean {
   return normalizeName(title).split(' ').some(word => MUSIC_WORDS.has(word))
 }
 
-// "Queen Camilla", "Air India", "Chicago Fire": a one-word name followed by
-// another capitalised word names somebody else. A possessive is how a band
-// credits its own member ("Queen's Brian May"), so that one stays.
 function namesAnother(title: string, name: string): boolean {
   const pattern = new RegExp(`(?:^|[^\\p{L}\\p{N}])(${escapePattern(name)})(['’]s)?\\s+(\\p{L})`, 'iu')
-  // The name is accent-free ("bjork"); the title keeps its case but drops its
-  // accents too, so "Björk Reykjavik ..." is matched.
   const match = pattern.exec(title.normalize('NFD').replace(/\p{M}/gu, ''))
   const first = match?.[3] ?? ''
 
@@ -137,8 +123,6 @@ function isAboutArtist(title: string, name: string): boolean {
   return !namesAnother(title, name) && hasMusicWord(title)
 }
 
-// Only news about this artist, and only news a host can still call news: an
-// item older than a month or about somebody else would be a made-up fact.
 export function parseNews(xml: string, artist: string, now: number): SongNews[] {
   const name = normalizeName(artist)
 

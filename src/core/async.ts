@@ -7,18 +7,13 @@ export async function withTimeout<T>(promise: Promise<T>, milliseconds: number, 
     timer = setTimeout(() => reject(new TimeoutError(message)), milliseconds)
   })
 
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer)
-      clearTimeout(timer)
-  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
 }
 
 export interface KeyedQueue {
   run: <T>(key: string, work: () => Promise<T>) => Promise<T>
 }
 
-// Playback mutations for one guild are serialized: a skip and a remove racing
-// each other would otherwise both read the same queue position.
 export function keyedQueue(): KeyedQueue {
   const tails = new Map<string, Promise<unknown>>()
 
@@ -50,11 +45,8 @@ export interface CircuitBreaker {
   failure: () => void
 }
 
-// A provider that is down must stop costing a timeout per request. After the
-// threshold the breaker opens, and one trial is allowed after the cooldown.
-export function circuitBreaker(options: { threshold: number, cooldownMs: number, now?: () => number }): CircuitBreaker {
+export function circuitBreaker(options: { cooldownMs: number, now?: () => number }): CircuitBreaker {
   const now = options.now ?? (() => Date.now())
-  let failures = 0
   let openedAt: number | null = null
   let trialInFlight = false
 
@@ -74,16 +66,12 @@ export function circuitBreaker(options: { threshold: number, cooldownMs: number,
       return true
     },
     success() {
-      failures = 0
       openedAt = null
       trialInFlight = false
     },
     failure() {
-      failures++
       trialInFlight = false
-
-      if (failures >= options.threshold)
-        openedAt = now()
+      openedAt = now()
     },
   }
 }

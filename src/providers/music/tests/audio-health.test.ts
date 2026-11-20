@@ -1,17 +1,16 @@
 import type { Logger } from '../../../core/logger.ts'
+import type { PingSample } from '../audio-health.ts'
 import { expect, test } from 'bun:test'
 import { logger } from '../../../core/logger.ts'
-import {
-  audioHealth,
-} from '../audio-health.ts'
+import { audioHealth } from '../audio-health.ts'
 
 interface Line {
   readonly event: string
   readonly fields: Record<string, unknown>
 }
 
-// A clock, a timer that only runs when the test says so, and the log lines the
-// module produced: no sleeping, and the lag is whatever the test makes it.
+const noPing = (): PingSample => ({ ws: undefined, udp: undefined })
+
 function harness() {
   const lines: Line[] = []
   const pending: Array<{ run: () => void, afterMs: number, spent: boolean }> = []
@@ -71,7 +70,6 @@ function harness() {
 
   return {
     health,
-    lines,
     tick,
     only,
     count,
@@ -103,7 +101,7 @@ test('a song summary carries the worst lag and the pings it saw', () => {
 test('a lag under the stall threshold is measured but not counted', () => {
   const h = harness()
 
-  h.health.start({ guildId: 'g1', title: 'Song', ping: () => null })
+  h.health.start({ guildId: 'g1', title: 'Song', ping: noPing })
   h.tick(0)
   h.tick(30)
   h.health.end('g1', 'finished')
@@ -119,7 +117,7 @@ test('a lag under the stall threshold is measured but not counted', () => {
 test('a long stall logs once, and again only after ten seconds', () => {
   const h = harness()
 
-  h.health.start({ guildId: 'g1', title: 'Song', ping: () => null })
+  h.health.start({ guildId: 'g1', title: 'Song', ping: noPing })
   h.tick(150)
   expect(h.only('music.loop_stall').fields.lagMs).toBe(150)
   h.tick(400)
@@ -131,8 +129,8 @@ test('a long stall logs once, and again only after ten seconds', () => {
 test('the timer runs while a song plays, and stops with the last one', () => {
   const h = harness()
 
-  h.health.start({ guildId: 'g1', title: 'One', ping: () => null })
-  h.health.start({ guildId: 'g2', title: 'Two', ping: () => null })
+  h.health.start({ guildId: 'g1', title: 'One', ping: noPing })
+  h.health.start({ guildId: 'g2', title: 'Two', ping: noPing })
   expect(h.pending()).toBe(1)
 
   h.tick(0)
@@ -153,12 +151,9 @@ test('a ping that throws is contained, and the song still summarizes', () => {
   h.health.start({ guildId: 'g1', title: 'One', ping: boom })
   h.health.start({ guildId: 'g2', title: 'Two', ping: boom })
 
-  // Both samples run inside the timer, and the one in end() runs in a handler:
-  // an escaping throw would be an uncaught exception either way.
   expect(() => h.tick(0)).not.toThrow()
   expect(() => h.health.end('g1', 'finished')).not.toThrow()
 
-  // Once per song: 25 samples a second would otherwise bury the log.
   expect(h.count('music.ping_failed')).toBe(2)
   expect(h.only('music.audio_health').fields.guildId).toBe('g1')
   expect(h.only('music.audio_health').fields.reason).toBe('finished')
@@ -169,7 +164,7 @@ test('a ping that throws is contained, and the song still summarizes', () => {
 test('dispose clears the timer and any pending summary', () => {
   const h = harness()
 
-  h.health.start({ guildId: 'g1', title: 'Song', ping: () => null })
+  h.health.start({ guildId: 'g1', title: 'Song', ping: noPing })
   h.health.dispose()
   h.health.end('g1', 'error')
 
