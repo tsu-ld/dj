@@ -10,10 +10,6 @@ function stripBotMention(content: string, botId: string): string {
   return content.replaceAll(`<@${botId}>`, '').replaceAll(`<@!${botId}>`, '')
 }
 
-// The users collection is the API's parsed mention list, not a name that looks
-// like one. Channel mentions come from the same list and are not render-aware:
-// a channel id inside backticks still counts, so set_channel keeps its admin
-// permission check.
 export function readMention(message: Message): Mention {
   const botId = message.client.user?.id
   const botMentioned = botId !== undefined && message.mentions.users.has(botId)
@@ -23,8 +19,6 @@ export function readMention(message: Message): Mention {
   return { botMentioned, channelMentions, text }
 }
 
-// "@DJ #music" is onboarding, not a command the model has to infer. The same
-// channel named twice is still one Discord mention in the collection.
 export function isChannelConfiguration(text: string, channelMentions: readonly { readonly id: string }[]): boolean {
   if (channelMentions.length !== 1)
     return false

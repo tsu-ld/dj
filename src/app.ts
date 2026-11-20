@@ -33,8 +33,6 @@ export interface App {
 
 const SHUTDOWN_TIMEOUT_MS = 5_000
 
-// The only place that knows every layer. Ports are wired here; no feature
-// imports a provider, and no provider imports a feature.
 export async function createApp(config: AppConfig): Promise<App> {
   const log = createLogger({ level: config.logLevel }).child({ app: 'dj' })
   const settings = await settingsStore({ path: config.settingsPath, logger: log })
@@ -48,10 +46,6 @@ export async function createApp(config: AppConfig): Promise<App> {
 
   const hostRef: { current: OnAirHost | null } = { current: null }
 
-  // The music engine needs the hook before the host exists, and the host needs
-  // the engine. The hook only runs after login, so the holder is always set by
-  // then; a null holder means a stream started before wiring, which skips the
-  // line instead of crashing the song.
   const music = musicEngine({
     client,
     config: config.music,
@@ -95,7 +89,6 @@ export async function createApp(config: AppConfig): Promise<App> {
       host.playlistQueued(payload)
       slot.playlistQueued(payload)
     }),
-    // The host records each request when the song goes on air.
     music.on('trackStarted', (payload) => {
       slot.update(payload)
       host.trackStarted(payload)
@@ -120,14 +113,10 @@ export async function createApp(config: AppConfig): Promise<App> {
       announcements.playbackError(payload)
       host.playbackError(payload)
 
-      // Only the queue that actually failed and is now empty loses its cards;
-      // a replacement queue must keep them.
       if (payload.cleanupAfterError)
         slot.queueCleared({ guildId: payload.guildId })
     }),
     music.on('disconnected', ({ guildId }) => {
-      // A kick or a drag out of the channel leaves the queue without a stop
-      // event; the card must not keep advertising a song that is not playing.
       slot.queueCleared({ guildId })
       host.disconnected(guildId)
     }),
@@ -153,7 +142,6 @@ export async function createApp(config: AppConfig): Promise<App> {
 
       await waitForGateway({
         fetch,
-        // A stop during the wait ends the sleep, so shutdown never waits on it.
         sleep: async milliseconds => new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, milliseconds)
 
@@ -193,8 +181,6 @@ export async function createApp(config: AppConfig): Promise<App> {
       client.off(Events.InteractionCreate, onInteractionEvent)
       slot.dispose()
 
-      // Every step runs even if an earlier one throws: temp clips must be
-      // deleted and pending settings writes flushed before the process exits.
       const steps: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
         ['music', async () => music.dispose()],
         ['on-air', async () => host.dispose()],

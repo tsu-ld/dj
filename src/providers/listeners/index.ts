@@ -58,8 +58,6 @@ function normalizeArtists(value: unknown): Record<string, ArtistStat> {
   return artists
 }
 
-// A member entry only needs a name; every other field falls back to its empty
-// value and unknown fields are dropped, so a hand-edited or older file loads.
 function normalizeMember(value: unknown): StoredMember | null {
   if (!isRecord(value) || typeof value.name !== 'string')
     return null
@@ -87,8 +85,6 @@ function capMembers(guild: StoredGuild): void {
 
 export async function listenersStore(deps: { path: string, logger: Logger, clock: Clock }): Promise<ListenersPort> {
   const { clock } = deps
-  // The file maps guilds to members. One bad guild or member drops only that
-  // entry; a file where no guild is an object is quarantined.
   const store = jsonMapFile({ path: deps.path, name: 'listeners', logger: deps.logger, entry: value => normalizeMap(value, normalizeMember) })
   const file = await store.read()
   let timer: ReturnType<typeof setTimeout> | null = null

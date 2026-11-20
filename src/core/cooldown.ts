@@ -6,10 +6,8 @@ export interface Cooldown {
   mark: (key: string) => void
 }
 
-// A request that arrives inside the window is refused; the window is capped so
-// a busy server cannot grow the map forever.
-export function cooldown(ms: number, options: { maxEntries?: number, now?: () => number } = {}): Cooldown {
-  const entries = ttlMap<string, true>({ ttlMs: ms, max: options.maxEntries ?? 1000, now: options.now })
+export function cooldown(ms: number, options: { now?: () => number } = {}): Cooldown {
+  const entries = ttlMap<string, true>({ ttlMs: ms, max: 1000, now: options.now })
 
   return {
     has: key => entries.get(key) === true,

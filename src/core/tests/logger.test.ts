@@ -1,9 +1,10 @@
+import type { LogLevel } from '../logger.ts'
 import { describe, expect, test } from 'bun:test'
 import { logger } from '../logger.ts'
 
-function capture() {
+function capture(level: LogLevel = 'debug') {
   const lines: string[] = []
-  const log = logger({ level: 'debug', sink: line => lines.push(line), now: () => 0 })
+  const log = logger({ level, sink: line => lines.push(line), now: () => 0 })
 
   return { log, lines, parsed: () => lines.map(line => JSON.parse(line) as Record<string, unknown>) }
 }
@@ -38,8 +39,7 @@ describe('logger', () => {
   })
 
   test('drops events below the configured level', () => {
-    const lines: string[] = []
-    const log = logger({ level: 'warn', sink: line => lines.push(line) })
+    const { log, lines } = capture('warn')
 
     log.debug('ignored')
     log.info('ignored')

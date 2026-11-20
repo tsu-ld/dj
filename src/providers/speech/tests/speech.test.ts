@@ -1,21 +1,16 @@
 import type { AppConfig } from '../../../config.ts'
-import type { Clock } from '../../../core/clock.ts'
 import type { FetchCalls } from '../../tests/http.ts'
 import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { logger } from '../../../core/logger.ts'
+import { captureLog, testClock } from '../../../tests/fixtures.ts'
 import { json, restoreFetch, stubFetch } from '../../tests/http.ts'
 import { fitsQuota, speechSynthesizer } from '../index.ts'
 
 type SpeechConfig = AppConfig['speech']
 type EnabledSpeech = Extract<SpeechConfig, { enabled: true }>
-
-interface TestClock extends Clock {
-  advance: (milliseconds: number) => void
-}
 
 let directory = ''
 let previousTmp: string | undefined
@@ -50,29 +45,12 @@ function config(overrides: Partial<EnabledSpeech> = {}): SpeechConfig {
   }
 }
 
-function clockAt(start = 1_700_000_000_000): TestClock {
-  let now = start
-
-  return {
-    now: () => now,
-    advance: (milliseconds) => {
-      now += milliseconds
-    },
-  }
-}
-
-function captureLogger(): { lines: string[], port: ReturnType<typeof logger> } {
-  const lines: string[] = []
-
-  return { lines, port: logger({ level: 'debug', sink: line => lines.push(line) }) }
-}
-
 function usageBody(used: number, limit: number): Response {
   return json({ character_count: used, character_limit: limit })
 }
 
-function audioBody(bytes: readonly number[] = [1, 2, 3]): Response {
-  return new Response(new Uint8Array(bytes), { status: 200 })
+function audioBody(): Response {
+  return new Response(new Uint8Array([1, 2, 3]), { status: 200 })
 }
 
 function providerFetch(options: {
@@ -99,8 +77,8 @@ describe('configuration', () => {
   test('without a voice configured nothing is synthesized', async () => {
     const speech = speechSynthesizer({
       config: { enabled: false },
-      logger: captureLogger().port,
-      clock: clockAt(),
+      logger: captureLog().logger,
+      clock: testClock(),
     })
 
     expect(speech.available).toBe(false)
@@ -112,8 +90,8 @@ describe('configuration', () => {
 
     const speech = speechSynthesizer({
       config: config(),
-      logger: captureLogger().port,
-      clock: clockAt(),
+      logger: captureLog().logger,
+      clock: testClock(),
     })
 
     expect(await speech.synthesize('x'.repeat(301))).toBeNull()
@@ -123,12 +101,12 @@ describe('configuration', () => {
 
 describe('rendering', () => {
   test('a successful line is written under the audio directory with a unique name', async () => {
-    providerFetch({ audio: () => audioBody([1, 2, 3]) })
+    providerFetch({ audio: () => audioBody() })
 
     const speech = speechSynthesizer({
       config: config(),
-      logger: captureLogger().port,
-      clock: clockAt(),
+      logger: captureLog().logger,
+      clock: testClock(),
     })
     const file = await speech.synthesize('Hola')
 
@@ -136,7 +114,7 @@ describe('rendering', () => {
       throw new Error('Expected a clip')
 
     expect(dirname(file)).toBe(join(directory, 'dj-speech'))
-    expect(basename(file)).toMatch(/^tts-1700000000000-[a-z0-9]+\.mp3$/)
+    expect(basename(file)).toMatch(/^tts-1000000-[a-z0-9]+\.mp3$/)
     expect([...await readFile(file)]).toEqual([1, 2, 3])
     expect(existsSync(file)).toBe(true)
 
@@ -150,8 +128,8 @@ describe('rendering', () => {
 
     const speech = speechSynthesizer({
       config: config(),
-      logger: captureLogger().port,
-      clock: clockAt(),
+      logger: captureLog().logger,
+      clock: testClock(),
     })
     const first = await speech.synthesize('Uno')
     const second = await speech.synthesize('Dos')
@@ -170,9 +148,9 @@ describe('rendering', () => {
 describe('quota', () => {
   test('the usage cache lives for five minutes', async () => {
     const fetch = providerFetch()
-    const clock = clockAt()
+    const clock = testClock()
 
-    const speech = speechSynthesizer({ config: config(), logger: captureLogger().port, clock })
+    const speech = speechSynthesizer({ config: config(), logger: captureLog().logger, clock })
 
     await speech.synthesize('abc')
     await speech.synthesize('abc')
@@ -191,8 +169,8 @@ describe('quota', () => {
 
     const speech = speechSynthesizer({
       config: config(),
-      logger: captureLogger().port,
-      clock: clockAt(),
+      logger: captureLog().logger,
+      clock: testClock(),
     })
 
     expect(await speech.synthesize('abc')).not.toBeNull()
@@ -202,7 +180,7 @@ describe('quota', () => {
   })
 
   test('a failed usage read is logged and lets the line through', async () => {
-    const capture = captureLogger()
+    const capture = captureLog()
 
     stubFetch(async (input) => {
       if (String(input).includes('/user/subscription'))
@@ -211,21 +189,21 @@ describe('quota', () => {
       return audioBody()
     })
 
-    const speech = speechSynthesizer({ config: config(), logger: capture.port, clock: clockAt() })
+    const speech = speechSynthesizer({ config: config(), logger: capture.logger, clock: testClock() })
 
     expect(await speech.synthesize('Hola')).not.toBeNull()
-    expect(capture.lines.some(line => line.includes('speech.quota_unreadable'))).toBe(true)
+    expect(capture.events).toContain('speech.quota_unreadable')
   })
 
   test('a confirmed shortage skips the line before synthesizing', async () => {
     const fetch = providerFetch({ usage: () => usageBody(100, 100) })
-    const capture = captureLogger()
+    const capture = captureLog()
 
-    const speech = speechSynthesizer({ config: config(), logger: capture.port, clock: clockAt() })
+    const speech = speechSynthesizer({ config: config(), logger: capture.logger, clock: testClock() })
 
     expect(await speech.synthesize('Hola')).toBeNull()
     expect(fetch.matching('/text-to-speech')).toBe(0)
-    expect(capture.lines.some(line => line.includes('speech.quota_exhausted'))).toBe(true)
+    expect(capture.events).toContain('speech.quota_exhausted')
   })
 
   test('a quota rejection marks the cache full without latching the provider', async () => {
@@ -246,9 +224,9 @@ describe('quota', () => {
 
       return audioBody()
     })
-    const clock = clockAt()
+    const clock = testClock()
 
-    const speech = speechSynthesizer({ config: config(), logger: captureLogger().port, clock })
+    const speech = speechSynthesizer({ config: config(), logger: captureLog().logger, clock })
 
     expect(await speech.synthesize('Hola')).toBeNull()
     expect(speech.available).toBe(true)
@@ -268,15 +246,15 @@ describe('credentials', () => {
     const fetch = providerFetch({
       audio: () => new Response('{"detail":{"code":"unauthorized","status":"invalid_api_key"}}', { status: 401 }),
     })
-    const capture = captureLogger()
+    const capture = captureLog()
 
-    const speech = speechSynthesizer({ config: config(), logger: capture.port, clock: clockAt() })
+    const speech = speechSynthesizer({ config: config(), logger: capture.logger, clock: testClock() })
 
     expect(await speech.synthesize('Hola')).toBeNull()
     expect(speech.available).toBe(false)
     expect(await speech.synthesize('Hola')).toBeNull()
     expect(fetch.matching('/text-to-speech')).toBe(1)
-    expect(capture.lines.some(line => line.includes('speech.credentials_rejected'))).toBe(true)
+    expect(capture.events).toContain('speech.credentials_rejected')
   })
 
   test('a forbidden key also latches', async () => {
@@ -284,8 +262,8 @@ describe('credentials', () => {
 
     const speech = speechSynthesizer({
       config: config(),
-      logger: captureLogger().port,
-      clock: clockAt(),
+      logger: captureLog().logger,
+      clock: testClock(),
     })
 
     expect(await speech.synthesize('Hola')).toBeNull()
@@ -301,12 +279,12 @@ describe('failures', () => {
       throw new Error('offline')
     })
 
-    const capture = captureLogger()
-    const speech = speechSynthesizer({ config: config(), logger: capture.port, clock: clockAt() })
+    const capture = captureLog()
+    const speech = speechSynthesizer({ config: config(), logger: capture.logger, clock: testClock() })
 
     expect(await speech.synthesize('Hola')).toBeNull()
     expect(speech.available).toBe(true)
-    expect(capture.lines.some(line => line.includes('speech.synthesis_failed'))).toBe(true)
+    expect(capture.events).toContain('speech.synthesis_failed')
   })
 
   test('an invalid subscription shape is a failed read, not an empty quota', async () => {
@@ -317,10 +295,10 @@ describe('failures', () => {
       return audioBody()
     })
 
-    const capture = captureLogger()
-    const speech = speechSynthesizer({ config: config(), logger: capture.port, clock: clockAt() })
+    const capture = captureLog()
+    const speech = speechSynthesizer({ config: config(), logger: capture.logger, clock: testClock() })
 
     expect(await speech.synthesize('Hola')).not.toBeNull()
-    expect(capture.lines.some(line => line.includes('speech.quota_unreadable'))).toBe(true)
+    expect(capture.events).toContain('speech.quota_unreadable')
   })
 })

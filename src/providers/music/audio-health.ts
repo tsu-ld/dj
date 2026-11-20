@@ -2,10 +2,6 @@ import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
 import { errorMessage } from '../../core/errors.ts'
 
-// A voice connection under 100 ms of event-loop lag starves the audio encoder,
-// and a stalled read from the stream host starves it the same way: a listener
-// hears the song speed up and slow down. These thresholds separate a normal
-// sample, a stall, and a stall worth its own line in the log.
 const SAMPLE_MS = 40
 const STALL_MS = 40
 const STALL_LOG_MS = 100
@@ -19,7 +15,7 @@ export interface PingSample {
 export interface AudioHealthSession {
   readonly guildId: string
   readonly title: string
-  readonly ping: () => PingSample | null
+  readonly ping: () => PingSample
 }
 
 export type AudioEndReason = 'finished' | 'skipped' | 'stopped' | 'error'
@@ -60,8 +56,6 @@ function freshest(current: number, value: number | undefined): number {
   return Math.max(current, Math.round(value))
 }
 
-// One loop serves every guild: the lag is the process's, so a timer per guild
-// would only measure the same thing twice. It runs only while a song plays.
 export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer }): AudioHealth {
   const { clock, logger } = deps
   const timer = deps.timer ?? systemTimer
@@ -70,16 +64,11 @@ export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer 
   let dueAt = 0
   let lastStallLogAt = Number.NEGATIVE_INFINITY
 
-  // The ping reaches into a connection the engine may already have destroyed, so
-  // the call can throw. This runs inside a timer: an escaping throw is an
-  // uncaught exception, so the sample is dropped, named once per song.
+  // the ping reads a connection the SDK may already have destroyed, so it can throw
   function samplePings(): void {
     for (const entry of entries.values()) {
       try {
         const ping = entry.session.ping()
-
-        if (ping === null)
-          continue
 
         entry.counters.udpMax = freshest(entry.counters.udpMax, ping.udp)
         entry.counters.wsMax = freshest(entry.counters.wsMax, ping.ws)

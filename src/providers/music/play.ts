@@ -7,7 +7,7 @@ import type { MusicCatalog } from './catalog.ts'
 import { UserError } from '../../core/errors.ts'
 import { MAX_QUEUE_SIZE, queueRoom } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
-import { assertSupportedMusicUrl, PolicyError } from './policy.ts'
+import { isSupportedMusicUrl, isUrlLike, PolicyError } from './policy.ts'
 import { capQueue, errorCodeOf } from './queue.ts'
 import { voiceChannelProblem } from './voice.ts'
 
@@ -37,8 +37,7 @@ export function musicPlay(deps: {
 
     logger.error('music.play_failed', error, { guildId: request.voiceChannel.guild.id })
 
-    // A text request that never created a queue leaves the bot sitting alone in
-    // voice: a failed direct query disconnects. A dj batch keeps its connection.
+    // the bot has already joined voice, and the SDK does not leave when play() fails
     if (request.kind === 'text' && !player.getQueue(request.voiceChannel.guild.id))
       void request.voiceChannel.guild.members.me?.voice?.disconnect()
 
@@ -54,16 +53,8 @@ export function musicPlay(deps: {
       if (problem !== null)
         throw new UserError(problem)
 
-      if (request.kind === 'text') {
-        // Refused before the bot joins; the catalog's own check reaches the
-        // same mapping through the SDK.
-        try {
-          assertSupportedMusicUrl(request.value)
-        }
-        catch (error) {
-          throw mapPlayFailure(error, request)
-        }
-      }
+      if (request.kind === 'text' && isUrlLike(request.value) && !isSupportedMusicUrl(request.value))
+        throw new UserError(MESSAGES.unsupportedUrl)
 
       if (queueRoom(player.getQueue(guildId)?.songs.length ?? 0) === 0)
         throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
@@ -82,9 +73,6 @@ export function musicPlay(deps: {
         else {
           const wanted = request.value.slice(0, queueRoom(player.getQueue(guildId)?.songs.length ?? 0))
 
-          // All searches run in parallel, then the resolved playlist is added
-          // with a single play() so the queue keeps the requested order and only
-          // one add event fires.
           const resolved = (await Promise.all(wanted.map(async query => catalog.searchSong(query, { member: request.member })
             .catch((error: unknown) => {
               logger.error('music.search_failed', error, { query })

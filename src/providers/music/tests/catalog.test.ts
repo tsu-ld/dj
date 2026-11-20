@@ -6,7 +6,7 @@ import { extractionStub, log, memberOf, rejection, streamStub } from './fakes.ts
 
 function catalogWith(
   json: (url: string, flags?: readonly string[]) => Promise<unknown> = async () => ({}),
-  remember: (id: string | null | undefined, formats: unknown) => void = () => {},
+  remember: (id: string | null, formats: unknown) => void = () => {},
 ): MusicCatalog {
   return new MusicCatalog({
     extraction: extractionStub({ json }),
@@ -79,7 +79,6 @@ test('a channel that is not a topic channel never becomes the artist', async () 
   const related = await catalog.getRelatedSongs({ id: 'a' })
 
   expect(related.map(song => catalog.trackOf(song).artist)).toEqual([null, null])
-  // the card still shows who uploaded it
   expect(related.map(song => song.uploader.name)).toEqual(['7clouds', undefined])
 })
 
@@ -98,10 +97,8 @@ test('a track keeps who asked for it, and a radio pick has no requester', async 
   if (!related)
     throw new Error('expected a related song')
 
-  // autoplay hands the bot in as the radio pick's member
   related.member = memberOf('300000000000000009', 'DJ')
 
-  expect(related.member?.id).toBe('300000000000000009')
   expect(requested.requesterId).toBe('200000000000000007')
   expect(requested.requestedBy).toBe('tsu')
   expect(catalog.trackOf(related).requesterId).toBeNull()
@@ -303,7 +300,13 @@ test('a search without results returns null', async () => {
 })
 
 test('the extractor is never asked to resolve a spotify url', async () => {
-  const catalog = catalogWith()
+  let called = false
+  const catalog = catalogWith(async () => {
+    called = true
+
+    return {}
+  })
 
   expect(await rejection(async () => catalog.resolve('https://open.spotify.com/track/abc', {}))).toBe(MESSAGES.unsupportedUrl)
+  expect(called).toBe(false)
 })

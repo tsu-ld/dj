@@ -3,7 +3,7 @@ import { MESSAGES } from '../../messages.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
 import { chooseRoute } from '../route.ts'
-import { fakeContext, fakeUi, log, track, view } from './fakes.ts'
+import { fakeContext, fakeMusic, fakeUi, log, track, view } from './fakes.ts'
 
 const queue = view({
   current: track({ title: 'a' }),
@@ -11,7 +11,7 @@ const queue = view({
   size: 2,
 })
 
-const withQueue = fakeContext({ queue })
+const withQueue = fakeContext({ services: { music: fakeMusic({ view: () => queue }) } })
 const bus = commandBus({ specs: commands, logger: log })
 
 describe('chooseRoute', () => {
@@ -25,7 +25,7 @@ describe('chooseRoute', () => {
   test('a queue command without a queue routes so the bus refuses it once', async () => {
     for (const [text, name] of [['pausá', 'pause'], ['remove 1', 'remove']] as const) {
       const ui = fakeUi()
-      const context = fakeContext({ queue: null, ui })
+      const context = fakeContext({ ui })
       const route = chooseRoute(bus, text, name, context)
 
       expect(route?.spec.name).toBe(name)

@@ -6,21 +6,7 @@ import { MAX_QUEUE_SIZE } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
 import { commandBus } from '../bus.ts'
 import { addSongs, query } from '../play.ts'
-import { fakeContext, fakeMusic, fakeTextChannel, fakeUi, log, view, voiceContext } from './fakes.ts'
-
-function collector(requests: PlayRequest[], result: { added: number, first: string | null, dropped?: number }): ReturnType<typeof fakeMusic> {
-  return fakeMusic({
-    async play(request) {
-      requests.push(request)
-
-      return {
-        added: result.added,
-        first: result.first,
-        dropped: result.dropped ?? 0,
-      }
-    },
-  })
-}
+import { collector, fakeContext, fakeMusic, fakeTextChannel, fakeUi, log, view, voiceContext } from './fakes.ts'
 
 interface TypingQuery {
   readonly typing: () => number
@@ -28,7 +14,6 @@ interface TypingQuery {
   readonly running: Promise<unknown>
 }
 
-// A query whose search never ends until the test finishes it, under fake timers.
 async function withTypingQuery(check: (query: TypingQuery) => Promise<void>): Promise<void> {
   jest.useFakeTimers()
 
@@ -180,10 +165,10 @@ describe('query', () => {
 
   test('a full queue is refused before joining voice', async () => {
     const requests: PlayRequest[] = []
-    const music = collector(requests, { added: 1, first: 'A' })
+    const music = collector(requests, {}, { view: () => view({ size: MAX_QUEUE_SIZE }) })
     const bus = commandBus({ specs: [query], logger: log })
 
-    const outcome = await bus.run('query', { query: 'cumbia' }, fakeContext({ queue: view({ size: MAX_QUEUE_SIZE }), services: { music } }))
+    const outcome = await bus.run('query', { query: 'cumbia' }, fakeContext({ services: { music } }))
 
     expect(outcome).toEqual({ kind: 'refused', message: MESSAGES.queueFull(MAX_QUEUE_SIZE) })
     expect(requests).toEqual([])
@@ -223,24 +208,26 @@ describe('add_songs', () => {
 
   test('only asks for the room left in the queue', async () => {
     const requests: PlayRequest[] = []
-    const music = collector(requests, { added: 5, first: 'A' })
+    const music = collector(requests, { added: 5, first: 'A' }, { view: () => view({ size: MAX_QUEUE_SIZE - 5 }) })
     const songs = Array.from({ length: 8 }, (_, index) => `Song ${index + 1}`)
 
-    await addSongs.run({ songs }, voiceContext({ queue: view({ size: MAX_QUEUE_SIZE - 5 }), services: { music } }))
+    await addSongs.run({ songs }, voiceContext({ services: { music } }))
 
     expect(requests[0]?.value).toHaveLength(5)
   })
 
   test('refuses an empty list, a full queue or a missing voice channel', async () => {
     const music = fakeMusic()
+    const full = fakeMusic({ view: () => view({ size: MAX_QUEUE_SIZE }) })
     const bus = commandBus({ specs: [addSongs], logger: log })
 
     expect(await bus.run('add_songs', { songs: [] }, fakeContext({ services: { music } })))
       .toEqual({ kind: 'refused', message: 'no songs were given' })
-    expect(await bus.run('add_songs', { songs: ['a'] }, fakeContext({ queue: view({ size: MAX_QUEUE_SIZE }), services: { music } })))
+    expect(await bus.run('add_songs', { songs: ['a'] }, fakeContext({ services: { music: full } })))
       .toEqual({ kind: 'refused', message: MESSAGES.queueFull(MAX_QUEUE_SIZE) })
     expect(await bus.run('add_songs', { songs: ['a'] }, fakeContext({ voiceChannel: null, services: { music } })))
       .toEqual({ kind: 'refused', message: MESSAGES.joinVoiceChannel })
     expect(music.calls).not.toContain('play')
+    expect(full.calls).not.toContain('play')
   })
 })

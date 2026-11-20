@@ -13,9 +13,6 @@ function toRoute(spec: CommandSpec): DecisionOption {
   return { name: spec.name, description: spec.description }
 }
 
-// One executor for every entry point: the fast router, the model's tool calls
-// and the now-playing buttons all land here, so preconditions, authorization,
-// confirmation and error mapping are written once.
 export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger }): CommandBus {
   const byName = new Map(deps.specs.map(spec => [spec.name, spec]))
   const tools = deps.specs.filter(spec => spec.modelTool !== false).map(toTool)
@@ -54,8 +51,6 @@ export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger
           await scoped.ui.ack()
       }
       catch (error) {
-        // The action already happened: a missing reaction or a deleted channel
-        // must not be reported as a failed command.
         deps.logger.warn('command.feedback_failed', { name, error: errorMessage(error) })
       }
 
@@ -83,16 +78,14 @@ export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger
     async runTool(name, args, context) {
       const spec = byName.get(name)
 
-      // A command that is not a model tool must not become executable because
-      // the model guessed its name: query joins voice, toggle changes playback.
       if (!spec || spec.modelTool === false) {
         deps.logger.warn('command.not_a_tool', { name })
 
-        return Promise.resolve({
+        return {
           kind: 'failed',
           error: new Error(`Unknown tool: ${name}`),
           message: `there is no tool called ${name}`,
-        })
+        }
       }
 
       return run(name, args, context)
@@ -104,8 +97,6 @@ type Prepared
   = | { readonly refusal: string }
     | { readonly scoped: CommandContext, readonly execute: (args: Record<string, unknown>) => Promise<CommandData> }
 
-// The only check of each precondition, before authorization or any side
-// effect. A queue command reads the live queue, not the context snapshot.
 function prepare(spec: CommandSpec, context: CommandContext): Prepared {
   if (spec.requiresQueue === true) {
     const queue = context.services.music.view(context.guildId)

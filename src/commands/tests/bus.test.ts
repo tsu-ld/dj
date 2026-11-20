@@ -258,12 +258,9 @@ describe('commandBus', () => {
     expect(ran).toBe(false)
   })
 
-  test('a queue command reads the live queue, not the context snapshot', async () => {
+  test('a queue command receives the live queue', async () => {
     const fresh = view({ size: 4 })
-    const context = fakeContext({
-      queue: null,
-      services: { music: fakeMusic({ view: () => fresh }) },
-    })
+    const context = fakeContext({ services: { music: fakeMusic({ view: () => fresh }) } })
     const received: unknown[] = []
     const bus = commandBus({
       specs: [command({
@@ -281,7 +278,6 @@ describe('commandBus', () => {
     await bus.run('thing', {}, context)
 
     expect(received).toEqual([fresh])
-    expect(context.queue).toBeNull()
   })
 
   test('tools and routes are derived from the spec flags', () => {

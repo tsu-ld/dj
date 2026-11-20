@@ -1,11 +1,12 @@
 import type { AppConfig } from '../../../config.ts'
 import type { DecisionOption } from '../../../ports/decision.ts'
+import type { FetchCalls } from '../../tests/http.ts'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { isRecord, parseJson } from '../../../core/json.ts'
 import { testClock } from '../../../tests/fixtures.ts'
+import { restoreFetch, stubFetch } from '../../tests/http.ts'
 import { intentClassifier } from '../index.ts'
 
-const realFetch = globalThis.fetch
 const OPTIONS: readonly DecisionOption[] = [
   { name: 'pause', description: 'Pause the music.' },
   { name: 'skip', description: 'Skip the current song.' },
@@ -22,28 +23,24 @@ const config: AppConfig['decision'] = {
   retryAfterMs: 60_000,
 }
 
-function stubFetch(answer: unknown): Record<string, unknown>[] {
-  const bodies: Record<string, unknown>[] = []
-
-  globalThis.fetch = Object.assign(async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-    const body = parseJson(String(init?.body ?? ''))
-
-    if (isRecord(body))
-      bodies.push(body)
-
-    return Response.json({ answers: { action: answer } })
-  }, { preconnect: realFetch.preconnect })
-
-  return bodies
+function answer(choice: unknown): FetchCalls {
+  return stubFetch(async () => Response.json({ answers: { action: choice } }))
 }
 
-afterEach(() => {
-  globalThis.fetch = realFetch
-})
+function sentBody(calls: FetchCalls, index: number): Record<string, unknown> {
+  const body = parseJson(String(calls.at(index).init?.body ?? ''))
+
+  if (!isRecord(body))
+    throw new Error(`request ${index} sent no JSON body`)
+
+  return body
+}
+
+afterEach(restoreFetch)
 
 describe('intentClassifier', () => {
   test('the decision sends the message, the state and the registered options', async () => {
-    const bodies = stubFetch({ choice: 'pause', confidence: 0.9 })
+    const calls = answer({ choice: 'pause', confidence: 0.9 })
     const classifier = intentClassifier({ config, clock: testClock() })
 
     const choice = await classifier.choose({
@@ -54,10 +51,10 @@ describe('intentClassifier', () => {
     })
 
     expect(choice).toBe('pause')
-    expect(bodies[0]?.model).toBe('decision-model')
-    expect(bodies[0]?.state).toEqual({ message: 'pausá', author_in_voice: true })
+    expect(sentBody(calls, 0).model).toBe('decision-model')
+    expect(sentBody(calls, 0).state).toEqual({ message: 'pausá', author_in_voice: true })
 
-    const questions = bodies[0]?.questions
+    const questions = sentBody(calls, 0).questions
 
     expect(isRecord(questions)).toBe(true)
 
@@ -70,16 +67,16 @@ describe('intentClassifier', () => {
   })
 
   test('the message overrides a message already in the state', async () => {
-    const bodies = stubFetch({ choice: 'pause', confidence: 0.9 })
+    const calls = answer({ choice: 'pause', confidence: 0.9 })
     const classifier = intentClassifier({ config, clock: testClock() })
 
     await classifier.choose({ text: 'pausá', state: { message: 'viejo' }, options: OPTIONS, sessionId: 'chan-1' })
 
-    expect(bodies[0]?.state).toEqual({ message: 'pausá' })
+    expect(sentBody(calls, 0).state).toEqual({ message: 'pausá' })
   })
 
   test('a low-confidence decision falls back to the dj', async () => {
-    stubFetch({ choice: 'pause', confidence: 0.4 })
+    answer({ choice: 'pause', confidence: 0.4 })
 
     expect(await intentClassifier({ config, clock: testClock() }).choose({
       text: 'pausá',
@@ -90,7 +87,7 @@ describe('intentClassifier', () => {
   })
 
   test('a confidence of exactly the minimum is accepted', async () => {
-    stubFetch({ choice: 'pause', confidence: 0.6 })
+    answer({ choice: 'pause', confidence: 0.6 })
 
     expect(await intentClassifier({ config, clock: testClock() }).choose({
       text: 'pausá',
@@ -101,7 +98,7 @@ describe('intentClassifier', () => {
   })
 
   test('a label outside the offered options falls back to the dj', async () => {
-    stubFetch({ choice: 'set_persona', confidence: 0.9 })
+    answer({ choice: 'set_persona', confidence: 0.9 })
 
     expect(await intentClassifier({ config, clock: testClock() }).choose({
       text: 'sé un dj',
@@ -114,11 +111,11 @@ describe('intentClassifier', () => {
   test('without an endpoint there is no decision call', async () => {
     let called = false
 
-    globalThis.fetch = Object.assign(async () => {
+    stubFetch(async () => {
       called = true
 
       return Response.json({})
-    }, { preconnect: realFetch.preconnect })
+    })
 
     expect(await intentClassifier({
       config: { enabled: false },
@@ -130,11 +127,11 @@ describe('intentClassifier', () => {
   test('a failed decision rejects once, then the cooldown answers null', async () => {
     let calls = 0
 
-    globalThis.fetch = Object.assign(async () => {
+    stubFetch(async () => {
       calls++
 
       return Response.json({ error: 'slow down' }, { status: 429 })
-    }, { preconnect: realFetch.preconnect })
+    })
 
     const classifier = intentClassifier({ config, clock: testClock() })
 
@@ -149,14 +146,14 @@ describe('intentClassifier', () => {
     const clock = testClock()
     let calls = 0
 
-    globalThis.fetch = Object.assign(async () => {
+    stubFetch(async () => {
       calls++
 
       if (calls === 1)
         return Response.json({ error: 'slow down' }, { status: 500 })
 
       return Response.json({ answers: { action: { choice: 'skip', confidence: 0.9 } } })
-    }, { preconnect: realFetch.preconnect })
+    })
 
     const classifier = intentClassifier({ config, clock })
 

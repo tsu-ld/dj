@@ -23,7 +23,6 @@ function facts(extra: Partial<SongFacts> = {}): SongFacts {
   }
 }
 
-// a regular who is not at a milestone and asked for nothing they usually ask for
 const REGULAR: ListenerProfile = {
   name: 'tsu',
   requests: 7,
@@ -85,7 +84,6 @@ describe('pickAngle data', () => {
   })
 
   test('a listener milestone: first request, round count, top song or top artist', () => {
-    // requests is counted before this song, so request number N has N - 1
     expect(pick({ listener: { ...REGULAR, requests: 0 } })).toBe('listener')
 
     for (const number of [5, 10, 25, 50, 100])
@@ -137,7 +135,6 @@ describe('anniversaryOf', () => {
     expect(anniversaryOf(facts({ releaseDate: '2006-11-20', year: 2006 }), NOW)).toEqual({ years: 20, days: 2 })
     expect(anniversaryOf(facts({ releaseDate: '1976-03-01', year: 1976 }), NOW)).toBeNull()
 
-    // A year alone cannot place the release day.
     for (const years of [10, 20, 25, 30, 40, 50])
       expect(anniversaryOf(facts({ year: 2026 - years }), NOW)).toBeNull()
   })

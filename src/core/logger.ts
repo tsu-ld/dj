@@ -32,13 +32,11 @@ function sanitize(value: unknown, depth = 0): unknown {
   if (Array.isArray(value))
     return value.slice(0, 20).map(item => sanitize(item, depth + 1))
 
-  const clean: Record<string, unknown> = {}
+  return sanitizeFields(value as Record<string, unknown>, depth)
+}
 
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    clean[key] = SECRET_KEY.test(key) ? '[redacted]' : sanitize(entry, depth + 1)
-  }
-
-  return clean
+function sanitizeFields(fields: LogFields, depth = 0): LogFields {
+  return Object.fromEntries(Object.entries(fields).map(([key, entry]) => [key, SECRET_KEY.test(key) ? '[redacted]' : sanitize(entry, depth + 1)]))
 }
 
 function describeError(error: unknown): Record<string, unknown> {
@@ -67,8 +65,8 @@ export function logger(options: { level: LogLevel, sink?: (line: string) => void
         level,
         time: new Date(now()).toISOString(),
         event,
-        ...sanitize(base) as LogFields,
-        ...sanitize(fields ?? {}) as LogFields,
+        ...sanitizeFields(base),
+        ...sanitizeFields(fields ?? {}),
         ...(error === undefined ? {} : { error: describeError(error) }),
       }
 

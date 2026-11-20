@@ -1,7 +1,9 @@
 import type { ConversationPort } from '../../ports/conversation.ts'
 import type { TestClock } from './support.ts'
 import { describe, expect, test } from 'bun:test'
+import { ERROR_ANNOUNCE_MS } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
+import { settle } from '../../tests/fixtures.ts'
 import { djAnnouncements } from '../announcements.ts'
 import { djReplies } from '../replies.ts'
 import {
@@ -22,10 +24,6 @@ function announcer(options: { clock?: TestClock } = {}): ReturnType<typeof djAnn
     settings: testSettings(),
     clock: options.clock ?? testClock(),
   })
-}
-
-async function settle(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0))
 }
 
 describe('djAnnouncements', () => {
@@ -62,6 +60,12 @@ describe('djAnnouncements', () => {
     await settle()
 
     expect(channel.sent).toEqual([])
+
+    clock.advance(ERROR_ANNOUNCE_MS)
+    announcements.playbackError({ guildId: 'g1', songId: null, cleanupAfterError: true, textChannel: channel.channel })
+    await settle()
+
+    expect(channel.sent).toEqual([MESSAGES.playbackError])
   })
 
   test('each guild has its own error throttle', async () => {

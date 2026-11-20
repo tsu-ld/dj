@@ -11,8 +11,6 @@ import { buildConversationInstructions } from './prompts.ts'
 
 const DJ_TIMEOUT_MS = 40_000
 const ASK_DEADLINE_MS = 60_000
-// Three rounds to act through the tools, then one forced spoken answer: a
-// model that keeps calling tools until the cap would otherwise act in silence.
 const MAX_TOOL_ROUNDS = 3
 const MAX_TOOL_CALLS_PER_ROUND = 4
 const MAX_TOOL_CALLS = 8
@@ -22,9 +20,6 @@ const CAP_RESULT = 'too many tool calls; try fewer at once'
 const INVALID_ARGUMENTS_RESULT = 'those arguments were not valid JSON'
 const FAILED_RESULT = 'the player could not do that'
 
-// The dj already answers in its own words; a tool call must not also ack, react
-// or announce a confirmation in the channel. Showing the queue stays visible:
-// that tool exists to post the queue card.
 const SILENT_UI: Omit<CommandContext['ui'], 'showQueue'> = {
   reply: async () => {},
   error: async () => {},
@@ -34,8 +29,6 @@ const SILENT_UI: Omit<CommandContext['ui'], 'showQueue'> = {
 export interface AskInput {
   request: string
   context: CommandContext
-  // A refused or failed tool makes the answer an explanation of a problem,
-  // which the caller must not swallow into a bare reaction.
   onRefused?: () => void
 }
 
@@ -171,13 +164,7 @@ export function djAgent(deps: {
 
             toolCalls++
 
-            // The queue changes between calls (adding songs creates it), so
-            // every tool sees the live view.
-            const callContext: CommandContext = {
-              ...toolContext,
-              queue: context.services.music.view(context.guildId),
-            }
-            const outcome = await resolveToolCall(call, callContext, deps.bus, deps.logger)
+            const outcome = await resolveToolCall(call, toolContext, deps.bus, deps.logger)
 
             acted ||= outcome.acted
 
@@ -199,8 +186,6 @@ export function djAgent(deps: {
           return MESSAGES.djActed
         }
 
-        // Tools off for the closing call, so the answer cannot carry more
-        // dangling tool calls and the conversation stays safe to remember.
         // Endpoints that emit tool calls even when none were offered get
         // sanitized away here.
         typing()

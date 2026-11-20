@@ -7,8 +7,6 @@ export class UserError extends Error {
 
 export type ProviderFailure = 'retryable' | 'fatal' | 'quota'
 
-// Provider failures carry the kind of failure, never the vendor behind it:
-// callers decide what to do without knowing which service was picked.
 export class ProviderError extends Error {
   readonly failure: ProviderFailure
   readonly status: number | null

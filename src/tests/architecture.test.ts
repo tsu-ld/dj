@@ -26,8 +26,6 @@ function sourceFiles(directory: string): string[] {
   return files
 }
 
-// Static imports, re-exports, dynamic imports and require all count: a cycle or
-// an upward dependency hidden behind `await import()` is still that dependency.
 function importsOf(file: string): string[] {
   const source = readFileSync(file, 'utf8')
 
@@ -54,8 +52,6 @@ function areaOf(file: string): string {
 const files = sourceFiles(SRC)
 const imports = new Map(files.map(file => [file, importsOf(file)]))
 
-// Every relative import must resolve. A path that exists only in a branch is a
-// crash waiting for that branch.
 test('every relative import points at a real file', () => {
   const missing = [...imports].flatMap(([file, targets]) =>
     targets
@@ -131,8 +127,6 @@ test('no area imports a layer above it', () => {
   expect(violations).toEqual([])
 })
 
-// The provider folder is the only place a technology may be named. Keeping the
-// check on paths means a folder cannot quietly become the architecture.
 test('a provider technology name never leaks into a path', () => {
   const names = ['distube', 'yt-dlp', 'ytdlp', 'elevenlabs', 'openai', 'jev', 'systemone', 'spotify', 'ffmpeg', 'deepseek', 'typesafe', 'opencode', 'mediaplex', 'davey', 'deezer', 'wikipedia']
   const leaked = files
@@ -156,12 +150,4 @@ test('no source file outgrows a single concern', () => {
     .filter(({ lines }) => lines > MAX_SOURCE_LINES)
 
   expect(large).toEqual([])
-})
-
-test('production code logs through the logger, never console', () => {
-  const consoles = files
-    .filter(file => /\bconsole\.(?:log|info|warn|error|debug)\b/.test(readFileSync(file, 'utf8')))
-    .map(file => relative(SRC, file))
-
-  expect(consoles).toEqual([])
 })

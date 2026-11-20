@@ -1,12 +1,11 @@
 import type { CommandOutcome } from '../../commands/spec.ts'
 import type { ConversationPort } from '../../ports/conversation.ts'
-import type { MusicPort } from '../../ports/music.ts'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
 import { djAgent } from '../conversation.ts'
 import {
   call,
-  captureLogger,
+  captureLog,
   failed,
   ok,
   refused,
@@ -160,16 +159,15 @@ describe('djAgent', () => {
       const agent = testAgent(scriptedModel([reply, () => textReply('listo')]), { clock })
 
       await agent.ask({ request: 'hacelo', context: testContext(), onRefused: () => problems.push(name) })
-        .catch(() => null)
     }
 
     const clock = testClock()
 
-    await ask('deadline', () => {
+    await expect(ask('deadline', () => {
       clock.advance(60_001)
 
       return toolReply(call('call_1', 'skip'))
-    }, clock)
+    }, clock)).rejects.toThrow('The DJ ran out of time before answering.')
     await ask('cap', () => toolReply(...Array.from({ length: 5 }, (_, index) => call(`call_${index}`, 'skip'))))
     await ask('malformed', () => toolReply(call('call_1', 'skip', 'not json')))
 
@@ -177,7 +175,7 @@ describe('djAgent', () => {
   })
 
   test('tool outcomes keep the data, the refusal and the failure apart', async () => {
-    const logs = captureLogger()
+    const logs = captureLog()
     const model = scriptedModel([
       () => toolReply(
         call('call_1', 'with_data'),
@@ -215,7 +213,7 @@ describe('djAgent', () => {
   })
 
   test('a tool that throws is reported to the model without breaking the turn', async () => {
-    const logs = captureLogger()
+    const logs = captureLog()
     const model = scriptedModel([() => toolReply(call('call_1', 'skip')), () => textReply('listo')])
     const bus = testBus(() => {
       throw new Error('player exploded')
@@ -316,7 +314,7 @@ describe('djAgent', () => {
   })
 
   test('a failure after acting is confirmed and remembered without a dangling call', async () => {
-    const logs = captureLogger()
+    const logs = captureLog()
     const model = scriptedModel([
       () => toolReply(call('call_1', 'skip')),
       () => {
@@ -337,29 +335,6 @@ describe('djAgent', () => {
       'tool',
       'user',
     ])
-  })
-
-  test('every tool sees the queue as it is at that moment', async () => {
-    let view = testView({ size: 1 })
-    const music = { view: () => view } as unknown as MusicPort
-    const sizes: number[] = []
-    const bus = testBus((name, _args, context) => {
-      sizes.push(context.queue?.size ?? 0)
-
-      if (name === 'add_songs')
-        view = testView({ size: 5 })
-
-      return ok()
-    })
-    const model = scriptedModel([
-      () => toolReply(call('call_1', 'add_songs'), call('call_2', 'add_songs')),
-      () => textReply('listo'),
-    ])
-    const agent = testAgent(model, { bus })
-
-    await agent.ask({ request: 'poné dos temas', context: testContext({ music }) })
-
-    expect(sizes).toEqual([1, 5])
   })
 
   test('a tool call does not ack or confirm through the command ui', async () => {

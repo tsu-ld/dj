@@ -1,37 +1,14 @@
 import type { GuildMember, GuildTextBasedChannel, Message } from 'discord.js'
 import type { CommandBus, CommandContext, CommandOutcome } from '../../commands/spec.ts'
-import type { Logger } from '../../core/logger.ts'
 import type { CompletionReply, CompletionRequest, ConversationPort, ToolCall } from '../../ports/conversation.ts'
 import type { MusicPort } from '../../ports/music.ts'
 import type { GuildSettings, SettingsPort } from '../../ports/settings.ts'
-import { isRecord, parseJson } from '../../core/json.ts'
-import { logger } from '../../core/logger.ts'
 import { silentLog } from '../../tests/fixtures.ts'
 
-export { silentLog, testClock, testTrack, testView } from '../../tests/fixtures.ts'
+export { captureLog, silentLog, testClock, testTrack, testView } from '../../tests/fixtures.ts'
 export type { TestClock } from '../../tests/fixtures.ts'
 
-export interface CapturedLog {
-  events: string[]
-  logger: Logger
-}
-
-export function captureLogger(): CapturedLog {
-  const events: string[] = []
-  const log = logger({
-    level: 'debug',
-    sink(line) {
-      const parsed = parseJson(line)
-
-      if (isRecord(parsed) && typeof parsed.event === 'string')
-        events.push(parsed.event)
-    },
-  })
-
-  return { events, logger: log }
-}
-
-export interface TestChannel {
+interface TestChannel {
   channel: GuildTextBasedChannel
   sent: string[]
   typing: { count: number }
@@ -61,7 +38,7 @@ export function testChannel(options: { id?: string, failSend?: boolean, failTypi
   return { channel, sent, typing }
 }
 
-export interface TestMessage {
+interface TestMessage {
   message: Message
   replies: string[]
 }
@@ -86,7 +63,7 @@ function testMember(): GuildMember {
   return {} as unknown as GuildMember
 }
 
-export interface TestSettings extends SettingsPort {
+interface TestSettings extends SettingsPort {
   current: () => GuildSettings
 }
 
@@ -110,7 +87,7 @@ function testMusic(): MusicPort {
   } as unknown as MusicPort
 }
 
-export interface TestBus extends CommandBus {
+interface TestBus extends CommandBus {
   calls: { name: string, args: Record<string, unknown> }[]
 }
 
@@ -149,7 +126,7 @@ export function failed(error: unknown): CommandOutcome {
   return { kind: 'failed', error }
 }
 
-export interface TestContextOptions {
+interface TestContextOptions {
   channel?: GuildTextBasedChannel
   message?: Message | null
   music?: MusicPort
@@ -165,8 +142,6 @@ export function testContext(options: TestContextOptions = {}): CommandContext {
     voiceChannel: null,
     textChannel: channel,
     message: options.message ?? null,
-    settings: settingsPort.get('123456789012345678'),
-    queue: null,
     services: {
       music: options.music ?? testMusic(),
       settings: settingsPort,
@@ -181,7 +156,7 @@ export function testContext(options: TestContextOptions = {}): CommandContext {
   }
 }
 
-export interface ScriptedModel extends ConversationPort {
+interface ScriptedModel extends ConversationPort {
   requests: CompletionRequest[]
 }
 

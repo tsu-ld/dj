@@ -1,9 +1,7 @@
 const RECENT_TITLES = 30
 
-// A mix offers what just played under another upload: "The Chain (2004
-// Remaster)", "Fleetwood Mac - The Chain - Remastered 2004". A title keys as its
-// lowercased name without bracketed parts or a remaster suffix, with and without
-// a leading "artist - ".
+// A YouTube mix offers what just played under another upload: "The Chain (2004
+// Remaster)", "Fleetwood Mac - The Chain - Remastered 2004".
 export function titleKeys(title: string): string[] {
   const bare = title
     .toLowerCase()
@@ -21,7 +19,6 @@ export function sameSong(title: string, heard: ReadonlySet<string>): boolean {
   return titleKeys(title).some(key => heard.has(key))
 }
 
-// The last titles each guild played, bounded per guild.
 export function recentTitles(limit = RECENT_TITLES): {
   add: (guildId: string, title: string) => void
   of: (guildId: string) => readonly string[]

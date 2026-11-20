@@ -36,12 +36,10 @@ describe('keyedQueue', () => {
 })
 
 describe('circuitBreaker', () => {
-  test('opens after the threshold and allows one trial after the cooldown', () => {
+  test('opens on a failure and allows one trial after the cooldown', () => {
     let now = 0
-    const breaker = circuitBreaker({ threshold: 2, cooldownMs: 100, now: () => now })
+    const breaker = circuitBreaker({ cooldownMs: 100, now: () => now })
 
-    expect(breaker.allow()).toBe(true)
-    breaker.failure()
     expect(breaker.allow()).toBe(true)
     breaker.failure()
     expect(breaker.allow()).toBe(false)

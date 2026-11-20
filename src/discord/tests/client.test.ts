@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { loadConfig } from '../../config.ts'
 import { silentLog as log } from '../../tests/fixtures.ts'
-import { discordClient, GATEWAY_RETRY_DELAYS_MS, waitForGateway } from '../client.ts'
+import { discordClient, waitForGateway } from '../client.ts'
 
 const config = loadConfig({ DISCORD_TOKEN: 'test-token' })
 
@@ -62,7 +62,7 @@ describe('waitForGateway', () => {
 
     await waitForGateway(fake.probe)
 
-    expect(fake.slept).toEqual(GATEWAY_RETRY_DELAYS_MS.slice(0, 3))
+    expect(fake.slept).toEqual([1_000, 2_000, 4_000])
     expect(fake.urls).toHaveLength(4)
   })
 
@@ -71,8 +71,8 @@ describe('waitForGateway', () => {
 
     await waitForGateway(fake.probe)
 
-    expect(fake.slept).toEqual([...GATEWAY_RETRY_DELAYS_MS])
-    expect(fake.urls).toHaveLength(GATEWAY_RETRY_DELAYS_MS.length + 1)
+    expect(fake.slept).toEqual([1_000, 2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000])
+    expect(fake.urls).toHaveLength(9)
   })
 
   test('a stop during the wait ends it without another probe', async () => {
@@ -86,7 +86,7 @@ describe('waitForGateway', () => {
 
     await waitForGateway(fake.probe)
 
-    expect(fake.slept).toEqual(GATEWAY_RETRY_DELAYS_MS.slice(0, 1))
+    expect(fake.slept).toEqual([1_000])
     expect(fake.urls).toHaveLength(1)
   })
 })

@@ -3,7 +3,6 @@ import { describe, expect, test } from 'bun:test'
 import { HISTORY_MAX_MESSAGES } from '../../limits.ts'
 import {
   conversationHistory,
-  conversationKey,
   trimToWholeExchanges,
 } from '../history.ts'
 import { testClock } from './support.ts'
@@ -21,7 +20,6 @@ function exchange(number: number): ChatMessage[] {
   ]
 }
 
-// The chat shape rejects a tool result whose matching tool call never appeared.
 function hasOrphanToolResult(messages: readonly ChatMessage[]): boolean {
   const announcedCallIds = new Set<string>()
 
@@ -107,7 +105,6 @@ describe('conversationHistory', () => {
     history.remember('channel-fallback', null, exchange(1))
 
     expect(history.recall('channel-fallback', null)).toEqual(exchange(1))
-    expect(conversationKey('channel-fallback', null)).toBe('channel-fallback')
   })
 
   test('an idle conversation expires', () => {
@@ -133,7 +130,6 @@ describe('conversationHistory', () => {
   test('the number of conversations is capped', () => {
     const history = conversationHistory({ clock: testClock() })
 
-    // one past the cap of a thousand conversations evicts the oldest
     for (let channel = 0; channel <= 1_000; channel++)
       history.remember(`channel-${channel}`, 'user-a', exchange(channel))
 

@@ -164,7 +164,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ? { enabled: true as const, clientId: metadataId, clientSecret: metadataSecret }
     : { enabled: false as const }
 
-  // A missing token is already an issue; the second test only narrows it.
   if (issues.length > 0 || token === null)
     throw new ConfigError(issues)
 

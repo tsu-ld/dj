@@ -1,15 +1,11 @@
 import type { QueueView } from '../ports/music.ts'
 
-// Discord rate-limits message edits; a card repainted every 15s stays far below
-// it while still moving visibly.
 export const PROGRESS_REPAINT_MS = 15_000
 
 const UNKNOWN_MESSAGE = 10_008
-// Discord caps edits to a message older than an hour (error 30046), and a card
-// edited every few seconds would reach that cap
+// Discord caps edits to a message older than an hour (error 30046).
 const EDITABLE_FOR_MS = 55 * 60_000
 
-// Only a deleted card is gone; a timeout or a rate limit keeps it for the next try.
 export function isDeletedMessage(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === UNKNOWN_MESSAGE
 }
@@ -19,14 +15,11 @@ export function isPastEditWindow(message: { readonly createdTimestamp: number } 
 }
 
 export interface ProgressTimers {
-  // starts or stops the guild's repaint for the song this view shows
   sync: (guildId: string, view: QueueView) => void
   stop: (guildId: string) => void
   dispose: () => void
 }
 
-// One repaint timer per guild, only for a playing song with a known length; a
-// tick that finds the player not playing skips its repaint.
 export function progressTimers(deps: {
   playing: (guildId: string) => boolean
   repaint: (guildId: string) => void

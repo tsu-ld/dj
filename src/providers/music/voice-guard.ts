@@ -4,9 +4,8 @@ import { errorMessage } from '../../core/errors.ts'
 
 type VoiceOf = Queue['voice']
 
-// The voice re-emits its stream's errors, and removing a queue detaches the
-// engine's listener from it; an emitter with no "error" listener throws, so
-// ours stays on every voice for good and only names the error.
+// The SDK's voice re-emits stream errors but loses its listener when the queue
+// is removed; an emitter with no "error" listener throws.
 export function voiceGuard(logger: Logger): (guildId: string, voice: VoiceOf) => void {
   const guarded = new WeakSet<VoiceOf>()
 

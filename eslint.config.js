@@ -5,12 +5,10 @@ export default antfu(
     typescript: {
       tsconfigPath: './tsconfig.json',
     },
-    ignores: ['docs/**'],
     rules: {
-      'quotes': ['error', 'single'],
       'antfu/no-top-level-await': 'off',
       'newline-before-return': 'error',
-      'no-console': 'off',
+      'no-console': ['error', {}],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
     },
@@ -20,5 +18,9 @@ export default antfu(
     // thenable-complete; the rule only produces false positives in tests.
     files: ['**/*.test.ts'],
     rules: { 'ts/await-thenable': 'off' },
+  },
+  {
+    files: ['e2e-test.ts'],
+    rules: { 'no-console': 'off' },
   },
 )

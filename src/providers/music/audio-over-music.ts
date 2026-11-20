@@ -37,8 +37,6 @@ export function audioOverMusic(deps: {
     return task
   }
 
-  // One file on its own player, then the connection goes back to the music.
-  // True when the file played to its end.
   async function playThrough(
     voice: VoiceSession,
     guildId: string,
@@ -47,8 +45,7 @@ export function audioOverMusic(deps: {
     events: { readonly unreadable: string, readonly settledEarly: string },
   ): Promise<boolean> {
     const player = createPlayer()
-    // A destroyed connection unsubscribes the player, which autopauses it and
-    // never reaches idle on its own; the wait listens for it directly.
+    // a destroyed connection autopauses the player, which then never reaches idle
     const stopPlayer = (): void => {
       player.stop(true)
     }
@@ -62,17 +59,14 @@ export function audioOverMusic(deps: {
         AbortSignal.any([abort.signal, attempt.signal]),
       )
 
-      // Registered after the wait: stopping the player emits idle, and the
-      // destroyed connection must settle the file as failed, not as played.
+      // after the wait: stopping the player emits idle, which would read as played
       voice.connection.once(VoiceConnectionStatus.Destroyed, stopPlayer)
 
       voice.connection.subscribe(player)
 
       const stream = createReadStream(filePath)
 
-      // A clip is a temp file: a concurrent cleanup or a crash can remove it
-      // between synthesis and playback. Settle the wait instead of letting the
-      // stream's unhandled error take the process down.
+      // an unhandled stream error event crashes Node; a temp clip can vanish before it plays
       stream.once('error', (error) => {
         logger.warn(events.unreadable, { guildId, error: errorMessage(error) })
         attempt.abort()
@@ -121,8 +115,7 @@ export function audioOverMusic(deps: {
         return false
       }
       finally {
-        // A pause pressed while the line held the connection never reached the
-        // music player; apply it once the music is playing again.
+        // @discordjs/voice ignores pause() on the autopaused player while the line holds the connection
         if (voice.connection.state.status !== VoiceConnectionStatus.Destroyed && access.queue(guildId)?.paused) {
           const pauseIfStillPaused = (): void => {
             if (access.queue(guildId)?.paused)
@@ -140,10 +133,8 @@ export function audioOverMusic(deps: {
     })())
   }
 
-  // The intro runs on its own player and the connection is handed back when it
-  // ends. Playing it through the music player makes the SDK read the intro's
-  // idle state as the requested song finishing: it drops the song from the
-  // queue and leaves the channel before the extractor has finished downloading.
+  // on the SDK's player the intro's idle reads as the song finishing: it drops
+  // the song and leaves the channel
   async function playWelcome(channel: VoiceBasedChannel): Promise<void> {
     const guildId = channel.guild.id
 

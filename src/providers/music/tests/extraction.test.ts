@@ -6,10 +6,10 @@ import { errorMessage } from '../../../core/errors.ts'
 import { extractor, extractorProcess } from '../extraction.ts'
 import { log, rejection, shellScript, tempDir } from './fakes.ts'
 
-async function readEventually(path: string, timeoutMs = 3_000): Promise<string> {
+async function readEventually(path: string): Promise<string> {
   const startedAt = Date.now()
 
-  while (Date.now() - startedAt < timeoutMs) {
+  while (Date.now() - startedAt < 3_000) {
     try {
       return await readFile(path, 'utf8')
     }
@@ -87,10 +87,12 @@ test('a hung extractor process is killed at the timeout', async () => {
   const { dir, cleanup } = await tempDir()
 
   try {
-    const command = await shellScript(dir, 'hang.sh', 'exec sleep 30')
+    const pidFile = join(dir, 'pid')
+    const command = await shellScript(dir, 'hang.sh', `echo $$ > '${pidFile}'\nexec sleep 30`)
     const runner = extractorProcess({ command, logger: log })
 
-    expect(await rejection(async () => runner.run([], 50))).toMatch(/timed out/)
+    expect(await rejection(async () => runner.run([], 200))).toMatch(/timed out/)
+    expect(isAlive(Number.parseInt((await readEventually(pidFile)).trim(), 10))).toBe(false)
 
     await runner.dispose()
   }
@@ -104,8 +106,6 @@ test('a killed extractor takes its grandchild down instead of hanging', async ()
 
   try {
     const pidFile = join(dir, 'grandchild')
-    // The background sleep inherits the pipes: killing only the shell makes
-    // 'close' wait forever while the grandchild keeps them open.
     const command = await shellScript(dir, 'tree.sh', `sleep 30 & echo $! > '${pidFile}'\nwait`)
     const runner = extractorProcess({ command, logger: log })
     const started = Date.now()
@@ -115,10 +115,9 @@ test('a killed extractor takes its grandchild down instead of hanging', async ()
     expect(isAlive(grandchild)).toBe(true)
     expect(await running).toMatch(/timed out/)
 
-    // The fixed grace period, not the 30s sleep, bounds the wait.
     expect(Date.now() - started).toBeLessThan(4_000)
 
-    // Signal delivery and the reaper are asynchronous: give them a moment.
+    // the kernel delivers the signal and reaps the process asynchronously
     for (let attempt = 0; attempt < 20 && isAlive(grandchild); attempt++)
       await Bun.sleep(50)
 

@@ -23,7 +23,7 @@ export interface OnAirInput {
   readonly now: number
 }
 
-const MAX_NEXT = 3
+export const MAX_NEXT = 3
 const MAX_NEWS = 3
 
 const RADIO_RULES = [
@@ -108,8 +108,6 @@ function hasName(name: string | null): name is string {
   return name !== null && name.trim() !== ''
 }
 
-// Autoplay songs inherit the member who started the queue, so the radio flag
-// wins: the host picked that song, that person never asked for it.
 function origin(song: { readonly requestedBy: string | null, readonly fromRadio: boolean }): string | null {
   if (song.fromRadio)
     return 'your own pick'
@@ -117,12 +115,7 @@ function origin(song: { readonly requestedBy: string | null, readonly fromRadio:
   return hasName(song.requestedBy) ? `requested by ${song.requestedBy}` : null
 }
 
-interface Song {
-  readonly title: string
-  readonly artist: string | null
-  readonly requestedBy: string | null
-  readonly fromRadio: boolean
-}
+type Song = Omit<PlayedEntry, 'skippedBy'>
 
 function entry(song: Song): string {
   const from = origin(song)
@@ -170,8 +163,6 @@ function aboutLines(input: OnAirInput): string[] {
   if (listener === null || input.track.fromRadio)
     return []
 
-  // The profile counts before this song; the number is given whole so the
-  // model never adds one itself.
   const lines = [
     `About ${listener.name}, who asked for this song:`,
     `This is request number ${listener.requests + 1} from ${listener.name}`,
@@ -226,13 +217,11 @@ function verifiedFacts(facts: SongFacts | null, now: number): string[] {
     lines.push(`News: ${item.title} (${meta})`)
   }
 
-  // A bare song line says nothing the run does not.
   return lines.length > 1 ? lines : []
 }
 
-// TTS reads punctuation and symbols out loud and the model does not always
-// respect the length cap, so the line is cleaned and cut before it costs
-// credits. Audio tags in square brackets survive: they direct the delivery.
+// Speech reads punctuation and symbols out loud, and the model does not always
+// keep to the length cap. Audio tags in square brackets direct the delivery.
 export function sanitizeLine(raw: unknown, maxChars: number): string | null {
   const text = String(raw ?? '')
     .replace(/https?:\/\/\S+/g, '')

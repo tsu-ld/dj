@@ -9,14 +9,10 @@ import { EMPTY_PARAMETERS } from './parameters.ts'
 const PERSONA_INTENT = /^(?:(?:s[ée]|act[uú]a|habl[aá]|speak|talk)(?=$|[\s,.:;!?])|persona\s*:)/i
 const LEADING_MENTION = /^\s*<@!?\d+>\s*[,:;]?\s*/
 
-// The tool stays model-callable, but the channel comes from the person's own
-// mention: the model cannot point the bot at a channel nobody named.
 function mentionedChannels(message: Message | null): Channel[] {
   return message ? [...message.mentions.channels.values()] : []
 }
 
-// The tool stays model-callable, but the person's own message must ask for the
-// change: a song title or a model mistake cannot rewrite the persona.
 function asksForPersona(message: Message | null): boolean {
   const content = String(message?.content ?? '').replace(LEADING_MENTION, '').trim()
 

@@ -10,10 +10,8 @@ const MAX_YEAR = 2100
 
 export interface SearchHit {
   readonly album: string | null
-  // Search results are tracks: their own id is the track, not the album.
   readonly albumId: number | null
   readonly artist: string
-  readonly id: number
   readonly title: string
 }
 
@@ -31,10 +29,7 @@ function isErrorPayload(payload: unknown): boolean {
   return !isRecord(payload) || 'error' in payload
 }
 
-// The advanced syntax (q=artist:"A" track:"T") answers an empty page today; a
-// plain query finds the same track, and the artist check below still refuses a
-// cover band. title_short is what the track is called ("The Chain"), title
-// carries the remaster suffix.
+// Deezer's advanced syntax (q=artist:"A" track:"T") answers an empty page; a plain query finds the track.
 export function searchUrl(title: string, artist: string): string {
   return `${SEARCH_URL}?q=${encodeURIComponent(`${artist} ${title}`)}&limit=${SEARCH_LIMIT}`
 }
@@ -56,30 +51,25 @@ export function searchHit(payload: unknown, artist: string, track: string): Sear
     if (!isRecord(entry))
       continue
 
-    const id = entry.id
     const title = entry.title
     const short = entry.title_short
     const name = isRecord(entry.artist) ? entry.artist.name : null
     const album = isRecord(entry.album) ? entry.album.title : null
     const albumId = isRecord(entry.album) && typeof entry.album.id === 'number' ? entry.album.id : null
 
-    if (typeof id !== 'number' || typeof title !== 'string' || typeof name !== 'string')
+    if (typeof title !== 'string' || typeof name !== 'string')
       continue
 
     const label = typeof short === 'string' && short !== '' ? short : title
 
-    // A search for "Daft Punk" happily answers a cover band. The song is only
-    // this artist's when the billing agrees.
     if (!eitherContains(name, artist))
       continue
 
-    // The artist agreeing is not the song agreeing: an obscure track or a live
-    // version would borrow another song's album and year. title_short drops the
-    // remaster suffix, so either label may name the parsed track.
+    // Deezer's title carries the remaster suffix and title_short drops it, so either may name the track.
     if (!eitherContains(label, track) && !eitherContains(title, track))
       continue
 
-    return { id, artist: name, title: label, album: typeof album === 'string' ? album : null, albumId }
+    return { artist: name, title: label, album: typeof album === 'string' ? album : null, albumId }
   }
 
   return null

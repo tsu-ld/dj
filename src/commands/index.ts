@@ -4,7 +4,6 @@ import { addSongs, query } from './play.ts'
 import { pause, radio, resume, seek, shuffle, skip, toggle } from './playback.ts'
 import { clear, queue, remove } from './queue.ts'
 
-// The only registry: tools, routes and lookups are all derived from this list.
 export const commands: readonly CommandSpec[] = [
   addSongs,
   clear,

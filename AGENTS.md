@@ -52,7 +52,7 @@ These are rules for every change. Where older code falls short, fix it when you 
 **Readable like a book.**
 - A name says what the thing is or does in this product, not how it works or which library it uses.
 - A function reads top to bottom at one level of detail.
-- A comment says why: a constraint, a Discord quirk, a past failure. It never restates the code or narrates history.
+- Write a comment only for a necessary workaround that this code cannot solve: a Discord, SDK or API quirk. Names and tests say everything else.
 - No `utils`, `helpers`, `misc`, `v2` or `new`.
 
 **Least code that works.**
@@ -86,8 +86,9 @@ These are rules for every change. Where older code falls short, fix it when you 
 - an upward import (`app -> commands/discord/dj/on-air -> ports -> core`; providers never import features);
 - a technology name in a file path;
 - an environment read outside `config.ts`;
-- a `console` call;
 - a non-test source file over 300 lines.
+
+`bun run lint` fails on a `console` call anywhere but `e2e-test.ts`.
 
 ## Behavior that must not regress
 

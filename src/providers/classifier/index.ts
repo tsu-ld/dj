@@ -60,8 +60,6 @@ async function decide(config: DecisionConfig, input: DecisionInput): Promise<str
   if (choice === null || confidence < config.minConfidence)
     return null
 
-  // The endpoint is external input: a label outside the offered options is
-  // not a decision this caller can act on.
   return Object.hasOwn(criteria, choice) ? choice : null
 }
 
@@ -74,10 +72,7 @@ export function intentClassifier(deps: {
   if (!config.enabled)
     return { choose: async () => null }
 
-  // The endpoint can be down or out of quota for a while; retrying on every
-  // message would add seconds to commands that the dj can route itself.
   const breaker = circuitBreaker({
-    threshold: 1,
     cooldownMs: config.retryAfterMs,
     now: () => clock.now(),
   })

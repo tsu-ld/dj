@@ -34,8 +34,6 @@ export interface CompletionReply {
   readonly toolCalls: readonly ToolCall[]
 }
 
-// The conversation capability speaks a small chat shape. The provider translates
-// it to whatever wire format it needs; callers never see that format.
 export interface ConversationPort {
   complete: (request: CompletionRequest) => Promise<CompletionReply>
 }

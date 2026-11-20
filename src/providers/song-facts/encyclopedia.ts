@@ -38,8 +38,6 @@ export interface PageHit {
   readonly title: string
 }
 
-// Search hits are page keys and titles; the caller fetches them in order until
-// one is about the song.
 export function pageHits(payload: unknown): PageHit[] {
   const pages = isRecord(payload) && Array.isArray(payload.pages) ? payload.pages : []
   const hits: PageHit[] = []
@@ -54,9 +52,6 @@ export function pageHits(payload: unknown): PageHit[] {
   return hits
 }
 
-// A Wikipedia page is only useful when it is about a musical act: a page with
-// the same name (a film, a place) is a miss, not a fact. The first two
-// sentences fit a spoken line; the rest is a discography.
 export function artistSummary(payload: unknown): string | null {
   if (!isRecord(payload) || payload.type === 'disambiguation')
     return null
@@ -79,14 +74,11 @@ export function artistSummary(payload: unknown): string | null {
   return cap(text, ARTIST_SUMMARY_LIMIT)
 }
 
-// The song's own article, but only when it names the artist and the track: the
-// artist's biography (or a same-titled song by somebody else) would be a wrong
-// fact said out loud.
 export function songSummary(payload: unknown, pageTitle: string, artist: string, track: string): string | null {
   if (!isRecord(payload) || payload.type === 'disambiguation')
     return null
 
-  // A search for "<track> <artist> song" answers the artist's page first.
+  // Wikipedia's search for "<track> <artist> song" answers the artist's page first.
   if (normalizeName(pageTitle) === normalizeName(artist))
     return null
 

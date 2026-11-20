@@ -12,7 +12,7 @@ describe('queue commands', () => {
     const music = fakeMusic({ view: () => fresh })
     const bus = commandBus({ specs: commands, logger: log })
 
-    const outcome = await bus.run('queue', {}, fakeContext({ ui, services: { music }, queue: null }))
+    const outcome = await bus.run('queue', {}, fakeContext({ ui, services: { music } }))
 
     expect(outcome).toEqual({ kind: 'ok', data: {} })
     expect(ui.queues).toEqual([fresh])
@@ -42,7 +42,7 @@ describe('queue commands', () => {
     const bus = commandBus({ specs: commands, logger: log })
 
     for (const position of [0, 9, 2.5]) {
-      const outcome = await bus.run('remove', { position }, fakeContext({ services: { music }, queue: view({ size: 3 }) }))
+      const outcome = await bus.run('remove', { position }, fakeContext({ services: { music } }))
 
       expect(outcome).toEqual({ kind: 'refused', message: MESSAGES.removeOutOfRange })
     }

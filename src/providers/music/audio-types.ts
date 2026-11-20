@@ -1,9 +1,7 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AudioOverMusic } from '../../ports/music.ts'
 
-// The SDK's players and connections declare their emitters as methods: turning
-// them into function properties makes their parameters contravariant and rejects
-// the real objects at the seam.
+// @discordjs/voice declares these as methods; function properties would be contravariant and reject the real objects
 /* eslint-disable ts/method-signature-style */
 export interface AudioPlayerLike {
   readonly state: { readonly status: string }

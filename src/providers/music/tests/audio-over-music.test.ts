@@ -5,13 +5,12 @@ import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
-import { audioOverMusic } from '../welcome.ts'
+import { audioOverMusic } from '../audio-over-music.ts'
 import { log, tempDir } from './fakes.ts'
 
 interface FakePlayer extends AudioPlayerLike {
   readonly pauses: number
   emit: (event: string, ...args: unknown[]) => boolean
-  setStatus: (status: string) => void
 }
 
 interface FakeConnection extends VoiceConnectionLike {
@@ -32,9 +31,6 @@ function fakePlayer(options: { onPlay?: (player: FakePlayer) => void, onStop?: (
     },
     get pauses() {
       return pauses
-    },
-    setStatus(status) {
-      state.status = status
     },
     on(event, listener) {
       emitter.on(event, listener)
@@ -134,8 +130,6 @@ function audioWith(deps: Omit<Parameters<typeof audioOverMusic>[0], 'logger' | '
 }
 
 function fakeChannel(id = 'guild-1'): VoiceBasedChannel {
-  // Test double for the SDK's channel handle: the audio code only reads the
-  // guild id before it hands the channel back to the voice access seam.
   return { guild: { id } } as unknown as VoiceBasedChannel
 }
 

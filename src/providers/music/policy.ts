@@ -1,8 +1,6 @@
 import { MESSAGES } from '../../messages.ts'
 
-// distube decides between resolve() and search with its own isURL, which accepts
-// http, https and file and refuses strings with spaces; mirror that so a search
-// phrase that happens to contain a URL is treated the same way here.
+// mirrors distube's isURL, which picks between resolve() and search
 const URL_PROTOCOLS = new Set(['http:', 'https:', 'file:'])
 const MUSIC_PROTOCOLS = new Set(['http:', 'https:'])
 const YOUTUBE_HOSTS = new Set([
@@ -17,7 +15,7 @@ const YOUTUBE_HOSTS = new Set([
 const SPOTIFY_HOSTS = new Set(['open.spotify.com'])
 const MUSIC_HOSTS = new Set([...YOUTUBE_HOSTS, ...SPOTIFY_HOSTS])
 
-export type PolicyCode = 'UNSUPPORTED_URL' | 'LIVE_UNSUPPORTED'
+type PolicyCode = 'UNSUPPORTED_URL' | 'LIVE_UNSUPPORTED'
 
 export class PolicyError extends Error {
   readonly code: PolicyCode
@@ -58,18 +56,9 @@ export function isYoutubeUrl(input: string): boolean {
   return isHostAllowed(input, YOUTUBE_HOSTS)
 }
 
-function unsupportedUrlError(): PolicyError {
-  return new PolicyError('UNSUPPORTED_URL', MESSAGES.unsupportedUrl)
-}
-
-export function assertSupportedMusicUrl(input: string): void {
-  if (isUrlLike(input) && !isSupportedMusicUrl(input))
-    throw unsupportedUrlError()
-}
-
 export function assertYoutubeUrl(input: string): void {
   if (isUrlLike(input) && !isYoutubeUrl(input))
-    throw unsupportedUrlError()
+    throw new PolicyError('UNSUPPORTED_URL', MESSAGES.unsupportedUrl)
 }
 
 export function liveError(): PolicyError {

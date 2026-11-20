@@ -13,16 +13,11 @@ export interface PrefetchCandidate {
 export interface AudioCache {
   fileFor: (id: string) => Promise<string | null>
   download: (url: string, id: string) => Promise<string>
-  // The next track downloads while the current one plays, so from the second
-  // song on the queue reads from disk. One prefetch per guild at a time; a
-  // Spotify song resolves to YouTube only when it starts, so it cannot be
-  // prefetched from its own URL.
   prefetch: (candidate: PrefetchCandidate | null | undefined, guildId: string) => void
   dispose: () => void
 }
 
-// yt-dlp leaves <id>.<ext>.part (and .ytdl) files behind mid-download;
-// only a finished file may be played.
+// yt-dlp leaves <id>.<ext>.part and .ytdl files mid-download
 function isPartial(file: string): boolean {
   return file.endsWith('.part') || file.endsWith('.ytdl')
 }
@@ -31,8 +26,6 @@ export function finishedAudioFile(files: readonly string[], id: string): string 
   return files.find(file => file.startsWith(`${id}.`) && !isPartial(file))
 }
 
-// The id comes from an external service and ends up in a path; keep only word
-// characters and dashes so it can never walk out of the audio directory.
 export function safeFileId(id: unknown): string {
   return String(id ?? '').replace(/[^\w-]/g, '_')
 }
@@ -77,7 +70,6 @@ export function audioCache(deps: {
         continue
       }
 
-      // Partial downloads belong to a process that may still be writing them.
       if (!isPartial(file))
         kept.push({ path, size: info.size, mtimeMs: info.mtimeMs })
     }

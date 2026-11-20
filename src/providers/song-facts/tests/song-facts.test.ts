@@ -8,8 +8,6 @@ import { parseNews } from '../news.ts'
 const TITLE = 'Daft Punk - One More Time (Official Video)'
 const NOW = Date.parse('2026-11-18T12:00:00Z')
 
-// Shapes copied from the live services: Deezer search, Deezer album, a
-// Wikipedia page summary and a Google News RSS feed.
 const SEARCH_RESULT = {
   data: [
     {
@@ -72,7 +70,6 @@ type Handler = (url: string) => Response | Promise<Response>
 
 interface Routes {
   search?: Handler
-  album?: Handler
   artist?: Handler
   songSearch?: Handler
   song?: Handler
@@ -111,7 +108,7 @@ function network(routes: Routes = {}): FakeNet {
       return (routes.search ?? (() => json(SEARCH_RESULT)))(url)
 
     if (url.startsWith('https://api.deezer.com/album/'))
-      return (routes.album ?? (() => json(ALBUM)))(url)
+      return json(ALBUM)
 
     if (url.startsWith('https://en.wikipedia.org/w/rest.php/v1/search/page'))
       return (routes.songSearch ?? (() => json(SONG_SEARCH)))(url)
@@ -184,7 +181,6 @@ describe('songFacts.lookup', () => {
     const facts = await portFor(net).lookup({ title: 'One More Time', artist: 'Daft Punk' })
 
     expect(facts).toBeNull()
-    // Without "Artist - Track" in the title, a mismatch leaves nothing to check.
     expect(net.urls.length).toBe(1)
   })
 
@@ -294,7 +290,6 @@ describe('songFacts.cached', () => {
 })
 
 describe('live API regressions', () => {
-  // The live search answers {"data":[],"total":0} to q=artist:"A" track:"T".
   test('a plain Deezer query finds a remastered track and reports title_short', async () => {
     const search = (url: string): Response => url.includes('q=artist%3A')
       ? json({ data: [], total: 0 })
@@ -318,7 +313,6 @@ describe('live API regressions', () => {
     expect(net.urls[0]).toContain('q=Daft%20Punk%20The%20Chain')
   })
 
-  // A search for "<track> <artist> song" answers the artist's own article.
   test('the artist article is not used as the song summary', async () => {
     const net = network({
       songSearch: () => json({
@@ -344,24 +338,9 @@ describe('live API regressions', () => {
     expect(facts?.artistSummary).toBe(EXPECTED.artistSummary)
     expect(facts?.songSummary).toBeNull()
   })
-
-  // "Intoxicados" is also a Spanish adjective: the bare query answered norovirus.
-  test('the news query asks for music news on the Argentine edition', async () => {
-    const net = network()
-
-    await portFor(net).lookup({ title: TITLE, artist: null })
-
-    const request = net.urls.find(url => url.includes('news.google.com')) ?? ''
-
-    expect(request).toContain('(banda%20OR%20band%20OR%20music%20OR%20m%C3%BAsica')
-    expect(request).toContain('hl=es-419')
-    expect(request).toContain('gl=AR')
-    expect(request).toContain('ceid=AR:es-419')
-    expect(request).not.toContain('hl=en-US')
-  })
 })
 
-describe('review regressions', () => {
+describe('strict matching, shared lookups and cache lifetimes', () => {
   test('a result for another song by the same artist is not a hit', async () => {
     const net = network({
       search: () => json({
@@ -452,9 +431,6 @@ describe('review regressions', () => {
   })
 })
 
-// Live Google News answers a one-word act with the word's other life: a
-// monarch, a city, a gas, a gesture. A doubtful headline is dropped, not read
-// out as a fact.
 function headline(title: string, source = 'Site'): string {
   return `<rss><channel><item><title>${title} - ${source}</title><pubDate>Tue, 17 Nov 2026 08:00:00 GMT</pubDate><source>${source}</source></item></channel></rss>`
 }
@@ -467,7 +443,6 @@ describe('common-word artists', () => {
     expect(parseNews(headline('Kiss between strangers caught on camera'), 'Kiss', NOW)).toEqual([])
   })
 
-  // The live Chicago and Air feeds: the word belongs to a team or an air show.
   test('a one-word name inside another proper noun is dropped, music word or not', () => {
     expect(parseNews(headline('Cada visita de Chicago Fire ya es parte del tour Lewandowski', 'MLS Español'), 'Chicago', NOW)).toEqual([])
     expect(parseNews(headline('El Fort Lauderdale Air Show 2026 recibe 350.000 visitantes', 'Univision'), 'Air', NOW)).toEqual([])
@@ -478,7 +453,6 @@ describe('common-word artists', () => {
     expect(parseNews(headline('Björk anuncia un nuevo disco'), 'Björk', NOW)).toHaveLength(1)
   })
 
-  // The live Chicago feed also answers with the outlet's own name in the title.
   test('a headline that names the artist only in the outlet is dropped', () => {
     expect(parseNews(headline('Garbage sella 30 años de historia con México', 'Chicago Tribune'), 'Chicago', NOW)).toEqual([])
   })

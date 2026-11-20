@@ -42,7 +42,7 @@ describe('now-playing buttons', () => {
     const reply = recorder.replies[0]
 
     expect(contentOf(reply)).toBe(MESSAGES.clearConfirm)
-    expect(typeof reply === 'string' ? null : reply?.flags).toBe(MessageFlags.Ephemeral)
+    expect(reply).toMatchObject({ flags: MessageFlags.Ephemeral })
     expect(recorder.deferredUpdates()).toBe(0)
     expect(music.calls).not.toContain('stop')
   })
@@ -74,7 +74,7 @@ describe('now-playing buttons', () => {
 
     expect(music.calls).not.toContain('stop')
     expect(recorder.editReplies.map(contentOf)).not.toContain(MESSAGES.sameVoiceChannel)
-    expect(JSON.stringify(recorder.followUps)).toContain(MESSAGES.sameVoiceChannel)
+    expect(recorder.followUps.map(contentOf)).toContain(MESSAGES.sameVoiceChannel)
   })
 
   test('a failed confirmation edit does not report the clear as failed', async () => {

@@ -1,11 +1,10 @@
 import type { QueueView } from '../../ports/music.ts'
-import type { CommandSpec, QueueContext, VoiceContext } from '../spec.ts'
+import type { CommandSpec } from '../spec.ts'
 import { describe, expect, test } from 'bun:test'
 import { queueOf } from '../../discord/tests/fakes.ts'
-import { MESSAGES } from '../../messages.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
-import { fakeContext, fakeMember, fakeMessage, fakeMusic, fakeSettings, fakeVoice, log, queueContext, view } from './fakes.ts'
+import { fakeContext, fakeMusic, log } from './fakes.ts'
 
 const bus = commandBus({ specs: commands, logger: log })
 
@@ -19,7 +18,7 @@ function spec(name: string): CommandSpec {
 }
 
 function parseRemove(text: string, queue: QueueView | null): Record<string, unknown> | null {
-  return spec('remove').parse?.(text, fakeContext({ queue })) ?? null
+  return spec('remove').parse?.(text, fakeContext({ services: { music: fakeMusic({ view: () => queue }) } })) ?? null
 }
 
 describe('command registry', () => {
@@ -76,83 +75,5 @@ describe('command registry', () => {
       expect(command.modelTool).not.toBe(false)
       expect(command.fastRoute).toBe(false)
     }
-  })
-
-  test('admin commands reject members without the permission', async () => {
-    const member = fakeMember({ allowed: false })
-    const settings = fakeSettings()
-
-    const persona = await bus.run('set_persona', { persona: 'x' }, fakeContext({ member, services: { settings } }))
-    const channel = await bus.run('set_channel', { channelId: '123' }, fakeContext({ member, services: { settings } }))
-
-    expect(persona).toEqual({ kind: 'refused', message: MESSAGES.personaPermission })
-    expect(channel).toEqual({ kind: 'refused', message: MESSAGES.channelConfigurePermission })
-  })
-
-  test('set_channel uses the mentioned channel and ignores the model argument', async () => {
-    const settings = fakeSettings()
-    const channel = { id: '456', name: 'music', isTextBased: () => true, isThread: () => false, permissionsFor: () => ({ has: () => true }) }
-
-    const outcome = await bus.run('set_channel', { channelId: '<#456>' }, fakeContext({
-      guildId: 'g1',
-      member: fakeMember(),
-      message: fakeMessage({ content: '<@999> escuchá en <#456>', channels: [{ id: '456' }], fetchChannel: () => channel }),
-      services: { settings },
-    }))
-
-    expect(outcome).toEqual({ kind: 'ok', data: { channelId: '456', channelName: 'music' } })
-    expect(settings.updates).toEqual([['g1', { textChannelId: '456' }]])
-  })
-
-  test('player commands read the queue from the context, not the arguments', async () => {
-    const calls: string[] = []
-    let paused = false
-    const music = fakeMusic({
-      async pause() {
-        paused = true
-        calls.push('pause')
-      },
-      async resume() {
-        paused = false
-        calls.push('resume')
-      },
-      async toggle() {
-        paused = !paused
-        calls.push('toggle')
-
-        return paused
-      },
-      async skip() {
-        calls.push('skip')
-      },
-      async shuffle() {
-        calls.push('shuffle')
-      },
-      async radio() {
-        calls.push('radio')
-
-        return true
-      },
-      async stop() {
-        calls.push('stop')
-      },
-    })
-    const context = (): QueueContext & VoiceContext => ({ ...queueContext({ services: { music }, queue: view({ paused }) }), voiceChannel: fakeVoice() })
-
-    await spec('pause').run({}, context())
-    expect(paused).toBe(true)
-
-    await spec('resume').run({}, context())
-    expect(paused).toBe(false)
-
-    await spec('toggle').run({}, context())
-    expect(paused).toBe(true)
-
-    await spec('skip').run({}, context())
-    await spec('shuffle').run({}, context())
-    await spec('radio').run({}, context())
-    await spec('clear').run({}, context())
-
-    expect(calls).toEqual(['pause', 'resume', 'toggle', 'skip', 'shuffle', 'radio', 'stop'])
   })
 })

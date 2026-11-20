@@ -10,10 +10,9 @@ import { MAX_PLAYLIST_SONGS } from '../../limits.ts'
 import { assertYoutubeUrl, liveError } from './policy.ts'
 import { recentTitles, sameSong, titleKeys } from './titles.ts'
 
-// a mix repeats itself around the songs just played; read far enough into it
+// a YouTube mix repeats the songs just played; read far enough into it
 const RELATED_FETCH_LIMIT = 25
 
-// The song autoplay relates to; its member names the guild.
 interface RelatedSeed {
   readonly id?: string
   readonly name?: string
@@ -71,8 +70,7 @@ function songUrlOf(info: Record<string, unknown>): string | undefined {
   return info._type === 'url' ? stringOf(info, 'url') ?? undefined : undefined
 }
 
-// Only a credit or YouTube Music's auto-generated "<artist> - Topic" channel
-// names the artist; any other channel (a VEVO, a lyric channel) is a guess.
+// YouTube names the artist only in a credit or an auto-generated "<artist> - Topic" channel
 function artistOf(info: Record<string, unknown>): string | null {
   const credited = stringOf(info, 'artist') ?? stringOf(info, 'creator')
 
@@ -97,8 +95,6 @@ export class MusicCatalog extends ExtractorPlugin {
   readonly #stream: StreamResolver
   readonly #logger: Logger
   readonly #radioSongs = new WeakSet<object>()
-  // The artist of the songs this catalog built; a Spotify song carries its own
-  // artists in the uploader instead.
   readonly #artists = new WeakMap<object, string | null>()
   readonly #recent = recentTitles()
   #player: DisTube | null = null
@@ -110,9 +106,7 @@ export class MusicCatalog extends ExtractorPlugin {
     this.#logger = deps.logger
   }
 
-  // validate() stays permissive on purpose: the SDK only follows a redirect with
-  // a HEAD request when no plugin validates the URL, so the allowlist is
-  // enforced in resolve() and before play().
+  // the SDK follows a redirect with a HEAD request unless a plugin validates the URL
   override validate(): boolean {
     return true
   }
@@ -127,7 +121,6 @@ export class MusicCatalog extends ExtractorPlugin {
       return []
 
     try {
-      // RD<id> is YouTube's mix (radio) playlist for that video.
       const info = infoRecord(await this.#extraction.json(
         `https://www.youtube.com/watch?v=${song.id}&list=RD${song.id}`,
         ['--flat-playlist', '--playlist-end', String(RELATED_FETCH_LIMIT)],
@@ -137,9 +130,7 @@ export class MusicCatalog extends ExtractorPlugin {
         .filter(entry => idOf(entry) !== null && idOf(entry) !== song.id && !isLiveInfo(entry))
       const fresh = playable.filter(entry => !sameSong(stringOf(entry, 'title') ?? '', heard))
 
-      // The engine plays the first entry whose id did not play this session.
-      // Unheard titles go first; the rest stay behind them so a long radio run
-      // replays a song instead of running dry and leaving the channel.
+      // the SDK plays the first entry whose id has not played this session
       return [...fresh, ...playable.filter(entry => !fresh.includes(entry))]
         .map(entry => this.buildSong(entry, {}, true))
     }
@@ -150,8 +141,6 @@ export class MusicCatalog extends ExtractorPlugin {
     }
   }
 
-  // What the guild just played or has queued, which the mix may offer again
-  // under another upload.
   #heard(song: RelatedSeed): Set<string> {
     const guildId = song.member?.guild.id
     const queued = guildId === undefined ? [] : this.#player?.getQueue(guildId)?.songs ?? []
@@ -164,9 +153,7 @@ export class MusicCatalog extends ExtractorPlugin {
     return new Set(titles.flatMap(title => title === undefined ? [] : titleKeys(title)))
   }
 
-  // YouTube Music's song shelf holds only catalogue tracks with a credited
-  // artist; plain YouTube is the fallback for what is not on it (covers,
-  // memes, live cuts) or when that search breaks.
+  // YouTube Music's song shelf lacks covers and live cuts, and its search breaks at times
   override async searchSong<T>(query: string, options: ResolveOptions<T>): Promise<Song<T> | null> {
     const songs = `https://music.youtube.com/search?${new URLSearchParams({ q: query }).toString()}#songs`
     const song = await this.#firstEntry(songs, ['--playlist-end', '1']).catch((error: unknown) => {
@@ -255,19 +242,12 @@ export class MusicCatalog extends ExtractorPlugin {
         isLive: live,
         thumbnail: thumbnailOf(info),
         duration: live ? 0 : numberOf(info, 'duration'),
-        uploader: {
-          name: stringOf(info, 'uploader') ?? undefined,
-          url: stringOf(info, 'uploader_url') ?? undefined,
-        },
-        views: numberOf(info, 'view_count'),
-        likes: numberOf(info, 'like_count'),
+        uploader: { name: stringOf(info, 'uploader') ?? undefined },
         ageRestricted: (numberOf(info, 'age_limit') ?? 0) >= 18,
       },
       options,
     )
 
-    // Autoplay adds related songs behind the user's back: the dj talks less over
-    // them, and the queue marks them as radio.
     if (fromRadio)
       this.#radioSongs.add(song)
 

@@ -24,13 +24,10 @@ export function timestampOf(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
 }
 
-// The key just recorded is pinned: a new key at the cap must be able to earn its
-// place instead of losing a stable tie with every existing count-1 entry. Among
-// the others, the lowest count goes first, then the least recently requested.
 export function keepTop<T extends { readonly count: number, readonly lastRequested: number }>(
   entries: Record<string, T>,
   max: number,
-  protectedKey?: string,
+  protectedKey: string,
 ): Record<string, T> {
   const keys = Object.keys(entries)
 

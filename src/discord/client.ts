@@ -12,7 +12,7 @@ const INTENTS = [
 
 const GATEWAY_URL = 'https://discord.com/api/v10/gateway'
 const GATEWAY_PROBE_TIMEOUT_MS = 5_000
-export const GATEWAY_RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000]
+const GATEWAY_RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000]
 
 export interface GatewayProbe {
   readonly fetch: (url: string, init: { signal: AbortSignal }) => Promise<{ ok: boolean }>
@@ -21,12 +21,9 @@ export interface GatewayProbe {
   readonly signal: AbortSignal
 }
 
-// A user unit starts before the network is up (network-online.target does not
-// apply to it), and a failed login destroys the client's gateway manager for
-// good. So the one login waits for Discord's unauthenticated gateway endpoint;
-// past the budget it logs in anyway and a failure restarts the process.
+// A failed login destroys discord.js's gateway manager for good, and a systemd
+// user unit starts before the network is up, so the login waits for the gateway.
 export async function waitForGateway(probe: GatewayProbe): Promise<void> {
-  // read on every call: the stop can land while a probe or a sleep is pending
   const stopped = (): boolean => probe.signal.aborted
 
   for (let attempt = 0; ; attempt++) {
@@ -54,8 +51,6 @@ export async function waitForGateway(probe: GatewayProbe): Promise<void> {
   }
 }
 
-// Mentions are disabled by default for every message the bot sends: an
-// untrusted song title must never ping a role or a person.
 export function discordClient(config: AppConfig, logger: Logger): Client {
   const client = new Client({
     intents: INTENTS,

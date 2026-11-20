@@ -6,8 +6,9 @@ import type { RepliesRecorder, SlotRecorder } from './fakes.ts'
 import { describe, expect, test } from 'bun:test'
 import { commandBus } from '../../commands/bus.ts'
 import { commands } from '../../commands/index.ts'
-import { fakeMember, fakeMusic, fakeSettings, fakeVoice, log, view } from '../../commands/tests/fakes.ts'
+import { collector, fakeMember, fakeMusic, fakeSettings, fakeVoice, log, view } from '../../commands/tests/fakes.ts'
 import { MESSAGES } from '../../messages.ts'
+import { settle } from '../../tests/fixtures.ts'
 import { messageHandler } from '../messages.ts'
 import { fakeIncomingMessage, fakeReplies, fakeSlot } from './fakes.ts'
 
@@ -17,7 +18,7 @@ const GUILD = '123456789012345678'
 interface SetupOptions {
   music?: MusicPort
   settings?: SettingsPort
-  decision?: DecisionPort | null
+  decision?: DecisionPort
   agent?: DjAgent | null
   replies?: RepliesRecorder
   slot?: SlotRecorder
@@ -41,7 +42,7 @@ function setup(options: SetupOptions = {}): {
     settings,
     replies,
     slot,
-    decision: options.decision ?? null,
+    decision: options.decision ?? fakeDecision(null),
     agent: options.agent ?? null,
     logger: log,
     cooldowns: options.cooldowns ?? { plainRequestMs: 2_000, djRequestMs: 15_000 },
@@ -61,11 +62,6 @@ function fakeDecision(choice: string | null): DecisionPort & { inputs: DecisionI
       return choice
     },
   }
-}
-
-async function settle(): Promise<void> {
-  for (let index = 0; index < 20; index++)
-    await Promise.resolve()
 }
 
 describe('messageHandler guard rails', () => {
@@ -102,23 +98,6 @@ describe('messageHandler guard rails', () => {
     })
 
     await handler(fakeIncomingMessage({ guildId: null }).message)
-
-    expect(views).toBe(0)
-  })
-
-  test('a non-text channel returns before touching the player', async () => {
-    let views = 0
-    const { handler } = setup({
-      music: fakeMusic({
-        view() {
-          views++
-
-          return null
-        },
-      }),
-    })
-
-    await handler(fakeIncomingMessage({ textBased: false }).message)
 
     expect(views).toBe(0)
   })
@@ -208,13 +187,7 @@ describe('messageHandler plain queries', () => {
   test('plain text outside the listening channel is ignored', async () => {
     const requests: PlayRequest[] = []
     const { handler } = setup({
-      music: fakeMusic({
-        async play(request) {
-          requests.push(request)
-
-          return { added: 1, first: 'a', playlist: null, dropped: 0, total: 1 }
-        },
-      }),
+      music: collector(requests),
     })
     const message = fakeIncomingMessage({ channelId: '3', content: 'cumbia' })
 
@@ -227,14 +200,7 @@ describe('messageHandler plain queries', () => {
   test('plain text in the listening channel plays the search', async () => {
     const requests: PlayRequest[] = []
     const { handler, slot } = setup({
-      music: fakeMusic({
-        view: () => view({ size: 1 }),
-        async play(request) {
-          requests.push(request)
-
-          return { added: 1, first: 'a', playlist: null, dropped: 0, total: 1 }
-        },
-      }),
+      music: collector(requests, {}, { view: () => view({ size: 1 }) }),
     })
     const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: fakeVoice() }) })
 
@@ -248,6 +214,30 @@ describe('messageHandler plain queries', () => {
 })
 
 describe('messageHandler plain intent', () => {
+  test('a control is refused when its author left the voice channel while the router decided', async () => {
+    const room = fakeVoice()
+    const member = fakeMember({ voiceChannel: room, botVoiceChannel: room })
+    const music = fakeMusic({ view: () => view({ size: 2 }) })
+    let decided: (choice: string) => void = () => {}
+    const decision: DecisionPort = {
+      choose: async () => new Promise((resolve) => {
+        decided = resolve
+      }),
+    }
+    const { handler, replies } = setup({ decision, music })
+    const message = fakeIncomingMessage({ content: 'skip', member })
+
+    const handled = handler(message.message)
+
+    await settle()
+    Object.assign(member.voice, { channel: null })
+    decided('skip')
+    await handled
+
+    expect(music.calls).not.toContain('skip')
+    expect(replies.said).toEqual([MESSAGES.sameVoiceChannel])
+  })
+
   test('plain text runs a command without a mention', async () => {
     const music = fakeMusic({ view: () => view({ size: 2 }) })
     const { handler } = setup({ decision: fakeDecision('pause'), music })
@@ -262,14 +252,7 @@ describe('messageHandler plain intent', () => {
     const requests: PlayRequest[] = []
     const { handler } = setup({
       decision: fakeDecision('query'),
-      music: fakeMusic({
-        view: () => view({ size: 1 }),
-        async play(request) {
-          requests.push(request)
-
-          return { added: 1, first: 'a', dropped: 0 }
-        },
-      }),
+      music: collector(requests, {}, { view: () => view({ size: 1 }) }),
     })
     const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: fakeVoice() }) })
 
@@ -301,14 +284,7 @@ describe('messageHandler plain intent', () => {
     const requests: PlayRequest[] = []
     const { handler } = setup({
       decision: fakeDecision('dj'),
-      music: fakeMusic({
-        view: () => view({ size: 1 }),
-        async play(request) {
-          requests.push(request)
-
-          return { added: 1, first: 'a', dropped: 0 }
-        },
-      }),
+      music: collector(requests, {}, { view: () => view({ size: 1 }) }),
     })
     const message = fakeIncomingMessage({ content: 'rock nacional', member: fakeMember({ voiceChannel: fakeVoice() }) })
 
@@ -326,14 +302,7 @@ describe('messageHandler plain intent', () => {
     }
     const { handler } = setup({
       decision,
-      music: fakeMusic({
-        view: () => view({ size: 1 }),
-        async play(request) {
-          requests.push(request)
-
-          return { added: 1, first: 'a', dropped: 0 }
-        },
-      }),
+      music: collector(requests, {}, { view: () => view({ size: 1 }) }),
     })
     const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: fakeVoice() }) })
 

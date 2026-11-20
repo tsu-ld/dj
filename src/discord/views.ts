@@ -41,7 +41,7 @@ function separator(): SeparatorBuilder {
 }
 
 const PROGRESS_SEGMENTS = 12
-// Discord's most buttons in one row.
+// Discord allows at most five buttons in a row.
 const TIMELINE_POINTS = 5
 const CUSTOM_ID_MAX = 100
 
@@ -50,7 +50,6 @@ interface Position {
   readonly total: number
 }
 
-// Only a song with a known length has a position: a live stream has no end.
 function positionOf(track: Track, elapsedMs: number | null): Position | null {
   const total = Math.floor(track.durationSeconds)
 
@@ -66,11 +65,7 @@ function progressLine({ elapsed, total }: Position): string {
   return `${'▰'.repeat(filled)}${'▱'.repeat(PROGRESS_SEGMENTS - filled)} \`${clock(elapsed)} / ${clock(total)}\``
 }
 
-// Each button jumps to the time it shows; the one the song is in is lit. The
-// song id rides along so a click on a card the next song already replaced is
-// refused. Discord rejects the whole card over a repeated or overlong id, so a
-// song too short for distinct points, or with a huge id, goes without.
-// A paused song cannot seek, so its timeline stays visible but disabled.
+// Discord rejects the whole card over a repeated or overlong custom id.
 function timelineRow(track: Track, { elapsed, total }: Position, paused: boolean): ActionRowBuilder<MessageActionRowComponentBuilder> | null {
   const longestId = `np:seek:${total}:${track.id}`
 
@@ -177,18 +172,8 @@ export function queueMessage(view: QueueView, requestedPage: number): ViewMessag
       .addSeparatorComponents(separator())
       .addActionRowComponents(
         row(
-          new ButtonBuilder()
-            .setCustomId(`nq:prev:${page}`)
-            .setLabel('Previous')
-            .setEmoji('⬅️')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page <= 1),
-          new ButtonBuilder()
-            .setCustomId(`nq:next:${page}`)
-            .setLabel('Next')
-            .setEmoji('➡️')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page >= pageCount),
+          button('Previous', `nq:prev:${page}`, '⬅️').setDisabled(page <= 1),
+          button('Next', `nq:next:${page}`, '➡️').setDisabled(page >= pageCount),
         ),
       )
   }

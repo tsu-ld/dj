@@ -15,8 +15,6 @@ interface RewriteChannel {
   sendTyping: () => Promise<unknown>
 }
 
-// Returns null instead of throwing: say and announce fall back to the plain
-// text, and nothing here can do anything useful with the error.
 async function speakInCharacter(
   model: ConversationPort | null,
   logger: Logger,
@@ -27,7 +25,6 @@ async function speakInCharacter(
   if (model === null)
     return null
 
-  // A failed typing indicator is not worth interrupting the reply over.
   void channel.sendTyping().catch(() => {})
 
   try {
