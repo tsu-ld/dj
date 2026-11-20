@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/banner.png" alt="dj: a singing kitten in headphones and the words &quot;a radio host for your Discord voice channel&quot;" width="100%">
+  <img src="docs/assets/banner.png" alt="tsu-ld/dj: a singing kitten in headphones and the words &quot;a radio host for your Discord voice channel&quot;" width="100%">
 </p>
 
 <p align="center">
@@ -48,7 +48,7 @@ With a voice configured, the DJ speaks in the gap before a song starts. The song
 ### A card that keeps up
 
 <p align="center">
-  <img src="docs/assets/now-playing.png" alt="The now-playing card: song title, status, a live progress bar, the next three songs and buttons for pause, skip, shuffle, radio, queue and leave" width="760">
+  <img src="docs/assets/now-playing.png" alt="The now-playing card for Radiohead's Weird Fishes/Arpeggi: status, a progress bar, the next two songs and buttons for pause, skip, shuffle, radio, queue and leave, beside an original dithered spiral of fish" width="760">
 </p>
 
 One card per server shows:
