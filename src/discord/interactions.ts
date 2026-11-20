@@ -10,7 +10,7 @@ import { errorMessage } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
 import { clearConfirmation, noticeMessage, queueMessage } from './views.ts'
 
-const NOW_PLAYING_ACTIONS = new Set(['toggle', 'skip', 'radio', 'shuffle', 'queue'])
+const NOW_PLAYING_ACTIONS = new Set(['toggle', 'skip', 'radio', 'shuffle', 'queue', 'seek'])
 
 export interface InteractionHandlerDeps {
   readonly bus: CommandBus
@@ -62,7 +62,8 @@ async function handleNowPlaying(deps: InteractionHandlerDeps, interaction: Butto
     return
   }
 
-  const name = interaction.customId.slice('np:'.length)
+  // a timeline button reads np:seek:<seconds>:<song id>
+  const [name = '', rawSeconds = '', ...songId] = interaction.customId.slice('np:'.length).split(':')
 
   // clear is destructive and irreversible: ask before stopping the music
   if (name === 'clear') {
@@ -86,7 +87,9 @@ async function handleNowPlaying(deps: InteractionHandlerDeps, interaction: Butto
     return
   }
 
-  await deps.bus.run(name, {}, interactionContext(deps, interaction, guildId, member, channel, view))
+  const args = name === 'seek' ? { seconds: Number.parseInt(rawSeconds, 10), songId: songId.join(':') } : {}
+
+  await deps.bus.run(name, args, interactionContext(deps, interaction, guildId, member, channel, view))
 }
 
 async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction: ButtonInteraction): Promise<void> {

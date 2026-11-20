@@ -34,4 +34,6 @@ export const MESSAGES = {
   clearConfirm: 'Clear the queue and leave the voice channel?',
   clearCancelled: 'Kept playing.',
   cleared: 'Cleared the queue and left the voice channel.',
+  seekStale: 'That song already ended.',
+  seekUnavailable: 'I can\'t jump around in this song right now.',
 } as const

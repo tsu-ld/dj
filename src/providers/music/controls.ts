@@ -3,13 +3,15 @@ import type { KeyedQueue } from '../../core/async.ts'
 import type { Listener, MusicPort, PlaybackStatus, QueueView } from '../../ports/music.ts'
 import type { MusicCatalog } from './catalog.ts'
 import type { MusicEmitter } from './types.ts'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { AudioPlayerStatus } from '@discordjs/voice'
 import { UserError } from '../../core/errors.ts'
 import { isPositionInQueue } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
 import { clearStation, removeSongAt, skipSong } from './queue.ts'
 
-type Controls = Pick<MusicPort, 'pause' | 'resume' | 'toggle' | 'skip' | 'stop' | 'shuffle' | 'remove' | 'radio' | 'view' | 'status'>
+type Controls = Pick<MusicPort, 'pause' | 'resume' | 'toggle' | 'skip' | 'stop' | 'shuffle' | 'remove' | 'radio' | 'seek' | 'view' | 'status'>
 
 export function musicControls(deps: {
   player: DisTube
@@ -17,8 +19,9 @@ export function musicControls(deps: {
   mutations: KeyedQueue
   emitter: MusicEmitter
   viewOf: (queue: Queue) => QueueView
+  streamReplaced: (queue: Queue) => void
 }): Controls {
-  const { player, catalog, mutations, emitter, viewOf } = deps
+  const { player, catalog, mutations, emitter, viewOf, streamReplaced } = deps
 
   function requireQueue(guildId: string): Queue {
     const queue = player.getQueue(guildId)
@@ -43,14 +46,49 @@ export function musicControls(deps: {
     if (!voice)
       return null
 
-    const state = voice.audioPlayer.state
-    const playing = state.status === AudioPlayerStatus.Playing
-    const paused = state.status === AudioPlayerStatus.Paused || state.status === AudioPlayerStatus.AutoPaused
+    const status = voice.audioPlayer.state.status
+    const playing = status === AudioPlayerStatus.Playing
+    const paused = status === AudioPlayerStatus.Paused || status === AudioPlayerStatus.AutoPaused
+    // The engine's time adds the seek offset to the resource's own clock; a
+    // sought song buffers at that offset, and an idle player still holds the
+    // last song's stream, which is no position at all.
+    const onAir = playing || paused || status === AudioPlayerStatus.Buffering
 
     return {
       state: playing ? 'playing' : paused ? 'paused' : 'idle',
-      playbackDurationMs: playing || paused ? state.playbackDuration : 0,
+      playbackDurationMs: onAir ? Math.round(voice.playbackTime * 1000) : 0,
     }
+  }
+
+  // Checked under the guild's lock, where the song cannot change underneath.
+  // Only a playing song seeks: one still buffering may be waiting on its spoken
+  // line, which a seek would resolve a second time, and a paused one would keep
+  // the new stream staged past a skip and play the skipped song on resume. A
+  // Spotify song plays a YouTube copy whose length is the one that counts.
+  function seekableLength(guildId: string, queue: Queue, songId: string): number {
+    const song = queue.songs[0]
+
+    if (!song || song.id !== songId)
+      throw new UserError(MESSAGES.seekStale)
+
+    const played = song.stream.playFromSource ? song : song.stream.song
+    const length = Math.min(song.duration, played?.duration ?? 0)
+    const url = played?.stream.playFromSource ? played.stream.url : undefined
+
+    if (song.isLive || !(length > 0) || status(guildId)?.state !== 'playing' || !reopenable(url))
+      throw new UserError(MESSAGES.seekUnavailable)
+
+    return length
+  }
+
+  // A seek reopens the song's source. The cache may have evicted a playing file
+  // (ffmpeg keeps reading its open copy), and reopening it would fail and drop
+  // the song.
+  function reopenable(url: string | undefined): boolean {
+    if (url === undefined)
+      return false
+
+    return !url.startsWith('file://') || existsSync(fileURLToPath(url))
   }
 
   // Reported before the skip, while the song still exists.
@@ -164,6 +202,16 @@ export function musicControls(deps: {
         emitState(queue)
 
         return queue.autoplay
+      })
+    },
+    async seek(guildId, songId, seconds) {
+      await mutations.run(guildId, async () => {
+        const queue = requireQueue(guildId)
+        const length = seekableLength(guildId, queue, songId)
+
+        await queue.seek(Math.min(Math.max(Math.floor(seconds), 0), Math.floor(length) - 1))
+        streamReplaced(queue)
+        emitState(queue)
       })
     },
     view(guildId) {

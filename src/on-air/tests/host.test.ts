@@ -65,6 +65,7 @@ function fakeMusic(playClip: (guildId: string, file: string) => Promise<boolean>
     shuffle: async () => {},
     remove: async () => '',
     radio: async () => false,
+    seek: async () => {},
     view: guildId => views.get(guildId) ?? null,
     status: () => null,
     audio: {

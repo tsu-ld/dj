@@ -1,5 +1,6 @@
 import type { DisTube } from 'distube'
 import type { MusicEventMap } from '../../../ports/music.ts'
+import { pathToFileURL } from 'node:url'
 import { AudioPlayerStatus } from '@discordjs/voice'
 import { expect, test } from 'bun:test'
 import { ChannelType } from 'discord.js'
@@ -227,10 +228,147 @@ function skipStation(): {
     mutations: keyedQueue(),
     emitter,
     viewOf: current => queueView(current, song => catalog.trackOf(song)),
+    streamReplaced: () => {},
   })
 
   return { controls, order, skipped }
 }
+
+function seekStation(options: { status?: AudioPlayerStatus, isLive?: boolean, duration?: number, copyDuration?: number, url?: string } = {}): {
+  controls: ReturnType<typeof musicControls>
+  seeks: number[]
+  order: string[]
+  setPlaybackTime: (seconds: number) => void
+} {
+  const catalog = new MusicCatalog({ extraction: extractionStub(), stream: streamStub(), logger: log })
+  const song = catalog.buildSong({ id: 'a', title: 'A', duration: options.duration ?? 200, is_live: options.isLive ?? false }, {})
+  const url = options.url ?? 'https://rr1.googlevideo.com/videoplayback?id=a'
+
+  // a Spotify song plays the YouTube copy the engine found for it
+  if (options.copyDuration === undefined) {
+    song.stream = { playFromSource: true, url }
+  }
+  else {
+    const copy = catalog.buildSong({ id: 'yt', title: 'A', duration: options.copyDuration }, {})
+
+    copy.stream = { playFromSource: true, url }
+    song.stream = { playFromSource: false, song: copy }
+  }
+
+  const seeks: number[] = []
+  const order: string[] = []
+  const queue = {
+    id: 'guild-1',
+    songs: [song],
+    autoplay: false,
+    paused: false,
+    textChannel: undefined,
+    async seek(time: number) {
+      seeks.push(time)
+      order.push('seek')
+    },
+  }
+  const voice = {
+    audioPlayer: { state: { status: options.status ?? AudioPlayerStatus.Playing, playbackDuration: 5_000 } },
+    playbackTime: 5,
+    leave() {},
+  }
+  const player = { getQueue: () => queue, voices: { get: () => voice } } as unknown as DisTube
+  const { emitter } = createEmitter()
+
+  emitter.on('stateChanged', () => order.push('stateChanged'))
+
+  const controls = musicControls({
+    player,
+    catalog,
+    mutations: keyedQueue(),
+    emitter,
+    viewOf: current => queueView(current, item => catalog.trackOf(item)),
+    streamReplaced: () => order.push('streamReplaced'),
+  })
+
+  return {
+    controls,
+    seeks,
+    order,
+    setPlaybackTime: (seconds) => {
+      voice.playbackTime = seconds
+    },
+  }
+}
+
+test('a seek jumps the playing song, watches its new stream and redraws the card', async () => {
+  const { controls, seeks, order } = seekStation()
+
+  await controls.seek('guild-1', 'a', 80)
+
+  expect(seeks).toEqual([80])
+  expect(order).toEqual(['seek', 'streamReplaced', 'stateChanged'])
+})
+
+test('a seek stays inside the song', async () => {
+  const { controls, seeks } = seekStation()
+
+  await controls.seek('guild-1', 'a', 500)
+  await controls.seek('guild-1', 'a', -3)
+
+  expect(seeks).toEqual([199, 0])
+})
+
+test('a song playing from a cached file that is still there seeks', async () => {
+  const { controls, seeks } = seekStation({ url: pathToFileURL(import.meta.path).href })
+
+  await controls.seek('guild-1', 'a', 40)
+
+  expect(seeks).toEqual([40])
+})
+
+test('a seek stays inside the copy a Spotify song plays', async () => {
+  const { controls, seeks } = seekStation({ duration: 300, copyDuration: 210 })
+
+  await controls.seek('guild-1', 'a', 240)
+
+  expect(seeks).toEqual([209])
+})
+
+test('a seek drawn for a song that already ended does not move the next one', async () => {
+  const { controls, seeks } = seekStation()
+
+  expect(await rejection(async () => controls.seek('guild-1', 'gone', 40))).toBe(MESSAGES.seekStale)
+  expect(seeks).toEqual([])
+})
+
+test('only a song that is playing seeks: not one buffering, paused, live or of unknown length', async () => {
+  const stations = [
+    seekStation({ status: AudioPlayerStatus.Idle }),
+    seekStation({ status: AudioPlayerStatus.Buffering }),
+    seekStation({ status: AudioPlayerStatus.Paused }),
+    seekStation({ isLive: true }),
+    seekStation({ duration: 0 }),
+    seekStation({ url: 'file:///nonexistent/dj-audio/a.mp4' }),
+  ]
+
+  for (const station of stations) {
+    expect(await rejection(async () => station.controls.seek('guild-1', 'a', 40))).toBe(MESSAGES.seekUnavailable)
+    expect(station.seeks).toEqual([])
+  }
+})
+
+test('the elapsed time counts from where the song was sought to', () => {
+  const { controls, setPlaybackTime } = seekStation()
+
+  setPlaybackTime(85.4)
+
+  expect(controls.status('guild-1')).toEqual({ state: 'playing', playbackDurationMs: 85_400 })
+})
+
+test('a song still buffering after a seek reports where it will start', () => {
+  const { controls, setPlaybackTime } = seekStation({ status: AudioPlayerStatus.Buffering })
+
+  setPlaybackTime(80)
+
+  expect(controls.status('guild-1')).toEqual({ state: 'idle', playbackDurationMs: 80_000 })
+})
 
 const listener = { id: '200000000000000008', name: 'ana' }
 

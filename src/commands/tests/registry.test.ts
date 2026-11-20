@@ -50,6 +50,7 @@ describe('command registry', () => {
     expect(names).toContain('set_channel')
     expect(names).not.toContain('query')
     expect(names).not.toContain('toggle')
+    expect(names).not.toContain('seek')
     expect(names).toContain('queue')
   })
 
@@ -62,6 +63,7 @@ describe('command registry', () => {
     expect(names).not.toContain('set_channel')
     expect(names).not.toContain('query')
     expect(names).not.toContain('toggle')
+    expect(names).not.toContain('seek')
   })
 
   test('remove takes a valid queue position, or asks the dj', () => {

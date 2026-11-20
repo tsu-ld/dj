@@ -1,4 +1,5 @@
 import type { QueueSpec } from './spec.ts'
+import { UserError } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
 import { EMPTY_PARAMETERS } from './parameters.ts'
 import { requireSameVoiceChannel } from './voice.ts'
@@ -46,6 +47,36 @@ export const toggle: QueueSpec = {
     const paused = await context.services.music.toggle(context.guildId)
 
     return { paused }
+  },
+}
+
+// Button-only: the card's timeline names the song it was drawn for, and the
+// engine refuses it once another song is playing.
+export const seek: QueueSpec = {
+  name: 'seek',
+  description: 'Jump to a point of the song that is playing.',
+  parameters: {
+    type: 'object',
+    properties: {
+      songId: { type: 'string' },
+      seconds: { type: 'integer', minimum: 0 },
+    },
+    required: ['songId', 'seconds'],
+  },
+  requiresQueue: true,
+  modelTool: false,
+  fastRoute: false,
+  ack: false,
+  authorize: requireSameVoiceChannel,
+  async run(args, context) {
+    const { songId, seconds } = args
+
+    if (typeof songId !== 'string' || typeof seconds !== 'number' || !Number.isInteger(seconds) || seconds < 0)
+      throw new UserError(MESSAGES.seekStale)
+
+    await context.services.music.seek(context.guildId, songId, seconds)
+
+    return { seconds }
   },
 }
 

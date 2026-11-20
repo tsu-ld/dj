@@ -274,6 +274,45 @@ describe('nowPlayingMessage', () => {
     for (const message of [live, unknown, live2])
       expect(message ? textMatching(message, / \/ /) : 'missing').toBeUndefined()
   })
+
+  test('a timeline of five points jumps through the song and marks where it is', () => {
+    const message = nowPlayingMessage(view({ current: track({ id: 'abc', durationSeconds: 200 }) }), 50_000)
+    const timeline = (message ? buttonsOf(message) : []).filter(button => button.customId.startsWith('np:seek:'))
+
+    expect(timeline.map(button => button.label)).toEqual(['0:00', '0:40', '1:20', '2:00', '2:40'])
+    expect(timeline.map(button => button.customId)).toEqual(['np:seek:0:abc', 'np:seek:40:abc', 'np:seek:80:abc', 'np:seek:120:abc', 'np:seek:160:abc'])
+    expect(timeline.map(button => button.style)).toEqual([
+      ButtonStyle.Secondary,
+      ButtonStyle.Primary,
+      ButtonStyle.Secondary,
+      ButtonStyle.Secondary,
+      ButtonStyle.Secondary,
+    ])
+  })
+
+  test('a paused song keeps its timeline but cannot jump', () => {
+    const playing = nowPlayingMessage(view({ current: track({ durationSeconds: 200 }) }), 50_000)
+    const paused = nowPlayingMessage(view({ current: track({ durationSeconds: 200 }), paused: true }), 50_000)
+    const timeline = (message: typeof paused): boolean[] => (message ? buttonsOf(message) : [])
+      .filter(button => button.customId.startsWith('np:seek:'))
+      .map(button => button.disabled)
+
+    expect(timeline(playing)).toEqual([false, false, false, false, false])
+    expect(timeline(paused)).toEqual([true, true, true, true, true])
+  })
+
+  test('a song without a known position or length has no timeline', () => {
+    const messages = [
+      card(view({ current: track({ durationSeconds: 200 }) })),
+      nowPlayingMessage(view({ current: track({ isLive: true }) }), 10_000),
+      nowPlayingMessage(view({ current: track({ durationSeconds: 0 }) }), 10_000),
+      nowPlayingMessage(view({ current: track({ durationSeconds: 3 }) }), 1_000),
+      nowPlayingMessage(view({ current: track({ id: 'x'.repeat(90), durationSeconds: 200 }) }), 10_000),
+    ]
+
+    for (const message of messages)
+      expect(message ? buttonsOf(message).filter(button => button.customId.startsWith('np:seek:')) : 'missing').toEqual([])
+  })
 })
 
 describe('noticeMessage', () => {

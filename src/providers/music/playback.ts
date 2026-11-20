@@ -121,7 +121,8 @@ export function musicPlayback(deps: MusicEngineDeps): MusicPort {
   beforeStreamFor = events.beforeStreamFor
 
   const play = musicPlay({ player, catalog, audio, mutations, logger })
-  const controls = musicControls({ player, catalog, mutations, emitter, viewOf })
+  // A seek replaces the song's ffmpeg stream without a new song event.
+  const controls = musicControls({ player, catalog, mutations, emitter, viewOf, streamReplaced: events.watchStream })
 
   return {
     play,
