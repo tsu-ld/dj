@@ -1,5 +1,5 @@
 import { isRecord } from '../../core/json.ts'
-import { artistMatches, titleMatches } from './title.ts'
+import { eitherContains } from './title.ts'
 
 const SEARCH_URL = 'https://api.deezer.com/search'
 const ALBUM_URL = 'https://api.deezer.com/album'
@@ -70,13 +70,13 @@ export function searchHit(payload: unknown, artist: string, track: string): Sear
 
     // A search for "Daft Punk" happily answers a cover band. The song is only
     // this artist's when the billing agrees.
-    if (!artistMatches(name, artist))
+    if (!eitherContains(name, artist))
       continue
 
     // The artist agreeing is not the song agreeing: an obscure track or a live
     // version would borrow another song's album and year. title_short drops the
     // remaster suffix, so either label may name the parsed track.
-    if (!titleMatches(label, track) && !titleMatches(title, track))
+    if (!eitherContains(label, track) && !eitherContains(title, track))
       continue
 
     return { id, artist: name, title: label, album: typeof album === 'string' ? album : null, albumId }

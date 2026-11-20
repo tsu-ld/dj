@@ -161,8 +161,6 @@ export function musicEvents(deps: {
 
     emitter.playlistQueued({
       guildId: queue.id,
-      name,
-      count,
       view: viewOf(queue),
       textChannel: queue.textChannel ?? null,
     })
@@ -204,22 +202,18 @@ export function musicEvents(deps: {
     ended(queue.id, 'finished')
   }
 
-  function onFinish(queue: Queue): void {
-    logger.info('music.queue_finished', { guildId: queue.id })
-    ended(queue.id, 'finished')
-    emitter.queueEnded({ guildId: queue.id })
-    leave(queue.id)
+  function queueEnded(event: 'music.queue_finished' | 'music.no_related'): (queue: Queue) => void {
+    return (queue) => {
+      logger.info(event, { guildId: queue.id })
+      emitter.queueEnded({ guildId: queue.id })
+      leave(queue.id)
+    }
   }
 
-  function onNoRelated(queue: Queue): void {
-    logger.info('music.no_related', { guildId: queue.id })
-    ended(queue.id, 'finished')
-    emitter.queueEnded({ guildId: queue.id })
-    leave(queue.id)
-  }
+  const onFinish = queueEnded('music.queue_finished')
+  const onNoRelated = queueEnded('music.no_related')
 
   function onDisconnect(queue: Queue): void {
-    ended(queue.id, 'finished')
     emitter.disconnected({ guildId: queue.id })
   }
 

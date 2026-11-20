@@ -1,7 +1,7 @@
 import type { ListenerProfile } from '../../ports/listeners.ts'
 
 export const MAX_SONGS = 50
-export const MAX_ARTISTS = 20
+const MAX_ARTISTS = 20
 export const MAX_MEMBERS = 500
 export const WRITE_DELAY_MS = 2_000
 
@@ -39,7 +39,6 @@ export function keepTop<T extends { readonly count: number, readonly lastRequest
 
   const evictable = keys.filter(key => key !== protectedKey)
   const evicted = new Set(evictable
-    .slice()
     .sort((left, right) => {
       const byCount = (entries[left]?.count ?? 0) - (entries[right]?.count ?? 0)
 
@@ -81,7 +80,6 @@ export function topSong(songs: Record<string, SongStat>): ListenerProfile['topSo
 
 export function topArtists(artists: Record<string, ArtistStat>): readonly string[] {
   return Object.entries(artists)
-    .slice()
     .sort((left, right) => right[1].count - left[1].count || right[1].lastRequested - left[1].lastRequested)
     .slice(0, 3)
     .map(([name]) => name)

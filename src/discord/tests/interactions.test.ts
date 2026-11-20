@@ -11,7 +11,7 @@ import { fakeMember, fakeMusic, fakeSettings, fakeVoice, log, track, view } from
 import { UserError } from '../../core/errors.ts'
 import { MESSAGES } from '../../messages.ts'
 import { interactionHandler } from '../interactions.ts'
-import { buttonsOf, cardText, contentOf, fakeChannel, fakeInteraction, fakeSlot } from './fakes.ts'
+import { buttonsOf, cardText, contentOf, fakeChannel, fakeInteraction, fakeSlot, queueOf } from './fakes.ts'
 
 function setup(options: { music?: MusicRecorder, slot?: SlotRecorder, logger?: Logger } = {}): {
   handler: (interaction: Interaction) => Promise<void>
@@ -276,14 +276,6 @@ describe('now-playing buttons', () => {
 })
 
 describe('queue pagination', () => {
-  function queueOf(count: number): ReturnType<typeof view> {
-    return view({
-      current: track({ title: 'Song 1' }),
-      upcoming: Array.from({ length: count - 1 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` })),
-      size: count,
-    })
-  }
-
   test('next edits the card to the second page', async () => {
     const recorder = fakeInteraction({ customId: 'nq:next:1' })
     const { handler } = setup({ music: fakeMusic({ view: () => queueOf(15) }) })

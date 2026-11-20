@@ -3,6 +3,7 @@ import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { AudioCache } from './cache.ts'
 import type { Extractor } from './extraction.ts'
+import { errorMessage } from '../../core/errors.ts'
 import { isRecord } from '../../core/json.ts'
 
 // ffmpeg only gets through the progressive mp4: ask for a muxed format by name.
@@ -145,7 +146,7 @@ export function streamResolver(deps: {
       return `file://${file}`
 
     const url = await directUrlFor(song).catch((error: unknown) => {
-      logger.warn('music.stream_url_failed', { songId: song.id, error: error instanceof Error ? error.message : String(error) })
+      logger.warn('music.stream_url_failed', { songId: song.id, error: errorMessage(error) })
 
       return null
     })

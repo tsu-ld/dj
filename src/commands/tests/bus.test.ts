@@ -227,8 +227,6 @@ describe('commandBus', () => {
 
     const context = fakeContext({ ui })
 
-    expect(context.services.music.view(context.guildId)).toBeNull()
-
     const outcome = await bus.run('thing', {}, context)
 
     expect(outcome).toEqual({ kind: 'refused', message: MESSAGES.nothingPlaying })

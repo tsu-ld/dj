@@ -146,8 +146,8 @@ export function onAirHost(deps: {
     if (disposed)
       return
 
-    // The old hook read the queue again in its finally block: a song removed
-    // while the line was airing must not be the one prepared next.
+    // The queue is read again: a song removed while the line was airing must
+    // not be the one prepared next.
     const live = music.view(guildId) ?? view
     const next = live?.upcoming[0]
 

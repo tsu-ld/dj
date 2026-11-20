@@ -1,50 +1,10 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { json, restoreFetch, stubFetch } from '../../tests/http.ts'
 import { failureFor, isAuthFailure, speechClient, SpeechRequestError } from '../client.ts'
 
 const config = { apiKey: 'secret', voiceId: 'voice-1', model: 'eleven_v4', timeoutMs: 12_000 }
-const restores: (() => void)[] = []
 
-type FetchHandler = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
-
-interface FetchCalls {
-  count: () => number
-  at: (index: number) => { url: string, init: RequestInit | undefined }
-}
-
-// Bun's fetch carries a static helper, so the stub has to carry it too.
-function fetchStub(handler: FetchHandler): typeof fetch {
-  return Object.assign(
-    async (input: Parameters<typeof fetch>[0], init?: RequestInit) => handler(input, init),
-    { preconnect: globalThis.fetch.preconnect },
-  )
-}
-
-function stubFetch(handler: FetchHandler): FetchCalls {
-  const spy = spyOn(globalThis, 'fetch').mockImplementation(fetchStub(handler))
-
-  restores.push(() => spy.mockRestore())
-
-  return {
-    count: () => spy.mock.calls.length,
-    at(index) {
-      const entry = spy.mock.calls[index]
-
-      if (!entry)
-        throw new Error(`No fetch call at index ${index}`)
-
-      return { url: String(entry[0]), init: entry[1] }
-    },
-  }
-}
-
-function json(body: unknown): Response {
-  return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
-}
-
-afterEach(() => {
-  while (restores.length > 0)
-    restores.pop()?.()
-})
+afterEach(restoreFetch)
 
 describe('speechClient', () => {
   test('the line is sent to the configured voice and model', async () => {

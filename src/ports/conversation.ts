@@ -25,7 +25,7 @@ export interface CompletionRequest {
   readonly tools?: readonly ToolSpec[]
   readonly timeoutMs: number
   readonly maxOutputTokens?: number
-  readonly reasoning?: 'none' | 'low' | 'medium' | 'high'
+  readonly reasoning?: 'none'
   readonly sessionId: string
 }
 

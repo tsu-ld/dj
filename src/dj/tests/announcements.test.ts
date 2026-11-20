@@ -6,7 +6,7 @@ import { djAnnouncements } from '../announcements.ts'
 import { djReplies } from '../replies.ts'
 import {
   scriptedModel,
-  silentLogger,
+  silentLog,
   testChannel,
   testClock,
   testSettings,
@@ -18,7 +18,7 @@ function nullReply(): ConversationPort {
 
 function announcer(options: { clock?: TestClock } = {}): ReturnType<typeof djAnnouncements> {
   return djAnnouncements({
-    replies: djReplies({ model: nullReply(), logger: silentLogger() }),
+    replies: djReplies({ model: nullReply(), logger: silentLog }),
     settings: testSettings(),
     clock: options.clock ?? testClock(),
   })

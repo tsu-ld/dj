@@ -55,14 +55,7 @@ export const toggle: QueueSpec = {
 export const seek: QueueSpec = {
   name: 'seek',
   description: 'Jump to a point of the song that is playing.',
-  parameters: {
-    type: 'object',
-    properties: {
-      songId: { type: 'string' },
-      seconds: { type: 'integer', minimum: 0 },
-    },
-    required: ['songId', 'seconds'],
-  },
+  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   modelTool: false,
   fastRoute: false,

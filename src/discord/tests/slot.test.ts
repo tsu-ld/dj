@@ -7,6 +7,7 @@ import { messageSlot } from '../slot.ts'
 import { cardText, fakeChannel, queueOf } from './fakes.ts'
 
 const GUILD = '123456789012345678'
+const noPlayback = (_guildId: string): PlaybackStatus | null => null
 
 // Writes are serialized through promises, so a fake timer tick still needs a
 // few microtask turns before the card is on the fake channel.
@@ -26,7 +27,7 @@ afterEach(() => {
 describe('messageSlot', () => {
   test('trackStarted sends the now-playing card once', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
@@ -39,7 +40,7 @@ describe('messageSlot', () => {
 
   test('stateChanged edits the card in place', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
@@ -57,7 +58,7 @@ describe('messageSlot', () => {
   test('a card in another channel is replaced in the new channel', async () => {
     const first = fakeChannel('2', GUILD)
     const second = fakeChannel('3', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: first.channel })
     await settle()
@@ -78,7 +79,7 @@ describe('messageSlot', () => {
 
   test('a failed edit sends a fresh card instead of dying', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
@@ -102,7 +103,7 @@ describe('messageSlot', () => {
 
   test('a repost deletes the old card and sends it again after the debounce', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
@@ -126,7 +127,7 @@ describe('messageSlot', () => {
 
   test('two reposts inside the window produce one write', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
@@ -150,7 +151,7 @@ describe('messageSlot', () => {
   test('a repost from another channel is ignored', async () => {
     const channel = fakeChannel('2', GUILD)
     const other = fakeChannel('3', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
@@ -166,7 +167,7 @@ describe('messageSlot', () => {
 
   test('a repost without a tracked card does nothing', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.repost({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     jest.advanceTimersByTime(NOW_PLAYING_REPOST_MS)
@@ -179,7 +180,7 @@ describe('messageSlot', () => {
 
   test('showQueue replaces the previous queue card', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     await slot.showQueue(queueOf(2), channel.channel)
 
@@ -196,7 +197,7 @@ describe('messageSlot', () => {
 
   test('playlistQueued posts the queue card', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.playlistQueued({ guildId: GUILD, view: queueOf(4), textChannel: channel.channel })
     await settle()
@@ -209,7 +210,7 @@ describe('messageSlot', () => {
 
   test('showing the queue keeps the now-playing card last', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
@@ -230,7 +231,7 @@ describe('messageSlot', () => {
 
   test('showing the queue without a card does not invent one', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     await slot.showQueue(queueOf(2), channel.channel)
     jest.advanceTimersByTime(NOW_PLAYING_REPOST_MS)
@@ -243,7 +244,7 @@ describe('messageSlot', () => {
 
   test('queueCleared deletes both cards and cancels a pending repost', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
@@ -266,7 +267,7 @@ describe('messageSlot', () => {
 
   test('dispose clears the repost timer', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: channel.channel })
     await settle()
@@ -279,21 +280,12 @@ describe('messageSlot', () => {
     expect(channel.sent).toHaveLength(1)
     expect(channel.sent[0]?.deletions()).toBe(0)
   })
-
-  test('a payload without a text channel is ignored', async () => {
-    const slot = messageSlot({ logger: log })
-
-    slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: null })
-    await settle()
-
-    slot.dispose()
-  })
 })
 
 describe('messageSlot queue card', () => {
   test('a visible queue card is redrawn in place on every song and state change', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     await slot.showQueue(queueOf(4), channel.channel)
 
@@ -315,7 +307,7 @@ describe('messageSlot queue card', () => {
 
   test('one queued song redraws a visible queue card and leaves the now-playing card alone', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.queueChanged({ guildId: GUILD, view: queueOf(5), textChannel: channel.channel })
     await settle()
@@ -334,7 +326,7 @@ describe('messageSlot queue card', () => {
 
   test('a redrawn queue card goes back to the first page', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     await slot.showQueue(queueOf(15), channel.channel)
     slot.update({ guildId: GUILD, view: queueOf(14), textChannel: channel.channel })
@@ -347,7 +339,7 @@ describe('messageSlot queue card', () => {
 
   test('a failed queue card edit forgets the card instead of reposting it', async () => {
     const channel = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     await slot.showQueue(queueOf(3), channel.channel)
 
@@ -532,7 +524,7 @@ describe('messageSlot progress', () => {
 
   test('a card past Discord\'s one-hour edit window is replaced when the next song starts', async () => {
     const home = fakeChannel('2', GUILD)
-    const slot = messageSlot({ logger: log })
+    const slot = messageSlot({ logger: log, playback: noPlayback })
 
     slot.update({ guildId: GUILD, view: view({ size: 2 }), textChannel: home.channel })
     await settle()

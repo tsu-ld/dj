@@ -1,6 +1,7 @@
 import type { Logger } from '../../../core/logger.ts'
 import type { SongFacts } from '../../../ports/song-facts.ts'
 import { describe, expect, test } from 'bun:test'
+import { fetchStub, json } from '../../tests/http.ts'
 import { songFacts } from '../index.ts'
 import { parseNews } from '../news.ts'
 
@@ -84,28 +85,20 @@ interface FakeNet {
   userAgents: (string | null)[]
 }
 
-// Bun's fetch carries a static helper, so the stub has to carry it too.
 function fakeNet(handler: Handler): FakeNet {
   const urls: string[] = []
   const userAgents: (string | null)[] = []
 
-  const stub = Object.assign(
-    async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
-      const url = String(input)
+  const stub = fetchStub(async (input, init) => {
+    const url = String(input)
 
-      urls.push(url)
-      userAgents.push(new Headers(init?.headers).get('User-Agent'))
+    urls.push(url)
+    userAgents.push(new Headers(init?.headers).get('User-Agent'))
 
-      return handler(url)
-    },
-    { preconnect: globalThis.fetch.preconnect },
-  )
+    return handler(url)
+  })
 
   return { fetch: stub, urls, userAgents }
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
 function xml(body: string): Response {
@@ -321,7 +314,7 @@ describe('live API regressions', () => {
     expect(facts?.album).toBe('Discovery')
     expect(facts?.year).toBe(2001)
     expect(facts?.genre).toBe('Electro')
-    expect(facts?.artistSummary).not.toBeNull()
+    expect(facts?.artistSummary).toBe(EXPECTED.artistSummary)
     expect(net.urls[0]).toContain('q=Daft%20Punk%20The%20Chain')
   })
 
@@ -348,7 +341,7 @@ describe('live API regressions', () => {
     })
     const facts = await portFor(net).lookup({ title: TITLE, artist: null })
 
-    expect(facts?.artistSummary).not.toBeNull()
+    expect(facts?.artistSummary).toBe(EXPECTED.artistSummary)
     expect(facts?.songSummary).toBeNull()
   })
 

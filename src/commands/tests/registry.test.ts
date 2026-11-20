@@ -1,10 +1,11 @@
 import type { QueueView } from '../../ports/music.ts'
 import type { CommandSpec, QueueContext, VoiceContext } from '../spec.ts'
 import { describe, expect, test } from 'bun:test'
+import { queueOf } from '../../discord/tests/fakes.ts'
 import { MESSAGES } from '../../messages.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
-import { fakeContext, fakeMember, fakeMessage, fakeMusic, fakeSettings, fakeVoice, log, queueContext, track, view } from './fakes.ts'
+import { fakeContext, fakeMember, fakeMessage, fakeMusic, fakeSettings, fakeVoice, log, queueContext, view } from './fakes.ts'
 
 const bus = commandBus({ specs: commands, logger: log })
 
@@ -15,14 +16,6 @@ function spec(name: string): CommandSpec {
     throw new Error(`Missing command: ${name}`)
 
   return found
-}
-
-function queueOf(count: number): QueueView {
-  return view({
-    current: track({ title: 'a' }),
-    upcoming: Array.from({ length: count - 1 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` })),
-    size: count,
-  })
 }
 
 function parseRemove(text: string, queue: QueueView | null): Record<string, unknown> | null {

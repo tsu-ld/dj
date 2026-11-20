@@ -24,16 +24,6 @@ export interface AudioHealthSession {
 
 export type AudioEndReason = 'finished' | 'skipped' | 'stopped' | 'error'
 
-export interface AudioHealthSummary {
-  readonly guildId: string
-  readonly title: string
-  readonly reason: AudioEndReason
-  readonly loopLagMaxMs: number
-  readonly loopStalls: number
-  readonly udpPingMaxMs: number
-  readonly wsPingMaxMs: number
-}
-
 type Timer = (run: () => void, afterMs: number) => () => void
 
 const systemTimer: Timer = (run, afterMs) => {
@@ -160,7 +150,7 @@ export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer 
       entries.delete(guildId)
       samplePings()
 
-      const summary: AudioHealthSummary = {
+      logger.info('music.audio_health', {
         guildId,
         title: entry.session.title,
         reason,
@@ -168,9 +158,7 @@ export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer 
         loopStalls: entry.counters.stalls,
         udpPingMaxMs: entry.counters.udpMax,
         wsPingMaxMs: entry.counters.wsMax,
-      }
-
-      logger.info('music.audio_health', { ...summary })
+      })
 
       if (entries.size === 0)
         stop()

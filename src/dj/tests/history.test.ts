@@ -1,5 +1,6 @@
 import type { ChatMessage } from '../../ports/conversation.ts'
 import { describe, expect, test } from 'bun:test'
+import { HISTORY_MAX_MESSAGES } from '../../limits.ts'
 import {
   conversationHistory,
   conversationKey,
@@ -52,7 +53,7 @@ describe('trimToWholeExchanges', () => {
       { role: 'assistant', content: 'listo 5' },
     ]
 
-    expect(hasOrphanToolResult(messages.slice(-16))).toBe(true)
+    expect(hasOrphanToolResult(messages.slice(-HISTORY_MAX_MESSAGES))).toBe(true)
     expect(hasOrphanToolResult(trimToWholeExchanges(messages))).toBe(false)
   })
 
@@ -61,7 +62,7 @@ describe('trimToWholeExchanges', () => {
     const trimmed = trimToWholeExchanges(messages)
 
     expect(trimmed[0]?.role).toBe('user')
-    expect(trimmed.length).toBeLessThanOrEqual(16)
+    expect(trimmed).toHaveLength(HISTORY_MAX_MESSAGES)
   })
 
   test('the most recent exchange always survives', () => {

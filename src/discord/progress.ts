@@ -28,7 +28,6 @@ export interface ProgressTimers {
 // One repaint timer per guild, only for a playing song with a known length; a
 // tick that finds the player not playing skips its repaint.
 export function progressTimers(deps: {
-  enabled: boolean
   playing: (guildId: string) => boolean
   repaint: (guildId: string) => void
 }): ProgressTimers {
@@ -47,7 +46,7 @@ export function progressTimers(deps: {
   return {
     sync(guildId, view) {
       const track = view.current
-      const ticking = !disposed && deps.enabled && !view.paused
+      const ticking = !disposed && !view.paused
         && track !== null && !track.isLive && track.durationSeconds > 0
 
       if (!ticking) {

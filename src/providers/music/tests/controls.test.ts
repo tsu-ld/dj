@@ -5,7 +5,7 @@ import { AudioPlayerStatus } from '@discordjs/voice'
 import { expect, test } from 'bun:test'
 import { ChannelType } from 'discord.js'
 import { keyedQueue } from '../../../core/async.ts'
-import { isPositionInQueue, queueRoom } from '../../../limits.ts'
+import { isPositionInQueue, MAX_QUEUE_SIZE, queueRoom } from '../../../limits.ts'
 import { MESSAGES } from '../../../messages.ts'
 import { MusicCatalog } from '../catalog.ts'
 import { musicControls } from '../controls.ts'
@@ -36,17 +36,18 @@ test('queue room is what remains under the cap', () => {
 })
 
 test('the queue is capped after the current song and reports what it dropped', () => {
-  const queue = { songs: [{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }] }
+  const names = Array.from({ length: MAX_QUEUE_SIZE + 1 }, (_, index) => `song-${index}`)
+  const queue = { songs: names.map(name => ({ name })) }
 
-  expect(capQueue(queue, 3)).toBe(1)
-  expect(queue.songs.map(song => song.name)).toEqual(['a', 'b', 'c'])
+  expect(capQueue(queue)).toBe(1)
+  expect(queue.songs.map(song => song.name)).toEqual(names.slice(0, MAX_QUEUE_SIZE))
 })
 
 test('a queue under the cap is left untouched', () => {
-  const queue = { songs: [{ name: 'a' }, { name: 'b' }] }
+  const queue = { songs: Array.from({ length: MAX_QUEUE_SIZE - 1 }, (_, index) => ({ name: `song-${index}` })) }
 
-  expect(capQueue(queue, 3)).toBe(0)
-  expect(queue.songs).toHaveLength(2)
+  expect(capQueue(queue)).toBe(0)
+  expect(queue.songs).toHaveLength(MAX_QUEUE_SIZE - 1)
 })
 
 test('removing a song keeps the rest of the queue in order', async () => {
@@ -402,25 +403,25 @@ const guild = { members: { me: { id: 'bot' } } }
 function voiceChannel({ type = ChannelType.GuildVoice, permissions = { has: () => true } }: {
   type?: ChannelType
   permissions?: { has: (permission: readonly bigint[]) => boolean } | null
-} = {}): { type: ChannelType, permissionsFor: () => typeof permissions } {
-  return { type, permissionsFor: () => permissions }
+} = {}): { type: ChannelType, guild: typeof guild, permissionsFor: () => typeof permissions } {
+  return { type, guild, permissionsFor: () => permissions }
 }
 
 test('playing without a voice channel is rejected', () => {
-  expect(voiceChannelProblem(null, guild)).toBe(MESSAGES.joinVoiceChannel)
+  expect(voiceChannelProblem(null)).toBe(MESSAGES.joinVoiceChannel)
 })
 
 test('a stage channel needs speaker permission', () => {
-  expect(voiceChannelProblem(voiceChannel({ type: ChannelType.GuildStageVoice }), guild)).toBe(MESSAGES.stageChannelPermissions)
+  expect(voiceChannelProblem(voiceChannel({ type: ChannelType.GuildStageVoice }))).toBe(MESSAGES.stageChannelPermissions)
 })
 
 test('a channel where the bot cannot connect and speak is rejected', () => {
-  expect(voiceChannelProblem(voiceChannel({ permissions: { has: () => false } }), guild)).toBe(MESSAGES.botPermissions)
-  expect(voiceChannelProblem(voiceChannel({ permissions: null }), guild)).toBe(MESSAGES.botPermissions)
+  expect(voiceChannelProblem(voiceChannel({ permissions: { has: () => false } }))).toBe(MESSAGES.botPermissions)
+  expect(voiceChannelProblem(voiceChannel({ permissions: null }))).toBe(MESSAGES.botPermissions)
 })
 
 test('a regular voice channel with permissions is fine', () => {
-  expect(voiceChannelProblem(voiceChannel(), guild)).toBeNull()
+  expect(voiceChannelProblem(voiceChannel())).toBeNull()
 })
 
 test('the guild defaults to the voice channel guild', () => {

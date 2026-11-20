@@ -21,10 +21,6 @@ export function testClock(start = 1_000_000): TestClock {
 // One shared instance: a silent logger has no state worth isolating per suite.
 export const silentLog: Logger = logger({ level: 'error', sink: () => {} })
 
-export function silentLogger(): Logger {
-  return silentLog
-}
-
 // Accepts a title or an overrides object so a suite can build either a named
 // song or a full fake without repeating every field.
 export function testTrack(first: string | Partial<Track> = {}, overrides: Partial<Track> = {}): Track {

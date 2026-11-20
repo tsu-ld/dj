@@ -38,19 +38,11 @@ export function containsWords(text: string, phrase: string): boolean {
 // Deezer and the title rarely agree on accents or on the exact billing:
 // "Beyonce" is still "Beyoncé", and "Calvin Harris feat. Rihanna" is still the
 // same act. Either name containing the other is the same artist; a different
-// one is a mismatch and the facts are refused.
-export function artistMatches(candidate: string, expected: string): boolean {
-  return containsWords(candidate, expected) || containsWords(expected, candidate)
-}
-
-export function mentionsName(text: string, name: string): boolean {
-  return containsWords(text, name)
-}
-
-// A remaster suffix ("The Chain (2004 Remaster)") may wrap the hit's own name;
-// a different song by the same artist must not pass.
-export function titleMatches(candidate: string, track: string): boolean {
-  return containsWords(candidate, track) || containsWords(track, candidate)
+// one is a mismatch and the facts are refused. Titles work the same way: a
+// remaster suffix ("The Chain (2004 Remaster)") may wrap the hit's own name,
+// but a different song by the same artist must not pass.
+export function eitherContains(left: string, right: string): boolean {
+  return containsWords(left, right) || containsWords(right, left)
 }
 
 export function stripDecorations(raw: string): string {

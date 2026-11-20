@@ -1,5 +1,5 @@
 import { isRecord } from '../../core/json.ts'
-import { mentionsName, normalizeName } from './title.ts'
+import { containsWords, normalizeName } from './title.ts'
 
 const SUMMARY_URL = 'https://en.wikipedia.org/api/rest_v1/page/summary'
 const SEARCH_URL = 'https://en.wikipedia.org/w/rest.php/v1/search/page'
@@ -92,10 +92,10 @@ export function songSummary(payload: unknown, pageTitle: string, artist: string,
 
   const extract = typeof payload.extract === 'string' ? payload.extract : ''
 
-  if (!mentionsName(extract, artist))
+  if (!containsWords(extract, artist))
     return null
 
-  if (!mentionsName(pageTitle, track) && !mentionsName(extract, track))
+  if (!containsWords(pageTitle, track) && !containsWords(extract, track))
     return null
 
   const text = sentences(extract, 2)

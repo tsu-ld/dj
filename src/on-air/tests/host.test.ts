@@ -556,56 +556,47 @@ describe('beforeStream', () => {
 })
 
 describe('transitions', () => {
-  test('a disconnect drops the prepared clip, welcomes again and keeps the cadence', async () => {
-    const model = fakeModel([line('A'), line('B'), line('B again'), line('C')])
-    const speech = fakeSpeech()
-    const { host, music } = createHost({ model: model.port, speech: speech.port })
-    const [a, b, c] = [track('A'), track('B'), track('C')]
+  // A disconnect keeps the cadence, so B takes the second slot and C is the
+  // silent third. A reset starts it over, so B is the first song again and C
+  // takes the second slot and speaks.
+  const endings = [
+    { name: 'a disconnect drops the prepared clip, welcomes again and keeps the cadence', end: (host: OnAirHost) => host.disconnected('g1'), cSpeaks: false },
+    { name: 'a reset drops the prepared clip and starts the cadence over', end: (host: OnAirHost) => host.reset('g1'), cSpeaks: true },
+  ]
 
-    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
-    await waitFor(() => speech.settled(2))
+  for (const { name, end, cSpeaks } of endings) {
+    test(name, async () => {
+      const model = fakeModel([line('A'), line('B'), line('B again'), line('C')])
+      const speech = fakeSpeech()
+      const { host, music } = createHost({ model: model.port, speech: speech.port })
+      const [a, b, c] = [track('A'), track('B'), track('C')]
 
-    const prepared = first(speech.files.slice(1))
+      await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
+      await waitFor(() => speech.settled(2))
 
-    host.disconnected('g1')
-    await waitFor(() => !existsSync(prepared))
+      const prepared = first(speech.files.slice(1))
 
-    await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
+      end(host)
+      await waitFor(() => !existsSync(prepared))
 
-    expect(model.requests[2]?.instructions).toContain('Angle for this line: welcome')
-    expect(music.clips).toHaveLength(2)
+      await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
 
-    // B took the second slot, so C is the silent third.
-    await host.beforeStream({ guildId: 'g1', view: view({ current: c }) })
+      expect(model.requests[2]?.instructions).toContain('Angle for this line: welcome')
 
-    expect(model.requests).toHaveLength(3)
-  })
+      expect(music.clips).toHaveLength(2)
 
-  test('a reset drops the prepared clip and starts the cadence over', async () => {
-    const model = fakeModel([line('A'), line('B'), line('B again'), line('C')])
-    const speech = fakeSpeech()
-    const { host } = createHost({ model: model.port, speech: speech.port })
-    const [a, b, c] = [track('A'), track('B'), track('C')]
+      await host.beforeStream({ guildId: 'g1', view: view({ current: c }) })
 
-    await host.beforeStream({ guildId: 'g1', view: view({ current: a, upcoming: [b] }) })
-    await waitFor(() => speech.settled(2))
-
-    const prepared = first(speech.files.slice(1))
-
-    host.reset('g1')
-    await waitFor(() => !existsSync(prepared))
-
-    await host.beforeStream({ guildId: 'g1', view: view({ current: b }) })
-
-    expect(model.requests[2]?.instructions).toContain('Angle for this line: welcome')
-
-    // B is the first song again, so C takes the second slot and speaks.
-    await host.beforeStream({ guildId: 'g1', view: view({ current: c }) })
-
-    expect(model.requests).toHaveLength(4)
-    expect(model.requests[3]?.instructions).toContain('Playing now: C')
-    expect(model.requests[3]?.instructions).not.toContain('Angle for this line: welcome')
-  })
+      if (cSpeaks) {
+        expect(model.requests).toHaveLength(4)
+        expect(model.requests[3]?.instructions).toContain('Playing now: C')
+        expect(model.requests[3]?.instructions).not.toContain('Angle for this line: welcome')
+      }
+      else {
+        expect(model.requests).toHaveLength(3)
+      }
+    })
+  }
 
   test('a prepared clip for a song that never played is deleted', async () => {
     const model = fakeModel([line('A'), line('B'), line('C')])

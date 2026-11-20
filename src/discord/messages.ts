@@ -177,8 +177,8 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
   }
 
   // A plain message in the listening channel is a request, not necessarily a
-  // search: Jev decides between a control, a song and the DJ. No confident
-  // choice keeps the old behavior and searches.
+  // search: Jev decides between a control, a song and the DJ. Without a
+  // confident choice the message is most likely a song, so it is searched.
   async function handlePlain(message: Message<true>, member: GuildMember, settings: GuildSettings, text: string): Promise<void> {
     const choice = await decide(text, contextFor(message, member, settings), [
       ...deps.bus.routes,

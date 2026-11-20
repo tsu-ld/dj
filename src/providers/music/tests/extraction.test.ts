@@ -222,7 +222,7 @@ test('a download failure carries the extractor stderr', async () => {
 test('a spawn failure is reported instead of hanging', async () => {
   const tool = extractor({ command: '/definitely/not/an/extractor', logger: log })
 
-  expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).not.toBe('')
+  expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).toMatch(/ENOENT.*\/definitely\/not\/an\/extractor/)
 
   await tool.dispose()
 })

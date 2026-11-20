@@ -8,7 +8,7 @@ import { commandBus } from './src/commands/bus.ts'
 import { commands } from './src/commands/index.ts'
 import { loadConfig } from './src/config.ts'
 import { systemClock } from './src/core/clock.ts'
-import { errorMessage, UserError } from './src/core/errors.ts'
+import { errorMessage } from './src/core/errors.ts'
 import { logger } from './src/core/logger.ts'
 import { discordClient } from './src/discord/client.ts'
 import { djAgent } from './src/dj/conversation.ts'
@@ -52,15 +52,14 @@ const model = config.language.enabled
 const bus = commandBus({ specs: commands, logger: log })
 const agent = model === null ? null : djAgent({ model, bus, settings, logger: log, clock: systemClock })
 
-const results: Array<[string, string]> = []
+let failed = 0
 
 function pass(name: string): void {
-  results.push(['PASS', name])
   console.log('  PASS:', name)
 }
 
 function fail(name: string, message: string): void {
-  results.push(['FAIL', name])
+  failed++
   console.log('  FAIL:', name, '-', message)
 }
 
@@ -216,7 +215,7 @@ size >= 2 ? pass(`queue holds ${size} songs`) : fail('queue holds 2 songs', `got
 console.log('== 6. Skip changes song ==')
 const before = currentSong()
 
-await music.skip(GUILD, { id: 'e2e', name: 'e2e' }).catch(() => {})
+await music.skip(GUILD, { id: 'e2e', name: 'e2e' }).catch((error: unknown) => fail('skip is accepted', errorMessage(error)))
 await wait(6_000)
 
 const after = currentSong()
@@ -246,7 +245,6 @@ const stillIn = (await guild.members.fetch(client.user?.id ?? '')).voice.channel
 leaveError === null && stillIn === null
   ? pass('bot leaves voice cleanly')
   : fail('bot leaves voice cleanly', leaveError ?? `still in channel ${stillIn}`)
-console.log('  (manual: a human leaving the channel also drops the bot)')
 
 console.log('== 9. DJ request queues and speaks ==')
 
@@ -268,23 +266,12 @@ else {
     music.status(GUILD)?.state === 'playing' ? pass('dj plays the queue') : fail('dj plays the queue', 'not playing')
   }
   catch (error) {
-    fail('dj request', error instanceof UserError ? error.message : String(error))
+    fail('dj request', errorMessage(error))
   }
 }
 
 await cleanup()
 await music.dispose()
-
-console.log('\n=== RESULTS ===')
-
-let failed = 0
-
-for (const [status, name] of results) {
-  console.log(`  ${status}  ${name}`)
-
-  if (status === 'FAIL')
-    failed++
-}
 
 console.log(failed === 0 ? '=== ALL PASS ===' : `=== ${failed} FAILED ===`)
 await client.destroy()

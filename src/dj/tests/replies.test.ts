@@ -3,7 +3,7 @@ import { djReplies } from '../replies.ts'
 import {
   captureLogger,
   scriptedModel,
-  silentLogger,
+  silentLog,
   testChannel,
   testMessage,
   testSettings,
@@ -17,7 +17,7 @@ describe('djReplies', () => {
     const channel = testChannel()
     const { message, replies } = testMessage(channel.channel)
     const model = scriptedModel([() => textReply('  argh, listo  ')])
-    const port = djReplies({ model, logger: silentLogger() })
+    const port = djReplies({ model, logger: silentLog })
 
     await port.say(message, settings, 'Done.')
 
@@ -34,7 +34,7 @@ describe('djReplies', () => {
     const channel = testChannel()
     const { message } = testMessage(channel.channel)
     const model = scriptedModel([() => textReply('argh, listo')])
-    const port = djReplies({ model, logger: silentLogger() })
+    const port = djReplies({ model, logger: silentLog })
 
     await port.say(message, settings, 'Done.')
 
@@ -59,7 +59,7 @@ describe('djReplies', () => {
   test('announce sends the rewritten line to the channel', async () => {
     const channel = testChannel()
     const model = scriptedModel([() => textReply('un tema nuevo')])
-    const port = djReplies({ model, logger: silentLogger() })
+    const port = djReplies({ model, logger: silentLog })
 
     await port.announce(channel.channel, settings, 'Added "Tema" to the queue.')
 
@@ -84,7 +84,7 @@ describe('djReplies', () => {
   test('an empty rewrite falls back instead of sending nothing', async () => {
     const channel = testChannel()
     const model = scriptedModel([() => textReply('')])
-    const port = djReplies({ model, logger: silentLogger() })
+    const port = djReplies({ model, logger: silentLog })
 
     await port.announce(channel.channel, settings, 'Added "Tema" to the queue.')
 
@@ -95,7 +95,7 @@ describe('djReplies', () => {
     const channel = testChannel()
     const { message, replies } = testMessage(channel.channel)
     const model = scriptedModel([() => textReply('x'.repeat(2_500))])
-    const port = djReplies({ model, logger: silentLogger() })
+    const port = djReplies({ model, logger: silentLog })
 
     await port.say(message, settings, 'Done.')
 
@@ -106,7 +106,7 @@ describe('djReplies', () => {
     const channel = testChannel({ failTyping: true })
     const { message, replies } = testMessage(channel.channel)
     const model = scriptedModel([() => textReply('listo')])
-    const port = djReplies({ model, logger: silentLogger() })
+    const port = djReplies({ model, logger: silentLog })
 
     await port.say(message, settings, 'Done.')
 
@@ -127,7 +127,7 @@ describe('djReplies', () => {
   test('without a model both methods send the plain text', async () => {
     const channel = testChannel()
     const { message, replies } = testMessage(channel.channel)
-    const port = djReplies({ model: null, logger: silentLogger() })
+    const port = djReplies({ model: null, logger: silentLog })
 
     await port.say(message, settings, 'Done.')
     await port.announce(channel.channel, settings, 'Added "Tema" to the queue.')

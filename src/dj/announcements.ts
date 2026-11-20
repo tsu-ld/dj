@@ -14,8 +14,8 @@ export function djAnnouncements(deps: {
   clock: Clock
 }) {
   // A broken playlist fails one song at a time; announcing every failure would
-  // flood the channel and spend one model request per song. The slot is taken
-  // before the channel check, exactly like the event handler this replaces.
+  // flood the channel and spend one model request per song. A failure with no
+  // channel still takes the slot: it is part of the same burst.
   const errorWindow = cooldown(ERROR_ANNOUNCE_MS, {
     maxEntries: MAX_THROTTLED_GUILDS,
     now: () => deps.clock.now(),
