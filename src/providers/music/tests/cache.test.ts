@@ -2,7 +2,7 @@ import { stat, utimes, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 import { audioCache, finishedAudioFile, safeFileId } from '../cache.ts'
-import { extractionStub, log, tempDir } from './helpers.ts'
+import { extractionStub, log, tempDir } from './fakes.ts'
 
 async function exists(path: string): Promise<boolean> {
   try {

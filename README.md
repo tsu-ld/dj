@@ -1,166 +1,124 @@
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tsu-ld/dj)
+<p align="center">
+  <img src="docs/assets/banner.png" alt="tsu-ld/dj: a singing kitten in headphones and the words &quot;a radio host for your Discord voice channel&quot;" width="100%">
+</p>
 
-# tsu-ld/dj
+<p align="center">
+  <b>A radio host for your Discord voice channel.</b><br>
+  Say what you want to hear, in your own words. It plays it, talks between songs like someone who loves being on air, and keeps the night going when nobody is asking.
+</p>
 
-A Discord bot that plays music in your voice channel. Drop a song name or a link in the assigned text channel and it starts playing, or tag it and talk to it like a DJ: it picks the music, answers in its own voice and keeps the radio running.
+---
 
-## Features
+Most music bots are jukeboxes with a command line. **dj** is built to feel like a person running the station:
 
-- **No tag needed**: in the listening channel, the fast router reads the intent of every message. "pausá" pauses, "mostrame la cola" shows the queue, "cumbia" plays a search, and a mood like "poneme algo tranqui" goes to the DJ.
-- **Talk to it like a DJ**: tag the bot with a plain request ("poneme algo tranqui de rock nacional") and it chooses the songs, queues them and answers in character.
-- **Radio voice**: with a voice configured, the DJ speaks in the gap before a song starts and never over it. One song in three runs without a line and autoplay songs talk less. Short lines keep the run moving (who asked, what just played, what comes next); every second line is longer and gets one fact about the song or artist, only when the model is sure of it. The DJ is the radio: a song nobody asked for is his own pick, and a skip is something he knows, not something he announces.
-- **Quiet in text while on air**: while the bot is in a voice channel, DJ answers and confirmations become a ✅ reaction and song requests get a ✅; refusals and errors still come as text.
-- **Personality per server**: ask it to talk a certain way (`@DJ sé un dj cumbiero`) and the setting lives with the server.
-- **Play anything**: YouTube links and search terms, and `open.spotify.com` links (track, album, playlist, artist). Other pasted links are rejected before they reach the extractor.
-- **Full control surface**: pause, resume, skip, shuffle, radio, clear (the button asks for confirmation) and a paginated queue view, as buttons on the now-playing message or by asking `@DJ` in plain language.
-- **Playlists**: paste a playlist link and it queues up to 50 songs.
-- **Leaves when done**: disconnects when the queue ends (unless radio is on) or the voice channel empties.
-- **Remembers its channel**: the listening channel and persona are per server and survive restarts.
-- **Welcome audio**: plays `assets/welcome.mp3` the first time it joins a voice channel each session (optional).
+| Instead of | dj |
+|---|---|
+| Learning `/play`, `/skip`, `/queue` | You type in the channel: `skip this one`, `play something chill`, a band, a link |
+| Dead air between songs | A short spoken intro in the gap before the song. The music waits for it. |
+| "Added to queue" after every request | A ✅ while it is on air; the live card shows the rest |
+| Autoplay looping the same few hits | Radio that avoids songs it played recently, remasters included |
+| Trivia from the model's imagination | Facts from Deezer, Wikipedia and recent news; the host is told to state nothing else as fact |
+| Everyone treated the same | It remembers who asks for what: favorite songs, artists, request milestones |
 
-## Tech Stack
+<p align="center">
+  <img src="docs/assets/a-night-on-air.gif" alt="tsu asks for the best LoL Worlds anthems and gets a checkmark; the song ends, the host says a short line about tsu's request in the gap, and the next song starts after it; tsu says skip this one and gets a checkmark" width="760">
+</p>
 
-- **[Bun](https://bun.sh/) 1.4+**: runs the TypeScript sources natively (no build step), installs dependencies, lints and runs the tests
-- **[TypeScript](https://www.typescriptlang.org/)**: explicit ports and state types, checked in CI with `tsc --noEmit`
-- **Discord**: [discord.js](https://discord.js.org/) + [distube](https://distube.js.org/)
-- **Multimedia**: [ffmpeg](https://ffmpeg.org/) on `PATH`
-- **Downloader**: [yt-dlp](https://github.com/yt-dlp/yt-dlp) on `PATH`
-- **LLM**: any OpenAI-compatible Responses API endpoint (`/responses`) for the DJ's voice and song picks
-- **Decision router (optional)**: [Jev](https://typesafe.ai) through TypeSafe or OpenCode's System One endpoint
+## What it does
 
-The internals are described in [docs/architecture.md](docs/architecture.md): capability ports, providers, one command bus, a station state machine and a tested dependency rule.
+### Talk to it like a person
 
-## Requirements
+Pick a channel (`@DJ #music`) and every message there is a request. You don't need to mention the bot. A fast router reads each one and sends it to the right place:
 
-- **Bun 1.4+**
-- **FFmpeg** on `PATH`
-- **yt-dlp** on `PATH`
-- **A Discord bot**: create one in the [Discord developer portal](https://discord.com/developers/applications) and invite it with Send Messages, Embed Links, Add Reactions, Read Message History, Connect and Speak. Enable the **Message Content** privileged intent.
+- a control: `pause`, `shuffle`, `remove 3`;
+- a search: `lofi beats`, a YouTube or Spotify link;
+- or the DJ: `play something to cook to`, `recommend me a band`.
 
-## Setup
+The DJ picks songs itself when you ask for a mood, a genre or an era. Mentioning the bot always reaches the DJ.
 
-1. **Install dependencies**:
+### A host on the air
 
-   ```bash
-   bun install
-   ```
+With a voice configured, the DJ speaks in the gap before a song starts. The song waits for the line, so the host never talks over the music.
 
-2. **Set the bot token**:
+- **It knows when to stay quiet.** One requested song in three gets no line, and the radio's own picks talk less. Every second line is a little longer.
+- **Every line is about one thing.** That can be who asked for the song, what just played, or a listener's milestone. It can also be a fact the host can back up: the album, the release year, an anniversary this week, or a headline from the last two weeks.
+- **It is the radio.** Songs nobody asked for are its own picks, introduced like any other song. When the last song was skipped, it doesn't announce it as if it played. It moves on.
+- **Lines are written ahead of time,** usually while the previous song plays. They're spoken with audio tags like `[laughs]`, in the persona's language.
 
-   ```bash
-   export DISCORD_TOKEN=your_bot_token
-   ```
+### A card that keeps up
 
-3. **(Optional) give it a voice**: point the bot at any OpenAI-compatible Responses API endpoint (`/responses`):
+<p align="center">
+  <img src="docs/assets/now-playing.png" alt="The now-playing card for Radiohead's Weird Fishes/Arpeggi: status, a progress bar, the next two songs and buttons for pause, skip, shuffle, radio, queue and leave, beside a dithered In Rainbows cover" width="760">
+</p>
 
-   ```bash
-   export LLM_BASE_URL=https://your-endpoint/v1/responses
-   export LLM_API_KEY=your_api_key
-   export LLM_MODEL=your_model  # optional, defaults to deepseek-v4-flash
-   ```
+One card per server shows:
+- what is playing and who asked for it;
+- a progress bar that moves every 15 seconds;
+- the next three songs;
+- buttons for pause, skip, shuffle, radio, the queue and leave. **Leave** asks before it stops the music.
 
-   Without these, the bot still plays music: announcements go out as plain text, refusals keep their plain reason, and tagged song requests are unavailable. The buttons, fast-routed controls and plain messages in the listening channel keep working.
+The queue view pages through everything waiting. When the chat scrolls past the card, it reposts itself at the bottom.
 
-4. **(Optional) Spotify credentials**: Spotify links work without them by scraping a web token, which is fragile. Set the credentials from a [Spotify app](https://developer.spotify.com/dashboard) to use the official API:
+### Radio that keeps going
 
-   ```bash
-   export MUSIC_METADATA_CLIENT_ID=your_client_id
-   export MUSIC_METADATA_CLIENT_SECRET=your_client_secret
-   ```
+Turn the radio on and related songs keep playing after the queue runs dry. It remembers the last 30 titles per server, alternate uploads and remasters included, and prefers anything it hasn't just played.
 
-5. **(Optional) fast action routing**: point `DECISION_BASE_URL` at a System One endpoint. With the official TypeSafe API:
+### A personality per server
 
-   ```bash
-   export DECISION_BASE_URL=https://api.typesafe.ai/v1/systemone
-   export DECISION_MODEL=jev-latest
-   export DECISION_API_KEY=your_typesafe_key
-   ```
+`@DJ from now on, talk like a cumbia DJ who never stops joking` changes how it talks; it needs the Manage Server permission. The persona and the listening channel survive restarts.
 
-   Or with OpenCode's Console endpoint and the same OpenCode key (set it explicitly; there is no fallback):
+### Built to behave
 
-   ```bash
-   export DECISION_BASE_URL=https://opencode.ai/inference/systemone/v1/systemone
-   export DECISION_MODEL=jev-1.13-free  # optional
-   export DECISION_API_KEY=your_opencode_key
-   ```
+- **A broken piece never stops the music.** No voice, no model, or a fact source that is down: the line is skipped and the song plays. Without a model it is still a quick, clean music bot.
+- **Controls belong to the room.** Pause, skip, shuffle, radio and leave only work for members in its voice channel.
+- **It refuses what it shouldn't play.** Live streams and links from anywhere but YouTube and Spotify are turned away.
+- **Hard limits.** 50 songs per playlist and 200 in the queue. The audio cache is trimmed back to 512 MiB.
+- **Titles and names stay data.** In the DJ's and the host's prompts they are fenced off as data, never read as instructions.
 
-   Without it, or when the model is unavailable, the DJ falls back to choosing actions with the conversation model.
+## Quick start
 
-6. **(Optional) radio voice**: give the DJ a voice in the voice channel with [ElevenLabs](https://elevenlabs.io/). Add a male Spanish (Argentina) voice from the [voice library](https://elevenlabs.io/voice-library) and copy its ID:
-
-   ```bash
-   export SPEECH_API_KEY=your_api_key
-   export SPEECH_VOICE_ID=your_voice_id
-   export SPEECH_MODEL_ID=eleven_v4  # optional
-   ```
-
-   The line is written while the previous song plays and airs in the gap, so the music never plays underneath it. The first song after a reconnect, and the autoplay songs, are written on the spot. The provider checks its character quota every five minutes and skips lines when the period is exhausted, so the free tier never breaks playback. Lines target 100 characters and are hard-capped at 120; every second line targets 210 and is capped at 230. Audio tags (`[laughs]`, `[sighs]`, `[excited]`) direct the delivery.
-
-7. **(Optional) welcome audio**: put an MP3 at `assets/welcome.mp3`.
-
-## Run
+You need:
+- **[Bun](https://bun.sh) 1.4+**;
+- **FFmpeg** and **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** on `PATH`;
+- a bot from the [Discord developer portal](https://discord.com/developers/applications) with the **Message Content** intent on, invited with View Channels, Send Messages, Embed Links, Add Reactions, Read Message History, Connect and Speak.
 
 ```bash
+bun install
+export DISCORD_TOKEN=your_bot_token
 bun run start
-# or, while developing
-bun run dev
 ```
 
-`bun run check` runs lint, typecheck and the test suite.
+Then, as someone with **Manage Channels**, type `@DJ #music` in the channel it should listen in. Join a voice channel and post a song name or a link.
 
-## Using it
+With only the token, you get a music bot: searches, links, the card and its buttons. **The full station needs three more pieces.** Plain-language controls need the router, conversation needs the DJ, and spoken lines need both the DJ and a voice:
 
-1. **Point it at a channel** (the author needs Manage Channels):
+| Set | And you get |
+|---|---|
+| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | **The DJ**: conversation, song picks, in-character replies and the writing of every spoken line. Point `LLM_BASE_URL` at the full `/responses` URL of an OpenAI-compatible endpoint. The default model is `deepseek-v4-flash`. |
+| `DECISION_BASE_URL`, `DECISION_API_KEY`, `DECISION_MODEL` | **The router** that turns plain messages into controls, searches or DJ requests, using a System One endpoint such as [Jev](https://typesafe.ai). Without it, plain messages are searched and only mentions reach the DJ. |
+| `SPEECH_API_KEY`, `SPEECH_VOICE_ID`, `SPEECH_MODEL_ID` | **The voice on air** ([ElevenLabs](https://elevenlabs.io), `eleven_v4` by default). A Spanish (Argentina) voice from their library suits the default show. |
+| `MUSIC_METADATA_CLIENT_ID`, `MUSIC_METADATA_CLIENT_SECRET` | Spotify's official API for Spotify links, before the web fallback. |
+| `assets/welcome.mp3` | A short intro the first time it joins voice in a server after it starts. |
 
-   ```
-   @DJ #music
-   ```
+## How a song goes on air
 
-2. **Play something**: join a voice channel and post a link or search term in the listening channel:
-
-   ```
-   never gonna give you up
-   ```
-
-3. **Control playback**: the buttons on the now-playing message cover everything, or ask in your own words:
-
-   ```
-   @DJ pausá
-   @DJ seguí
-   @DJ saltéala
-   @DJ mostrame la cola
-   @DJ sacá la 3
-   ```
-
-4. **Talk to the DJ**:
-
-   ```
-   @DJ poneme algo tranqui para el asado
-   ```
-
-5. **Set its personality** (Manage Server; ask in the listening channel):
-
-   ```
-   @DJ sé un dj cumbiero que no para de hacer chistes
-   ```
-
-## Testing
-
-- `bun run test` runs the unit tests; `bun test` works too.
-- `bun run typecheck` checks the TypeScript contracts.
-- `bun run test:e2e` runs the live suite against a real guild. It reads the token and model variables from `~/.config/dj/discord.env` (override with `E2E_ENV_FILE`, `E2E_GUILD`, `E2E_VOICE`, `E2E_TEXT`) and needs the bot service stopped so two clients do not share the token.
-
-## Layout
-
+```mermaid
+sequenceDiagram
+  participant You
+  participant Bot as dj
+  participant Voice as Voice channel
+  You->>Bot: "play the best LoL Worlds anthems"
+  Note over Bot: the DJ picks songs and queues them
+  Bot-->>You: ✅
+  Note over Bot: while the current song plays,<br/>the host writes and voices the next line
+  Bot->>Voice: "That was Radiohead, tsu's request... and now, Neutral Milk Hotel. Worlds anthems are coming up."
+  Bot->>Voice: ♪ the next song starts after the line, never under it
 ```
-src/
-  index.ts, app.ts       process entry and composition root
-  config.ts              the only environment reader
-  core/                  clock, errors, logger, async, text, TTL map
-  ports/                 capability interfaces
-  providers/             music, speech, language-model, classifier, settings, listeners, song-facts
-  dj/                    persona, prompts, conversation, replies, announcements
-  on-air/                station state machine, script, host
-  commands/              command specs, bus, fast router
-  discord/               gateway, handlers, views, message slot
-```
+
+## For contributors
+
+- [VISION.md](VISION.md): what dj is, the tenets that decide trade-offs, and what it will never be.
+- [AGENTS.md](AGENTS.md): commands, the map of the code, the words we use and how we write it.
+- `bun run check` runs lint, typecheck and the tests, exactly as CI does.
+
+MIT licensed.

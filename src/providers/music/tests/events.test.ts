@@ -10,7 +10,7 @@ import { logger } from '../../../core/logger.ts'
 import { audioHealth } from '../audio-health.ts'
 import { createEmitter } from '../emitter.ts'
 import { currentForStream, musicEvents } from '../events.ts'
-import { track } from './helpers.ts'
+import { track } from './fakes.ts'
 
 interface FakeSong {
   id: string

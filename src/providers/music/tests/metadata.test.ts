@@ -5,7 +5,7 @@ import { DisTube, Playlist, Song } from 'distube'
 import { MAX_PLAYLIST_SONGS } from '../../../limits.ts'
 import { MusicCatalog } from '../catalog.ts'
 import { MetadataCatalog } from '../metadata.ts'
-import { extractionStub, log, rejection, streamStub } from './helpers.ts'
+import { extractionStub, log, rejection, streamStub } from './fakes.ts'
 
 const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M'
 

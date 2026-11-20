@@ -18,7 +18,7 @@ import {
   skipSong,
 } from '../queue.ts'
 import { voiceChannelProblem } from '../voice.ts'
-import { extractionStub, log, memberOf, rejection, streamStub, track } from './helpers.ts'
+import { extractionStub, log, memberOf, rejection, streamStub, track } from './fakes.ts'
 
 test('queue positions are one-based and bounded by the queue', () => {
   expect(isPositionInQueue(2, 1)).toBe(true)
