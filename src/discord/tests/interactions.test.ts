@@ -1,17 +1,17 @@
 import type { Interaction } from 'discord.js'
-import type { MusicRecorder } from '../../commands/tests/fakes.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { MusicPort } from '../../ports/music.ts'
+import type { MusicRecorder } from '../../tests/fixtures.ts'
 import type { SlotRecorder } from './fakes.ts'
 import { describe, expect, test } from 'bun:test'
 import { MessageFlags } from 'discord.js'
 import { commandBus } from '../../commands/bus.ts'
 import { commands } from '../../commands/index.ts'
-import { fakeMember, fakeMusic, fakeSettings, fakeVoice, log, track, view } from '../../commands/tests/fakes.ts'
 import { UserError } from '../../core/errors.ts'
 import { MESSAGES } from '../../messages.ts'
+import { captureLog, fakeMember, fakeMusic, fakeSettings, fakeVoice, silentLog as log, queueOf, testTrack as track, testView as view } from '../../tests/fixtures.ts'
 import { interactionHandler } from '../interactions.ts'
-import { buttonsOf, cardText, contentOf, fakeChannel, fakeInteraction, fakeSlot, queueOf } from './fakes.ts'
+import { buttonsOf, cardText, contentOf, fakeChannel, fakeInteraction, fakeSlot } from './fakes.ts'
 
 function setup(options: { music?: MusicRecorder, slot?: SlotRecorder, logger?: Logger } = {}): {
   handler: (interaction: Interaction) => Promise<void>
@@ -78,14 +78,7 @@ describe('now-playing buttons', () => {
   })
 
   test('a failed confirmation edit does not report the clear as failed', async () => {
-    const warnings: string[] = []
-    const logger: Logger = {
-      debug: () => {},
-      info: () => {},
-      warn: event => warnings.push(event),
-      error: () => {},
-      child: () => logger,
-    }
+    const { logger, events: warnings } = captureLog()
     const recorder = fakeInteraction({ customId: 'nc:clear:yes', failEditReply: true })
     const { handler } = setup({ music: fakeMusic({ view: () => view() }), logger })
 
@@ -251,6 +244,55 @@ describe('now-playing buttons', () => {
     await handler(recorder.interaction)
 
     expect(contentOf(recorder.followUps[0])).toBe(MESSAGES.genericError)
+  })
+
+  test('a failure report Discord rejects is logged as a warning', async () => {
+    const warnings: string[] = []
+    const logger: Logger = {
+      debug: () => {},
+      info: () => {},
+      warn: event => warnings.push(event),
+      error: () => {},
+      child: () => logger,
+    }
+    const recorder = fakeInteraction({ customId: 'np:skip' })
+    const rejected = async (): Promise<never> => {
+      throw new Error('Unknown interaction')
+    }
+
+    Object.assign(recorder.interaction, { followUp: rejected, reply: rejected })
+
+    const { handler } = setup({
+      music: fakeMusic({
+        view: () => view(),
+        async skip() {
+          throw new Error('provider exploded')
+        },
+      }),
+      logger,
+    })
+
+    await handler(recorder.interaction)
+
+    expect(warnings).toEqual(['discord.failure_report_failed'])
+  })
+
+  test('a member fetch Discord rejects is logged and the clicker gets the generic message', async () => {
+    const { logger, events: warnings } = captureLog()
+    const recorder = fakeInteraction({ customId: 'np:skip' })
+    const rejected = async (): Promise<never> => {
+      throw new Error('Unknown Member')
+    }
+
+    Object.assign(recorder.interaction, { member: null, guild: { members: { fetch: rejected } } })
+
+    const { handler, music } = setup({ music: fakeMusic({ view: () => view() }), logger })
+
+    await handler(recorder.interaction)
+
+    expect(warnings).toEqual(['discord.member_fetch_failed'])
+    expect(contentOf(recorder.followUps[0])).toBe(MESSAGES.genericError)
+    expect(music.calls).not.toContain('skip')
   })
 
   test('a missing guild is ignored', async () => {

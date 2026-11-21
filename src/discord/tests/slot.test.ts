@@ -1,13 +1,12 @@
 import type { PlaybackStatus } from '../../ports/music.ts'
 import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test'
-import { log, track, view } from '../../commands/tests/fakes.ts'
 import { NOW_PLAYING_REPOST_MS } from '../../limits.ts'
-import { settle } from '../../tests/fixtures.ts'
-import { PROGRESS_REPAINT_MS } from '../progress.ts'
+import { silentLog as log, queueOf, settle, testTrack as track, testView as view } from '../../tests/fixtures.ts'
 import { messageSlot } from '../slot.ts'
-import { cardText, fakeChannel, queueOf } from './fakes.ts'
+import { cardText, fakeChannel } from './fakes.ts'
 
 const GUILD = '123456789012345678'
+const PROGRESS_REPAINT_MS = 15_000
 const noPlayback = (_guildId: string): PlaybackStatus | null => null
 
 beforeEach(() => {

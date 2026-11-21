@@ -1,10 +1,11 @@
 import type { AppConfig } from '../../../config.ts'
-import type { CompletionRequest } from '../../../ports/conversation.ts'
+import type { CompletionRequest, ConversationPort } from '../../../ports/conversation.ts'
 import type { FetchCalls } from '../../tests/http.ts'
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, jest, test } from 'bun:test'
+import { systemClock } from '../../../core/clock.ts'
 import { ProviderError } from '../../../core/errors.ts'
 import { isRecord, parseJson } from '../../../core/json.ts'
-import { silentLog as log } from '../../../tests/fixtures.ts'
+import { captureLog, silentLog as log, settle, testClock } from '../../../tests/fixtures.ts'
 import { restoreFetch, stubFetch } from '../../tests/http.ts'
 import { conversationModel } from '../index.ts'
 
@@ -40,13 +41,28 @@ function textPayload(text: string): Response {
   return Response.json({ output: [{ type: 'message', content: [{ type: 'output_text', text }] }] })
 }
 
-afterEach(restoreFetch)
+const LONGEST_RETRY_WAIT_MS = 750
+
+async function completeAcrossRetryWait(model: ConversationPort): Promise<void> {
+  jest.useFakeTimers()
+
+  const reply = model.complete(request())
+
+  await settle()
+  jest.advanceTimersByTime(LONGEST_RETRY_WAIT_MS)
+  await reply
+}
+
+afterEach(() => {
+  jest.useRealTimers()
+  restoreFetch()
+})
 
 describe('conversationModel', () => {
   test('a request with tools asks the endpoint to pick them', async () => {
     const calls = stubFetch(async () => textPayload('va'))
 
-    await conversationModel({ config, logger: log }).complete(request({
+    await conversationModel({ config, logger: log, clock: systemClock }).complete(request({
       tools: [{ name: 'skip_song', description: 'Skip the song.', parameters: {} }],
     }))
 
@@ -59,7 +75,7 @@ describe('conversationModel', () => {
   test('a request without tools sends neither key', async () => {
     const calls = stubFetch(async () => textPayload('va'))
 
-    await conversationModel({ config, logger: log }).complete(request())
+    await conversationModel({ config, logger: log, clock: systemClock }).complete(request())
 
     expect(calls.count()).toBe(1)
     expect(sentBody(calls, 0).tools).toBeUndefined()
@@ -70,7 +86,7 @@ describe('conversationModel', () => {
   test('a request can turn reasoning off for a fast answer', async () => {
     const calls = stubFetch(async () => textPayload('va'))
 
-    await conversationModel({ config, logger: log }).complete(request({ reasoning: 'none' }))
+    await conversationModel({ config, logger: log, clock: systemClock }).complete(request({ reasoning: 'none' }))
 
     expect(sentBody(calls, 0).reasoning).toEqual({ effort: 'none' })
   })
@@ -78,7 +94,7 @@ describe('conversationModel', () => {
   test('instructions and chat messages become the endpoint shape', async () => {
     const calls = stubFetch(async () => textPayload('va'))
 
-    await conversationModel({ config, logger: log }).complete(request({
+    await conversationModel({ config, logger: log, clock: systemClock }).complete(request({
       instructions: 'sos un dj',
       messages: [{ role: 'user', content: 'que suena?' }],
     }))
@@ -91,7 +107,7 @@ describe('conversationModel', () => {
     const calls = stubFetch(async () => Response.json({
       output: [{ type: 'function_call', call_id: 'call_1', name: 'skip_song', arguments: '{}' }],
     }))
-    const model = conversationModel({ config, logger: log })
+    const model = conversationModel({ config, logger: log, clock: systemClock })
     const reply = await model.complete(request())
 
     expect(reply.toolCalls).toEqual([{ id: 'call_1', name: 'skip_song', arguments: '{}' }])
@@ -118,7 +134,7 @@ describe('conversationModel', () => {
       ],
     }))
 
-    const reply = await conversationModel({ config, logger: log }).complete(request())
+    const reply = await conversationModel({ config, logger: log, clock: systemClock }).complete(request())
 
     expect(reply.text).toBe('uno dos')
     expect(reply.toolCalls).toEqual([])
@@ -127,7 +143,7 @@ describe('conversationModel', () => {
   test('a 200 response with no output is an error', async () => {
     stubFetch(async () => Response.json({}))
 
-    await expect(conversationModel({ config, logger: log }).complete(request())).rejects.toThrow(/no output/)
+    await expect(conversationModel({ config, logger: log, clock: systemClock }).complete(request())).rejects.toThrow(/no output/)
   })
 
   test('a 500 is retried once and the retry keeps the cost controls', async () => {
@@ -138,7 +154,7 @@ describe('conversationModel', () => {
       return textPayload('va')
     })
 
-    await conversationModel({ config, logger: log }).complete(request())
+    await conversationModel({ config, logger: log, clock: systemClock }).complete(request())
 
     expect(calls.count()).toBe(2)
     expect(sentBody(calls, 1).store).toBe(false)
@@ -157,9 +173,37 @@ describe('conversationModel', () => {
       return textPayload('va')
     })
 
-    await conversationModel({ config, logger: log }).complete(request())
+    await conversationModel({ config, logger: log, clock: systemClock }).complete(request())
 
     expect(calls).toBe(2)
+  })
+
+  test('the retry warning says which status failed', async () => {
+    const captured = captureLog()
+    const calls = stubFetch(async () => {
+      if (calls.count() === 1)
+        return new Response('upstream exploded', { status: 503 })
+
+      return textPayload('va')
+    })
+
+    await completeAcrossRetryWait(conversationModel({ config, logger: captured.logger, clock: systemClock }))
+
+    expect(captured.entries('language.retry')).toEqual([expect.objectContaining({ status: 503 })])
+  })
+
+  test('the retry warning says which connection error failed', async () => {
+    const captured = captureLog()
+    const calls = stubFetch(async () => {
+      if (calls.count() === 1)
+        throw new TypeError('fetch failed')
+
+      return textPayload('va')
+    })
+
+    await completeAcrossRetryWait(conversationModel({ config, logger: captured.logger, clock: systemClock }))
+
+    expect(captured.entries('language.retry')).toEqual([expect.objectContaining({ error: 'fetch failed' })])
   })
 
   test('a timed-out request is not retried', async () => {
@@ -174,31 +218,24 @@ describe('conversationModel', () => {
       throw error
     })
 
-    await expect(conversationModel({ config, logger: log }).complete(request()))
+    await expect(conversationModel({ config, logger: log, clock: systemClock }).complete(request()))
       .rejects
       .toThrow(/timed out/)
     expect(calls).toBe(1)
   })
 
   test('a retry without budget fails closed instead of starting again', async () => {
-    const realNow = Date.now
-    let now = 1_000
+    const clock = testClock(1_000)
 
     stubFetch(async () => {
-      now = 2_000
+      clock.advance(1_000)
 
       return new Response('upstream exploded', { status: 500 })
     })
 
-    try {
-      Date.now = () => now
-      await expect(conversationModel({ config, logger: log }).complete(request()))
-        .rejects
-        .toThrow(/ran out of time/)
-    }
-    finally {
-      Date.now = realNow
-    }
+    await expect(conversationModel({ config, logger: log, clock }).complete(request()))
+      .rejects
+      .toThrow(/ran out of time/)
   })
 
   test('a 400 is not retried and the error body is truncated', async () => {
@@ -210,7 +247,7 @@ describe('conversationModel', () => {
       return new Response('x'.repeat(5_000), { status: 400 })
     })
 
-    const error = await conversationModel({ config, logger: log }).complete(request()).catch((caught: unknown) => caught)
+    const error = await conversationModel({ config, logger: log, clock: systemClock }).complete(request()).catch((caught: unknown) => caught)
 
     expect(calls).toBe(1)
     expect(error).toBeInstanceOf(ProviderError)
@@ -225,7 +262,7 @@ describe('conversationModel', () => {
   test('an explicit output cap overrides the default', async () => {
     const calls = stubFetch(async () => textPayload('va'))
 
-    await conversationModel({ config, logger: log }).complete(request({ maxOutputTokens: 200 }))
+    await conversationModel({ config, logger: log, clock: systemClock }).complete(request({ maxOutputTokens: 200 }))
 
     expect(sentBody(calls, 0).max_output_tokens).toBe(200)
   })
@@ -242,7 +279,7 @@ describe('conversationModel', () => {
       return textPayload('va')
     })
 
-    await conversationModel({ config, logger: log }).complete(request({ sessionId: 'chan-9' }))
+    await conversationModel({ config, logger: log, clock: systemClock }).complete(request({ sessionId: 'chan-9' }))
 
     expect(seen.session).toBe('chan-9')
     expect(seen.authorization).toBe('Bearer test-key')

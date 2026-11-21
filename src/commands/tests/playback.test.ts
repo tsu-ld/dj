@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
+import { fakeContext, fakeMusic, fakeUi, silentLog as log, testTrack as track, testView as view } from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
 import { pause, radio, resume, seek, shuffle, skip, toggle } from '../playback.ts'
-import { fakeContext, fakeMusic, fakeUi, log, queueContext, track, view } from './fakes.ts'
+import { queueContext } from './fakes.ts'
 
 describe('playback commands', () => {
   test('pause pauses a playing queue only once', async () => {

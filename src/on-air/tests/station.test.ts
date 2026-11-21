@@ -1,8 +1,11 @@
-import type { PlayedEntry, Station, StationSong } from '../station.ts'
+import type { PlayedEntry } from '../station.ts'
 import { describe, expect, test } from 'bun:test'
 import { RADIO_MEMORY_MS, RADIO_MEMORY_SIZE } from '../../limits.ts'
 import { testClock } from '../../tests/fixtures.ts'
 import { onAirStation, shouldSpeak } from '../station.ts'
+
+type Station = ReturnType<typeof onAirStation>
+type StationSong = Parameters<Station['recordSong']>[1]
 
 function song(id: string, extra: Partial<StationSong> = {}): StationSong {
   return { id, title: id.toUpperCase(), artist: null, requestedBy: null, fromRadio: false, ...extra }

@@ -6,7 +6,6 @@ export default antfu(
       tsconfigPath: './tsconfig.json',
     },
     rules: {
-      'antfu/no-top-level-await': 'off',
       'newline-before-return': 'error',
       'no-console': ['error', {}],
       '@typescript-eslint/no-explicit-any': 'error',
@@ -21,6 +20,6 @@ export default antfu(
   },
   {
     files: ['e2e-test.ts'],
-    rules: { 'no-console': 'off' },
+    rules: { 'no-console': 'off', 'antfu/no-top-level-await': 'off' },
   },
 )

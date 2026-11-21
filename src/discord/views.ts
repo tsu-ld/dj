@@ -82,7 +82,7 @@ function timelineRow(track: Track, { elapsed, total }: Position, paused: boolean
     .setDisabled(paused)))
 }
 
-export function nowPlayingMessage(view: QueueView, elapsedMs: number | null = null): ViewMessage | null {
+export function nowPlayingMessage(view: QueueView, elapsedMs: number | null): ViewMessage | null {
   const track = view.current
 
   if (!track)
@@ -189,7 +189,7 @@ export function noticeMessage(content: string): ViewMessage {
   }
 }
 
-export interface ClearConfirmation {
+interface ClearConfirmation {
   readonly content: string
   readonly components: readonly ActionRowBuilder<MessageActionRowComponentBuilder>[]
   readonly flags: typeof MessageFlags.Ephemeral

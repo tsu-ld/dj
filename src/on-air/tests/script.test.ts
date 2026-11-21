@@ -1,11 +1,10 @@
 import type { ListenerProfile } from '../../ports/listeners.ts'
 import type { SongFacts } from '../../ports/song-facts.ts'
-import type { OnAirInput } from '../script.ts'
 import type { PlayedEntry } from '../station.ts'
 import { describe, expect, test } from 'bun:test'
 import { RADIO_LONG_CHARS, RADIO_SHORT_CHARS } from '../../limits.ts'
 import { testTrack as track } from '../../tests/fixtures.ts'
-import { buildOnAirPrompt, lineLimit, lineRequest, lineTarget, sanitizeLine } from '../script.ts'
+import { buildOnAirPrompt, lineLimit, lineRequest, sanitizeLine } from '../script.ts'
 
 const NOW = Date.UTC(2026, 10, 18, 12)
 const DAY = 86_400_000
@@ -36,7 +35,7 @@ const LISTENER: ListenerProfile = {
   topArtists: ['Soda Stereo', 'Los Fabulosos Cadillacs'],
 }
 
-function prompt(extra: Partial<OnAirInput> & { persona?: string | null } = {}): string {
+function prompt(extra: Partial<Parameters<typeof buildOnAirPrompt>[0]> & { persona?: string | null } = {}): string {
   return buildOnAirPrompt({
     settings: { textChannelId: null, persona: extra.persona === undefined ? 'un dj' : extra.persona },
     track: track('Tema'),
@@ -71,8 +70,7 @@ describe('the run block', () => {
     expect(text).toContain('Who asked: requested by tsu')
     expect(text).toContain('Last song: Matador, requested by ana, played through')
     expect(text).toContain('Next up, in order: Seminare, requested by ana | La Luna, your own pick')
-    expect(text).toContain('one sentence')
-    expect(text).toContain(String(lineTarget(false)))
+    expect(text).toContain('Say one sentence, at most 100 characters.')
   })
 
   test('a skipped last song is context: who skipped it, never when', () => {
@@ -107,8 +105,7 @@ describe('the run block', () => {
 
     expect(text).toContain('Next up, in order: One | Two | Three')
     expect(text).not.toContain('Four')
-    expect(text).toContain('two sentences')
-    expect(text).toContain(String(lineTarget(true)))
+    expect(text).toContain('Say two sentences, at most 210 characters.')
   })
 
   test('the radio keeps going only when it is on and the queue is short', () => {
@@ -228,8 +225,6 @@ describe('the rules', () => {
   test('the length limits are the shared ones', () => {
     expect(lineLimit(true)).toBe(RADIO_LONG_CHARS)
     expect(lineLimit(false)).toBe(RADIO_SHORT_CHARS)
-    expect(lineTarget(true)).toBe(210)
-    expect(lineTarget(false)).toBe(100)
   })
 })
 
@@ -273,6 +268,10 @@ describe('sanitizeLine', () => {
     expect(sanitizeLine('Escuchá https://youtu.be/x esto', 100)).toBe('Escuchá esto')
     expect(sanitizeLine('"La mano de Dios"', 100)).toBe('La mano de Dios')
     expect(sanitizeLine('   ', 100)).toBeNull()
+  })
+
+  test('the hard cut never splits a character', () => {
+    expect(sanitizeLine('你好𠀀𠀀', 3)).toBe('你好')
   })
 
   test('keeps the audio tags that direct the delivery', () => {

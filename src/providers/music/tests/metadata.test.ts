@@ -3,9 +3,10 @@ import { expect, test } from 'bun:test'
 import { Client, GatewayIntentBits } from 'discord.js'
 import { DisTube, Playlist, Song } from 'distube'
 import { MAX_PLAYLIST_SONGS } from '../../../limits.ts'
+import { silentLog as log } from '../../../tests/fixtures.ts'
 import { MusicCatalog } from '../catalog.ts'
 import { MetadataCatalog } from '../metadata.ts'
-import { extractionStub, log, rejection, streamStub } from './fakes.ts'
+import { extractionStub, rejection, streamStub } from './fakes.ts'
 
 const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M'
 

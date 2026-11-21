@@ -2,9 +2,11 @@ import type { Logger } from '../../core/logger.ts'
 import type { Extractor } from './extraction.ts'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { errorMessage } from '../../core/errors.ts'
+import { isRecord } from '../../core/json.ts'
 import { isYoutubeUrl } from './policy.ts'
 
-export interface PrefetchCandidate {
+interface PrefetchCandidate {
   readonly id: string
   readonly url?: string | null
   readonly isLive?: boolean
@@ -22,11 +24,11 @@ function isPartial(file: string): boolean {
   return file.endsWith('.part') || file.endsWith('.ytdl')
 }
 
-export function finishedAudioFile(files: readonly string[], id: string): string | undefined {
+function finishedAudioFile(files: readonly string[], id: string): string | undefined {
   return files.find(file => file.startsWith(`${id}.`) && !isPartial(file))
 }
 
-export function safeFileId(id: unknown): string {
+function safeFileId(id: unknown): string {
   return String(id ?? '').replace(/[^\w-]/g, '_')
 }
 
@@ -43,7 +45,12 @@ export function audioCache(deps: {
   let disposed = false
 
   async function filesIn(dirPath: string): Promise<string[]> {
-    return readdir(dirPath).catch(() => [])
+    return readdir(dirPath).catch((error: unknown) => {
+      if (!isRecord(error) || error.code !== 'ENOENT')
+        logger.warn('music.cache_unreadable', { error: errorMessage(error) })
+
+      return []
+    })
   }
 
   async function fileFor(id: string): Promise<string | null> {

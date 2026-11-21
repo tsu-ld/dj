@@ -1,71 +1,58 @@
-import type { Logger } from '../../../core/logger.ts'
 import type { PingSample } from '../audio-health.ts'
-import { expect, test } from 'bun:test'
-import { logger } from '../../../core/logger.ts'
+import { afterEach, expect, jest, spyOn, test } from 'bun:test'
+import { isRecord } from '../../../core/json.ts'
+import { captureLog } from '../../../tests/fixtures.ts'
 import { audioHealth } from '../audio-health.ts'
-
-interface Line {
-  readonly event: string
-  readonly fields: Record<string, unknown>
-}
 
 const noPing = (): PingSample => ({ ws: undefined, udp: undefined })
 
 function harness() {
-  const lines: Line[] = []
-  const pending: Array<{ run: () => void, afterMs: number, spent: boolean }> = []
   let now = 1_000_000
-  let cancelled = 0
+  let clockReads = 0
 
-  const log: Logger = logger({
-    level: 'debug',
-    now: () => now,
-    sink(line) {
-      const parsed = JSON.parse(line) as Record<string, unknown>
-      lines.push({ event: String(parsed.event), fields: parsed })
-    },
-  })
+  jest.useFakeTimers()
+
+  const clearTimer = spyOn(globalThis, 'clearTimeout')
+  const log = captureLog()
 
   const health = audioHealth({
-    clock: { now: () => now },
-    logger: log,
-    timer(run, afterMs) {
-      const entry = { run, afterMs, spent: false }
+    clock: {
+      now: () => {
+        clockReads += 1
 
-      pending.push(entry)
-
-      return () => {
-        entry.spent = true
-        cancelled += 1
-      }
+        return now
+      },
     },
+    logger: log.logger,
   })
 
-  function live(): Array<{ run: () => void, afterMs: number, spent: boolean }> {
-    return pending.filter(entry => !entry.spent)
-  }
-
   function tick(lateMs: number): void {
-    const next = live().shift()
+    const readsBefore = clockReads
 
-    if (next === undefined)
+    jest.advanceTimersByTime(39)
+    expect(clockReads).toBe(readsBefore)
+
+    now += 40 + lateMs
+    jest.advanceTimersByTime(1)
+
+    if (clockReads === readsBefore)
       throw new Error('No sample was scheduled.')
-
-    next.spent = true
-    expect(next.afterMs).toBe(40)
-    now += next.afterMs + lateMs
-    next.run()
   }
 
-  function only(event: string): Line {
-    const found = lines.filter(line => line.event === event)
+  function only(event: string): Record<string, unknown> {
+    const found = log.entries(event)
     expect(found).toHaveLength(1)
 
-    return found[0] as Line
+    const [entry] = found
+
+    if (!isRecord(entry))
+      throw new Error(`No ${event} line was logged.`)
+
+    return entry
   }
 
   function count(event: string): number {
-    return lines.filter(line => line.event === event).length
+    return log.entries(event).length
   }
 
   return {
@@ -73,10 +60,15 @@ function harness() {
     tick,
     only,
     count,
-    pending: () => live().length,
-    cancelled: () => cancelled,
+    pending: () => jest.getTimerCount(),
+    cancelled: () => clearTimer.mock.calls.length,
   }
 }
+
+afterEach(() => {
+  jest.restoreAllMocks()
+  jest.useRealTimers()
+})
 
 test('a song summary carries the worst lag and the pings it saw', () => {
   const h = harness()
@@ -90,12 +82,12 @@ test('a song summary carries the worst lag and the pings it saw', () => {
 
   const summary = h.only('music.audio_health')
 
-  expect(summary.fields.guildId).toBe('g1')
-  expect(summary.fields.title).toBe('Song')
-  expect(summary.fields.loopLagMaxMs).toBe(55)
-  expect(summary.fields.loopStalls).toBe(1)
-  expect(summary.fields.udpPingMaxMs).toBe(210)
-  expect(summary.fields.wsPingMaxMs).toBe(120)
+  expect(summary.guildId).toBe('g1')
+  expect(summary.title).toBe('Song')
+  expect(summary.loopLagMaxMs).toBe(55)
+  expect(summary.loopStalls).toBe(1)
+  expect(summary.udpPingMaxMs).toBe(210)
+  expect(summary.wsPingMaxMs).toBe(120)
 })
 
 test('a lag under the stall threshold is measured but not counted', () => {
@@ -108,10 +100,10 @@ test('a lag under the stall threshold is measured but not counted', () => {
 
   const summary = h.only('music.audio_health')
 
-  expect(summary.fields.loopLagMaxMs).toBe(30)
-  expect(summary.fields.loopStalls).toBe(0)
-  expect(summary.fields.udpPingMaxMs).toBe(0)
-  expect(summary.fields.wsPingMaxMs).toBe(0)
+  expect(summary.loopLagMaxMs).toBe(30)
+  expect(summary.loopStalls).toBe(0)
+  expect(summary.udpPingMaxMs).toBe(0)
+  expect(summary.wsPingMaxMs).toBe(0)
 })
 
 test('a long stall logs once, and again only after ten seconds', () => {
@@ -119,7 +111,7 @@ test('a long stall logs once, and again only after ten seconds', () => {
 
   h.health.start({ guildId: 'g1', title: 'Song', ping: noPing })
   h.tick(150)
-  expect(h.only('music.loop_stall').fields.lagMs).toBe(150)
+  expect(h.only('music.loop_stall').lagMs).toBe(150)
   h.tick(400)
   expect(h.count('music.loop_stall')).toBe(1)
   h.tick(10_000)
@@ -155,8 +147,8 @@ test('a ping that throws is contained, and the song still summarizes', () => {
   expect(() => h.health.end('g1', 'finished')).not.toThrow()
 
   expect(h.count('music.ping_failed')).toBe(2)
-  expect(h.only('music.audio_health').fields.guildId).toBe('g1')
-  expect(h.only('music.audio_health').fields.reason).toBe('finished')
+  expect(h.only('music.audio_health').guildId).toBe('g1')
+  expect(h.only('music.audio_health').reason).toBe('finished')
 
   h.health.dispose()
 })

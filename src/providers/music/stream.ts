@@ -9,7 +9,7 @@ import { isRecord } from '../../core/json.ts'
 // googlevideo urls expire after a few hours
 const STREAM_URL_MARGIN_MS = 5 * 60_000
 
-export interface StreamEntry {
+interface StreamEntry {
   readonly url: string
   readonly expiresAt: number
 }
@@ -22,7 +22,7 @@ export interface StreamResolver {
 }
 
 // YouTube answers ffmpeg 403 on audio-only urls; only the progressive mp4 streams.
-export function directStreamUrl(formats: unknown): string | undefined {
+function directStreamUrl(formats: unknown): string | undefined {
   const entries: readonly unknown[] = Array.isArray(formats) ? formats : []
 
   for (const entry of entries) {
@@ -38,37 +38,17 @@ export function directStreamUrl(formats: unknown): string | undefined {
   return undefined
 }
 
-export function isUrlFresh(entry: StreamEntry | undefined, now: number): entry is StreamEntry {
+function isUrlFresh(entry: StreamEntry | undefined, now: number): entry is StreamEntry {
   if (entry === undefined)
     return false
 
   return entry.expiresAt - now > STREAM_URL_MARGIN_MS
 }
 
-export function urlExpiresAt(url: string): number {
+function urlExpiresAt(url: string): number {
   const expire = Number(new URL(url).searchParams.get('expire'))
 
   return Number.isFinite(expire) && expire > 0 ? expire * 1000 : Number.POSITIVE_INFINITY
-}
-
-export async function streamWithDjLine<T>(
-  song: T,
-  deps: { fetchUrl: (song: T) => Promise<string>, line: (song: T) => Promise<void> },
-): Promise<string> {
-  const speech = deps.line(song)
-
-  try {
-    const url = await deps.fetchUrl(song)
-
-    await speech
-
-    return url
-  }
-  catch (error) {
-    await speech
-
-    throw error
-  }
 }
 
 export function streamResolver(deps: {
@@ -153,8 +133,21 @@ export function streamResolver(deps: {
     return `file://${await cache.download(song.url, song.id)}`
   }
 
-  async function resolvePlayableUrl(song: Song): Promise<string> {
-    return streamWithDjLine(song, { fetchUrl: playableUrl, line: waitForTheDj })
+  async function playableUrlAfterTheDj(song: Song): Promise<string> {
+    const speech = waitForTheDj(song)
+
+    try {
+      const url = await playableUrl(song)
+
+      await speech
+
+      return url
+    }
+    catch (error) {
+      await speech
+
+      throw error
+    }
   }
 
   return {
@@ -162,7 +155,7 @@ export function streamResolver(deps: {
     forget(id) {
       streamUrls.delete(id)
     },
-    playableUrl: resolvePlayableUrl,
+    playableUrl: playableUrlAfterTheDj,
     dispose() {
       streamUrls.clear()
     },

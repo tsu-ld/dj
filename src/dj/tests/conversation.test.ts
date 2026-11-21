@@ -2,31 +2,27 @@ import type { CommandOutcome } from '../../commands/spec.ts'
 import type { ConversationPort } from '../../ports/conversation.ts'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
-import { djAgent } from '../conversation.ts'
 import {
-  call,
   captureLog,
-  failed,
-  ok,
-  refused,
+  fakeContext,
+  fakeSettings,
+  fakeTextChannel,
   scriptedModel,
+  settle,
   silentLog,
-  testBus,
-  testChannel,
   testClock,
-  testContext,
-  testSettings,
   testView,
   textReply,
-  toolReply,
-} from './support.ts'
+} from '../../tests/fixtures.ts'
+import { djAgent } from '../conversation.ts'
+import { call, failed, ok, refused, testBus, toolReply } from './support.ts'
 
 function toolMessages(messages: readonly { role: string, content: string | null }[]): { role: string, content: string | null }[] {
   return messages.filter(message => message.role === 'tool')
 }
 
 function testAgent(model: ConversationPort, deps: Partial<Omit<Parameters<typeof djAgent>[0], 'model'>> = {}) {
-  return djAgent({ model, bus: testBus(), settings: testSettings(), logger: silentLog, clock: testClock(), ...deps })
+  return djAgent({ model, bus: testBus(), settings: fakeSettings(), logger: silentLog, clock: testClock(), ...deps })
 }
 
 describe('djAgent', () => {
@@ -34,7 +30,7 @@ describe('djAgent', () => {
     const model = scriptedModel([() => textReply('hola')])
     const agent = testAgent(model)
 
-    const reply = await agent.ask({ request: 'hola', context: testContext() })
+    const reply = await agent.ask({ request: 'hola', context: fakeContext() })
 
     expect(reply).toBe('hola')
     expect(model.requests[0]?.messages).toEqual([{ role: 'user', content: 'hola' }])
@@ -45,9 +41,9 @@ describe('djAgent', () => {
 
   test('the guild persona from the settings port reaches the prompt', async () => {
     const model = scriptedModel([() => textReply('hola')])
-    const agent = testAgent(model, { settings: testSettings({ persona: 'un dj pirata' }) })
+    const agent = testAgent(model, { settings: fakeSettings({ persona: 'un dj pirata' }) })
 
-    await agent.ask({ request: 'hola', context: testContext() })
+    await agent.ask({ request: 'hola', context: fakeContext() })
 
     expect(model.requests[0]?.instructions).toContain('un dj pirata')
   })
@@ -55,7 +51,7 @@ describe('djAgent', () => {
   test('a conversation keeps its context on the next request', async () => {
     const model = scriptedModel([() => textReply('hola'), () => textReply('otra vez')])
     const agent = testAgent(model)
-    const context = testContext()
+    const context = fakeContext()
 
     await agent.ask({ request: 'hola', context })
     await agent.ask({ request: 'qué suena', context })
@@ -73,7 +69,7 @@ describe('djAgent', () => {
     const bus = testBus(() => refused('there is no tool called nope'))
     const agent = testAgent(model, { bus })
 
-    const reply = await agent.ask({ request: 'hacelo', context: testContext() })
+    const reply = await agent.ask({ request: 'hacelo', context: fakeContext() })
     const results = toolMessages(model.requests[1]?.messages ?? [])
 
     expect(reply).toBe('listo')
@@ -92,7 +88,7 @@ describe('djAgent', () => {
     const bus = testBus()
     const agent = testAgent(model, { bus, clock })
 
-    await expect(agent.ask({ request: 'hacelo', context: testContext() }))
+    await expect(agent.ask({ request: 'hacelo', context: fakeContext() }))
       .rejects
       .toThrow(/ran out of time/)
     expect(bus.calls).toHaveLength(0)
@@ -100,7 +96,7 @@ describe('djAgent', () => {
 
   test('the deadline after acting returns the short confirmation', async () => {
     const clock = testClock()
-    const settings = testSettings()
+    const settings = fakeSettings()
     const model = scriptedModel([() => toolReply(call('call_1', 'set_persona', '{"persona":"un dj"}'))])
     const bus = testBus(async () => {
       await settings.update('123456789012345678', { persona: 'un dj' })
@@ -110,7 +106,7 @@ describe('djAgent', () => {
     })
     const agent = testAgent(model, { bus, settings, clock })
 
-    const reply = await agent.ask({ request: 'sé un dj', context: testContext() })
+    const reply = await agent.ask({ request: 'sé un dj', context: fakeContext() })
 
     expect(reply).toBe(MESSAGES.djActed)
     expect(settings.current()).toEqual({ textChannelId: null, persona: 'un dj' })
@@ -125,7 +121,7 @@ describe('djAgent', () => {
       return ok()
     })
     const agent = testAgent(model, { bus, clock })
-    const context = testContext()
+    const context = fakeContext()
 
     const reply = await agent.ask({ request: 'hacelo', context })
 
@@ -146,7 +142,7 @@ describe('djAgent', () => {
     for (const name of ['ok', 'refused', 'failed']) {
       const agent = testAgent(scriptedModel([() => toolReply(call('call_1', name)), () => textReply('listo')]), { bus: testBus(() => outcomes[name] ?? ok()) })
 
-      await agent.ask({ request: 'hacelo', context: testContext(), onRefused: () => problems.push(name) })
+      await agent.ask({ request: 'hacelo', context: fakeContext(), onRefused: () => problems.push(name) })
     }
 
     expect(problems).toEqual(['refused', 'failed'])
@@ -158,7 +154,7 @@ describe('djAgent', () => {
     async function ask(name: string, reply: () => ReturnType<typeof toolReply>, clock = testClock()): Promise<void> {
       const agent = testAgent(scriptedModel([reply, () => textReply('listo')]), { clock })
 
-      await agent.ask({ request: 'hacelo', context: testContext(), onRefused: () => problems.push(name) })
+      await agent.ask({ request: 'hacelo', context: fakeContext(), onRefused: () => problems.push(name) })
     }
 
     const clock = testClock()
@@ -179,7 +175,6 @@ describe('djAgent', () => {
     const model = scriptedModel([
       () => toolReply(
         call('call_1', 'with_data'),
-        call('call_2', 'without_data'),
         call('call_3', 'refused'),
         call('call_4', 'failed'),
       ),
@@ -189,9 +184,6 @@ describe('djAgent', () => {
       if (name === 'with_data')
         return ok({ queued: 2 })
 
-      if (name === 'without_data')
-        return ok()
-
       if (name === 'refused')
         return refused('no permission')
 
@@ -199,13 +191,12 @@ describe('djAgent', () => {
     })
     const agent = testAgent(model, { bus, logger: logs.logger })
 
-    await agent.ask({ request: 'hacelo', context: testContext() })
+    await agent.ask({ request: 'hacelo', context: fakeContext() })
 
     const results = toolMessages(model.requests[1]?.messages ?? [])
 
     expect(results.map(result => result.content)).toEqual([
       '{"queued":2}',
-      '{"done":"without_data"}',
       '{"error":"no permission"}',
       '{"error":"the player could not do that"}',
     ])
@@ -220,7 +211,7 @@ describe('djAgent', () => {
     })
     const agent = testAgent(model, { bus, logger: logs.logger })
 
-    const reply = await agent.ask({ request: 'hacelo', context: testContext() })
+    const reply = await agent.ask({ request: 'hacelo', context: fakeContext() })
     const results = toolMessages(model.requests[1]?.messages ?? [])
 
     expect(reply).toBe('listo')
@@ -236,7 +227,7 @@ describe('djAgent', () => {
     const bus = testBus()
     const agent = testAgent(model, { bus })
 
-    await agent.ask({ request: 'hacelo', context: testContext() })
+    await agent.ask({ request: 'hacelo', context: fakeContext() })
 
     expect(bus.calls).toHaveLength(0)
     expect(toolMessages(model.requests[1]?.messages ?? [])[0]?.content)
@@ -247,14 +238,14 @@ describe('djAgent', () => {
     const model = scriptedModel([() => textReply('')])
     const agent = testAgent(model)
 
-    expect(await agent.ask({ request: 'hola', context: testContext() })).toBeNull()
+    expect(await agent.ask({ request: 'hola', context: fakeContext() })).toBeNull()
   })
 
   test('acting without a final line returns the short confirmation', async () => {
     const model = scriptedModel([() => toolReply(call('call_1', 'skip')), () => textReply('')])
     const agent = testAgent(model)
 
-    expect(await agent.ask({ request: 'skippea', context: testContext() }))
+    expect(await agent.ask({ request: 'skippea', context: fakeContext() }))
       .toBe(MESSAGES.djActed)
   })
 
@@ -268,7 +259,7 @@ describe('djAgent', () => {
     ])
     const agent = testAgent(model, { bus })
 
-    const reply = await agent.ask({ request: 'hacelo', context: testContext() })
+    const reply = await agent.ask({ request: 'hacelo', context: fakeContext() })
 
     expect(reply).toBe('final')
     expect(model.requests).toHaveLength(4)
@@ -293,7 +284,7 @@ describe('djAgent', () => {
     const bus = testBus()
     const agent = testAgent(model, { bus })
 
-    const reply = await agent.ask({ request: 'hacelo', context: testContext() })
+    const reply = await agent.ask({ request: 'hacelo', context: fakeContext() })
     const capped = toolMessages(model.requests[3]?.messages ?? [])
       .filter(result => result.content === '{"error":"too many tool calls; try fewer at once"}')
 
@@ -308,7 +299,7 @@ describe('djAgent', () => {
     }])
     const agent = testAgent(model)
 
-    await expect(agent.ask({ request: 'hola', context: testContext() }))
+    await expect(agent.ask({ request: 'hola', context: fakeContext() }))
       .rejects
       .toThrow('upstream exploded')
   })
@@ -323,7 +314,7 @@ describe('djAgent', () => {
       () => textReply('hola'),
     ])
     const agent = testAgent(model, { logger: logs.logger })
-    const context = testContext()
+    const context = fakeContext()
 
     expect(await agent.ask({ request: 'skippea', context })).toBe(MESSAGES.djActed)
     expect(await agent.ask({ request: 'hola', context })).toBe('hola')
@@ -349,7 +340,7 @@ describe('djAgent', () => {
       return ok()
     })
     const agent = testAgent(model, { bus })
-    const base = testContext()
+    const base = fakeContext()
     const context = {
       ...base,
       ui: {
@@ -373,16 +364,31 @@ describe('djAgent', () => {
   })
 
   test('the answer is clamped to a Discord message', async () => {
-    const channel = testChannel()
+    const channel = fakeTextChannel()
     const model = scriptedModel([() => textReply('x'.repeat(2_500))])
     const agent = testAgent(model)
 
     const reply = await agent.ask({
       request: 'hola',
-      context: testContext({ channel: channel.channel }),
+      context: fakeContext({ textChannel: channel.channel }),
     })
 
     expect(reply?.length).toBe(2_000)
     expect(channel.typing.count).toBe(1)
+  })
+
+  test('a failed typing indicator is logged and the DJ still answers', async () => {
+    const channel = fakeTextChannel({ failTyping: true })
+    const logs = captureLog()
+    const model = scriptedModel([() => textReply('hola')])
+    const agent = testAgent(model, { logger: logs.logger })
+
+    const reply = await agent.ask({ request: 'hola', context: fakeContext({ textChannel: channel.channel }) })
+    await settle()
+
+    expect(reply).toBe('hola')
+    expect(logs.entries('dj.typing_failed')).toEqual([
+      expect.objectContaining({ level: 'debug', error: 'typing failed' }),
+    ])
   })
 })

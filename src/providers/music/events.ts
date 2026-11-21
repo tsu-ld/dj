@@ -5,14 +5,14 @@ import type { QueueView } from '../../ports/music.ts'
 import type { AudioEndReason, AudioHealth } from './audio-health.ts'
 import type { AudioCache } from './cache.ts'
 import type { MusicCatalog } from './catalog.ts'
-import type { MusicEmitter } from './types.ts'
+import type { MusicEmitter } from './emitter.ts'
 import { Events as DiscordEvents } from 'discord.js'
 import { Events, isVoiceChannelEmpty } from 'distube'
 import { errorMessage } from '../../core/errors.ts'
-import { leavesEmptyChannel, shouldCleanupAfterError } from './queue.ts'
-import { voiceGuard } from './voice-guard.ts'
+import { addressOf, leavesEmptyChannel, shouldCleanupAfterError } from './queue.ts'
 
-type StreamOf = NonNullable<Queue['voice']['stream']>
+type VoiceOf = Queue['voice']
+type StreamOf = NonNullable<VoiceOf['stream']>
 
 export function musicEvents(deps: {
   player: import('distube').DisTube
@@ -31,7 +31,17 @@ export function musicEvents(deps: {
   const detach: Array<() => void> = []
   const noted = new WeakSet<StreamOf>()
   const watched = new Map<string, Array<StreamOf>>()
-  const guardVoice = voiceGuard(logger)
+  const guardedVoices = new WeakSet<VoiceOf>()
+
+  // The SDK's voice re-emits stream errors but loses its listener when the queue
+  // is removed; an emitter with no "error" listener throws.
+  function guardVoice(queue: Queue): void {
+    if (guardedVoices.has(queue.voice))
+      return
+
+    guardedVoices.add(queue.voice)
+    queue.voice.on('error', (error: Error) => logger.warn('music.voice_error', { guildId: queue.id, error: errorMessage(error) }))
+  }
 
   function orphanedStreamFailed(guildId: string, stream: StreamOf, error: Error): void {
     const queue = player.getQueue(guildId) ?? null
@@ -74,12 +84,7 @@ export function musicEvents(deps: {
     const track = catalog.trackOf(song)
 
     logger.info('music.song_added', { guildId: queue.id, title: track.title })
-    emitter.trackQueued({
-      guildId: queue.id,
-      track,
-      view: viewOf(queue),
-      textChannel: queue.textChannel ?? null,
-    })
+    emitter.emit('trackQueued', { ...addressOf(queue), track, view: viewOf(queue) })
   }
 
   function onAddList(queue: Queue, playlist: Playlist): void {
@@ -87,12 +92,7 @@ export function musicEvents(deps: {
     const count = playlist.songs.length
 
     logger.info('music.playlist_added', { guildId: queue.id, name, count })
-
-    emitter.playlistQueued({
-      guildId: queue.id,
-      view: viewOf(queue),
-      textChannel: queue.textChannel ?? null,
-    })
+    emitter.emit('playlistQueued', { ...addressOf(queue), view: viewOf(queue) })
   }
 
   function onPlaySong(queue: Queue, song: Song): void {
@@ -100,18 +100,14 @@ export function musicEvents(deps: {
 
     logger.info('music.playing', { guildId: queue.id, title })
     lastSong.set(queue.id, song.id)
-    guardVoice(queue.id, queue.voice)
+    guardVoice(queue)
     watchStream(queue)
     health.start({
       guildId: queue.id,
       title,
       ping: () => ({ ws: queue.voice.connection.ping.ws, udp: queue.voice.connection.ping.udp }),
     })
-    emitter.trackStarted({
-      guildId: queue.id,
-      view: viewOf(queue),
-      textChannel: queue.textChannel ?? null,
-    })
+    emitter.emit('trackStarted', { ...addressOf(queue), view: viewOf(queue) })
     cache.prefetch(queue.songs[1], queue.id)
   }
 
@@ -127,7 +123,7 @@ export function musicEvents(deps: {
   function queueEnded(event: 'music.queue_finished' | 'music.no_related'): (queue: Queue) => void {
     return (queue) => {
       logger.info(event, { guildId: queue.id })
-      emitter.queueEnded({ guildId: queue.id })
+      emitter.emit('queueEnded', { guildId: queue.id })
       leave(queue.id)
     }
   }
@@ -136,7 +132,7 @@ export function musicEvents(deps: {
   const onNoRelated = queueEnded('music.no_related')
 
   function onDisconnect(queue: Queue): void {
-    emitter.disconnected({ guildId: queue.id })
+    emitter.emit('disconnected', { guildId: queue.id })
   }
 
   function onError(error: Error, queue: Queue | undefined, song: Song | undefined): void {
@@ -157,7 +153,7 @@ export function musicEvents(deps: {
 
     const songId = song?.id ?? failed ?? null
 
-    emitter.playbackError({ guildId: queue.id, songId, textChannel: queue.textChannel ?? null, cleanupAfterError: cleanup })
+    emitter.emit('playbackError', { ...addressOf(queue), songId, cleanupAfterError: cleanup })
 
     if (cleanup) {
       logger.info('music.error_left_queue_empty', { guildId: queue.id })
@@ -172,7 +168,7 @@ export function musicEvents(deps: {
       return
 
     logger.info('music.channel_empty', { guildId: oldState.guild.id })
-    emitter.queueCleared({ guildId: oldState.guild.id, resetStation: false })
+    emitter.emit('queueCleared', { guildId: oldState.guild.id, resetStation: false })
     voice?.leave()
   }
 

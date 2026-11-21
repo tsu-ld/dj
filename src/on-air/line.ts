@@ -17,7 +17,7 @@ const LINE_TIMEOUT_MS = 8_000
 const LINE_MAX_OUTPUT_TOKENS = 1_200
 const MODEL_PAUSE_MS = 10 * 60_000
 
-export interface LineContext {
+interface LineContext {
   readonly guildId: string
   readonly track: Track
   readonly view: QueueView
@@ -29,12 +29,12 @@ export interface LineContext {
   readonly lastAngle: Angle | null
 }
 
-export interface WrittenLine {
+interface WrittenLine {
   readonly text: string
   readonly angle: Angle
 }
 
-export interface LineWriter {
+interface LineWriter {
   ready: () => boolean
   write: (context: LineContext) => Promise<WrittenLine | null>
 }

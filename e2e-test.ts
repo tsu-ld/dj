@@ -35,7 +35,7 @@ const GUILD = process.env.E2E_GUILD ?? missing('E2E_GUILD')
 const VOICE = process.env.E2E_VOICE ?? missing('E2E_VOICE')
 const TEXT = process.env.E2E_TEXT ?? missing('E2E_TEXT')
 
-const log = logger({ level: 'info' })
+const log = logger({ level: 'info', clock: systemClock, out: process.stdout })
 const client = discordClient(config, log)
 const directory = await mkdtemp(join(tmpdir(), 'dj-e2e-'))
 const settings = await settingsStore({ path: join(directory, 'guilds.json'), logger: log })
@@ -47,7 +47,7 @@ const music = musicEngine({
   beforeStream: async () => {},
 })
 const model = config.language.enabled
-  ? conversationModel({ config: config.language, logger: log })
+  ? conversationModel({ config: config.language, logger: log, clock: systemClock })
   : null
 const bus = commandBus({ specs: commands, logger: log })
 const agent = model === null ? null : djAgent({ model, bus, settings, logger: log, clock: systemClock })
@@ -126,7 +126,9 @@ async function stopError(): Promise<string | null> {
 }
 
 async function cleanup(): Promise<void> {
-  await music.stop(GUILD).catch(() => {})
+  if (music.view(GUILD) !== null)
+    await music.stop(GUILD).catch((error: unknown) => console.log('  cleanup: stop failed -', errorMessage(error)))
+
   await wait(2_000)
 }
 
@@ -230,30 +232,23 @@ if (skipped) {
 }
 await cleanup()
 
-console.log('== 7. Clear empties queue ==')
+console.log('== 7. Clear empties the queue and leaves voice ==')
 await play('hipercandombe maquina de hacer pajaros')
-await wait(8_000)
+await wait(10_000)
 const clearError = await stopError()
-await wait(2_000)
+await wait(4_000)
 
 clearError === null && music.view(GUILD) === null
   ? pass('clear empties the queue')
   : fail('clear empties the queue', clearError ?? 'queue still present')
-await cleanup()
-
-console.log('== 8. Leave is clean ==')
-await play('hipercandombe maquina de hacer pajaros')
-await wait(10_000)
-const leaveError = await stopError()
-await wait(4_000)
 
 const stillIn = (await guild.members.fetch(client.user?.id ?? '')).voice.channelId
 
-leaveError === null && stillIn === null
+clearError === null && stillIn === null
   ? pass('bot leaves voice cleanly')
-  : fail('bot leaves voice cleanly', leaveError ?? `still in channel ${stillIn}`)
+  : fail('bot leaves voice cleanly', clearError ?? `still in channel ${stillIn}`)
 
-console.log('== 9. DJ request answers, queues and plays ==')
+console.log('== 8. DJ request answers, queues and plays ==')
 
 if (!agent) {
   console.log('  SKIP: dj answers in character (language model not configured)')

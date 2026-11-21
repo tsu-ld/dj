@@ -1,6 +1,6 @@
 import type { QueueView } from '../ports/music.ts'
 
-export const PROGRESS_REPAINT_MS = 15_000
+const PROGRESS_REPAINT_MS = 15_000
 
 const UNKNOWN_MESSAGE = 10_008
 // Discord caps edits to a message older than an hour (error 30046).
@@ -14,7 +14,7 @@ export function isPastEditWindow(message: { readonly createdTimestamp: number } 
   return message !== undefined && now - message.createdTimestamp > EDITABLE_FOR_MS
 }
 
-export interface ProgressTimers {
+interface ProgressTimers {
   sync: (guildId: string, view: QueueView) => void
   stop: (guildId: string) => void
   dispose: () => void

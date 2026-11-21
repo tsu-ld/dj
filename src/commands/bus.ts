@@ -5,8 +5,14 @@ import type { CommandBus, CommandContext, CommandData, CommandOutcome, CommandSp
 import { errorMessage, UserError } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
 
+const EMPTY_PARAMETERS: Record<string, unknown> = {
+  type: 'object',
+  properties: {},
+  additionalProperties: false,
+}
+
 function toTool(spec: CommandSpec): ToolSpec {
-  return { name: spec.name, description: spec.description, parameters: spec.parameters }
+  return { name: spec.name, description: spec.description, parameters: spec.parameters ?? EMPTY_PARAMETERS }
 }
 
 function toRoute(spec: CommandSpec): DecisionOption {

@@ -4,9 +4,10 @@ import { describe, expect, jest, test } from 'bun:test'
 import { UserError } from '../../core/errors.ts'
 import { MAX_QUEUE_SIZE } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
+import { captureLog, collector, fakeContext, fakeMusic, fakeTextChannel, fakeUi, silentLog as log, testView as view } from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { addSongs, query } from '../play.ts'
-import { collector, fakeContext, fakeMusic, fakeTextChannel, fakeUi, log, view, voiceContext } from './fakes.ts'
+import { voiceContext } from './fakes.ts'
 
 interface TypingQuery {
   readonly typing: () => number
@@ -18,14 +19,8 @@ async function withTypingQuery(check: (query: TypingQuery) => Promise<void>): Pr
   jest.useFakeTimers()
 
   try {
-    let typing = 0
     let finish: (result: PlayResult) => void = () => {}
-    const textChannel = {
-      ...fakeTextChannel(),
-      async sendTyping() {
-        typing++
-      },
-    } as unknown as GuildTextBasedChannel
+    const { channel: textChannel, typing } = fakeTextChannel()
     const music = fakeMusic({
       play: async () => new Promise<PlayResult>((resolve) => {
         finish = resolve
@@ -34,7 +29,7 @@ async function withTypingQuery(check: (query: TypingQuery) => Promise<void>): Pr
     const bus = commandBus({ specs: [query], logger: log })
     const running = bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music } }))
 
-    await check({ typing: () => typing, finish: result => finish(result), running })
+    await check({ typing: () => typing.count, finish: result => finish(result), running })
   }
   finally {
     jest.useRealTimers()
@@ -79,7 +74,7 @@ describe('query', () => {
   test('a query shows a typing indicator before searching', async () => {
     const events: string[] = []
     const textChannel = {
-      ...fakeTextChannel(),
+      ...fakeTextChannel().channel,
       async sendTyping() {
         events.push('typing')
       },
@@ -100,12 +95,7 @@ describe('query', () => {
 
   test('a query still searches when the typing indicator fails', async () => {
     let played = false
-    const textChannel = {
-      ...fakeTextChannel(),
-      async sendTyping() {
-        throw new Error('typing failed')
-      },
-    } as unknown as GuildTextBasedChannel
+    const textChannel = fakeTextChannel({ failTyping: true }).channel
     const music = fakeMusic({
       async play() {
         played = true
@@ -113,12 +103,14 @@ describe('query', () => {
         return { added: 1, first: 'A', dropped: 0 }
       },
     })
+    const logs = captureLog()
     const bus = commandBus({ specs: [query], logger: log })
 
-    const outcome = await bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music } }))
+    const outcome = await bus.run('query', { query: 'cumbia' }, fakeContext({ textChannel, services: { music, logger: logs.logger } }))
 
     expect(outcome.kind).toBe('ok')
     expect(played).toBe(true)
+    expect(logs.entries('command.typing_failed')).toMatchObject([{ level: 'debug', error: 'typing failed' }])
   })
 
   test('a query keeps refreshing the typing indicator until it finishes', async () => {
@@ -161,6 +153,37 @@ describe('query', () => {
     expect(outcome.kind).toBe('ok')
     expect(ui.replies).toEqual([MESSAGES.playlistCapped(3, 5)])
     expect(ui.acks()).toBe(0)
+  })
+
+  test('a full queue the music engine finds at the request\'s turn reaches the listener', async () => {
+    const requests: PlayRequest[] = []
+    const music = fakeMusic({
+      async play(request) {
+        requests.push(request)
+        throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
+      },
+    })
+    const ui = fakeUi()
+    const bus = commandBus({ specs: [query], logger: log })
+
+    const outcome = await bus.run('query', { query: 'cumbia' }, fakeContext({ ui, services: { music } }))
+
+    expect(outcome).toEqual({ kind: 'refused', message: MESSAGES.queueFull(MAX_QUEUE_SIZE) })
+    expect(requests).toHaveLength(1)
+    expect(ui.errors).toEqual([MESSAGES.queueFull(MAX_QUEUE_SIZE)])
+  })
+
+  test('a query whose text is not a string fails instead of searching', async () => {
+    const requests: PlayRequest[] = []
+    const music = collector(requests)
+    const ui = fakeUi()
+    const bus = commandBus({ specs: [query], logger: log })
+
+    const outcome = await bus.run('query', { query: 42 }, fakeContext({ ui, services: { music } }))
+
+    expect(outcome.kind).toBe('failed')
+    expect(requests).toEqual([])
+    expect(ui.errors).toEqual([MESSAGES.genericError])
   })
 
   test('a full queue is refused before joining voice', async () => {

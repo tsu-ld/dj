@@ -3,14 +3,13 @@ import type { CommandSpec } from '../spec.ts'
 import { describe, expect, test } from 'bun:test'
 import { UserError } from '../../core/errors.ts'
 import { MESSAGES } from '../../messages.ts'
+import { fakeContext, fakeMusic, fakeUi, silentLog as log, testView as view } from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
-import { EMPTY_PARAMETERS } from '../parameters.ts'
-import { fakeContext, fakeMusic, fakeUi, log, view } from './fakes.ts'
 
-type Draft<Spec> = Spec extends CommandSpec ? Omit<Spec, 'description' | 'parameters'> : never
+type Draft<Spec> = Spec extends CommandSpec ? Omit<Spec, 'description'> : never
 
 function command(draft: Draft<CommandSpec>): CommandSpec {
-  return { description: draft.name, parameters: EMPTY_PARAMETERS, ...draft }
+  return { description: draft.name, ...draft }
 }
 
 interface WarningRecord {
@@ -293,6 +292,19 @@ describe('commandBus', () => {
     expect(bus.tools.map(tool => tool.name)).toEqual(['both', 'tool'])
     expect(bus.routes.map(route => route.name)).toEqual(['both'])
     expect(bus.specs).toHaveLength(3)
+  })
+
+  test('a tool without parameters tells the model it takes no arguments', () => {
+    const bus = commandBus({
+      specs: [command({ name: 'bare', async run() { return {} } })],
+      logger: log,
+    })
+
+    expect(bus.tools).toEqual([{
+      name: 'bare',
+      description: 'bare',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+    }])
   })
 
   test('the model cannot execute a command that is not a tool', async () => {

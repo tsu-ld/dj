@@ -1,3 +1,4 @@
+import type { Logger } from '../../core/logger.ts'
 import type { DecisionInput, DecisionPort } from '../../ports/decision.ts'
 import type { MusicPort, PlayRequest } from '../../ports/music.ts'
 import type { SettingsPort } from '../../ports/settings.ts'
@@ -6,9 +7,8 @@ import type { RepliesRecorder, SlotRecorder } from './fakes.ts'
 import { describe, expect, test } from 'bun:test'
 import { commandBus } from '../../commands/bus.ts'
 import { commands } from '../../commands/index.ts'
-import { collector, fakeMember, fakeMusic, fakeSettings, fakeVoice, log, view } from '../../commands/tests/fakes.ts'
 import { MESSAGES } from '../../messages.ts'
-import { settle } from '../../tests/fixtures.ts'
+import { captureLog, collector, fakeMember, fakeMusic, fakeSettings, fakeVoice, silentLog as log, settle, testClock, testView as view } from '../../tests/fixtures.ts'
 import { messageHandler } from '../messages.ts'
 import { fakeIncomingMessage, fakeReplies, fakeSlot } from './fakes.ts'
 
@@ -23,6 +23,7 @@ interface SetupOptions {
   replies?: RepliesRecorder
   slot?: SlotRecorder
   cooldowns?: { plainRequestMs: number, djRequestMs: number }
+  logger?: Logger
 }
 
 function setup(options: SetupOptions = {}): {
@@ -44,7 +45,8 @@ function setup(options: SetupOptions = {}): {
     slot,
     decision: options.decision ?? fakeDecision(null),
     agent: options.agent ?? null,
-    logger: log,
+    logger: options.logger ?? log,
+    clock: testClock(),
     cooldowns: options.cooldowns ?? { plainRequestMs: 2_000, djRequestMs: 15_000 },
   })
 
@@ -522,6 +524,40 @@ describe('messageHandler failures', () => {
 
     expect(message.replies).toEqual([MESSAGES.genericError])
     expect(slot.reposts).toHaveLength(1)
+  })
+
+  test('a failure answer that cannot be sent is logged', async () => {
+    const settings: SettingsPort = {
+      get() {
+        throw new Error('settings down')
+      },
+      async update() {},
+      async flush() {},
+    }
+    const captured = captureLog()
+    const { handler } = setup({ settings, logger: captured.logger })
+    const message = fakeIncomingMessage({ content: 'hola', failReply: true })
+
+    await handler(message.message)
+
+    expect(captured.entries('discord.reply_failed')).toEqual([expect.objectContaining({ error: 'Missing Permissions' })])
+  })
+
+  test('a dj failure answer that cannot be sent is logged', async () => {
+    const captured = captureLog()
+    const { handler } = setup({
+      agent: {
+        async ask() {
+          throw new Error('model down')
+        },
+      },
+      logger: captured.logger,
+    })
+    const message = fakeIncomingMessage({ content: '<@999> hola', users: BOT, failReply: true })
+
+    await handler(message.message)
+
+    expect(captured.entries('discord.reply_failed')).toEqual([expect.objectContaining({ error: 'Missing Permissions' })])
   })
 })
 

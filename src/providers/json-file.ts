@@ -4,7 +4,7 @@ import { dirname } from 'node:path'
 import { errorMessage } from '../core/errors.ts'
 import { isRecord, parseJson } from '../core/json.ts'
 
-export interface JsonMapFile<T> {
+interface JsonMapFile<T> {
   read: () => Promise<Record<string, T>>
   write: (value: unknown) => Promise<void>
   settled: () => Promise<void>

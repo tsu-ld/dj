@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
+import { fakeContext, fakeMusic, fakeUi, silentLog as log, testTrack as track, testView as view } from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
 import { chooseRoute } from '../route.ts'
-import { fakeContext, fakeMusic, fakeUi, log, track, view } from './fakes.ts'
 
 const queue = view({
   current: track({ title: 'a' }),

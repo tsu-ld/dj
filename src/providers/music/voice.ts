@@ -1,13 +1,13 @@
 import { ChannelType, PermissionFlagsBits } from 'discord.js'
 import { MESSAGES } from '../../messages.ts'
 
-export interface GuildLike {
+interface GuildLike {
   readonly members: { readonly me: unknown }
 }
 
 // discord.js declares these as methods; function properties would be contravariant and reject the real channel
 /* eslint-disable ts/method-signature-style */
-export interface VoiceChannelLike {
+interface VoiceChannelLike {
   readonly type: ChannelType
   readonly guild?: GuildLike
   permissionsFor(member: unknown): { has(permission: readonly bigint[]): boolean } | null

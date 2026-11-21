@@ -6,13 +6,14 @@ import type { SpeechUsage } from './client.ts'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { errorMessage } from '../../core/errors.ts'
 import { fetchSpeechUsage, SpeechRequestError, synthesizeSpeech } from './client.ts'
 
 interface UsageEntry extends SpeechUsage {
   readonly at: number
 }
 
-export function fitsQuota(usage: SpeechUsage, length: number): boolean {
+function fitsQuota(usage: SpeechUsage, length: number): boolean {
   return usage.limit - usage.used >= length
 }
 
@@ -105,7 +106,9 @@ export function speechSynthesizer(deps: {
 
     files.clear()
 
-    await Promise.all(paths.map(async path => rm(path, { force: true }).catch(() => {})))
+    await Promise.all(paths.map(async path => rm(path, { force: true }).catch((error: unknown) => {
+      logger.warn('speech.clip_delete_failed', { path, error: errorMessage(error) })
+    })))
   }
 
   return {

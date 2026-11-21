@@ -4,6 +4,7 @@ import type { AppConfig } from '../../config.ts'
 import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { BeforeStreamInput, MusicPort, QueueView } from '../../ports/music.ts'
+import { createAudioPlayer, createAudioResource } from '@discordjs/voice'
 import { SpotifyPlugin } from '@distube/spotify'
 import { DisTube } from 'distube'
 import { keyedQueue } from '../../core/async.ts'
@@ -74,6 +75,9 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
       },
     },
     logger,
+    welcomeFile: deps.config.welcomeFile,
+    createPlayer: createAudioPlayer,
+    createResource: createAudioResource,
   })
 
   function metadataPlugin(): MetadataCatalog {

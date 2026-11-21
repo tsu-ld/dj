@@ -1,6 +1,6 @@
 import type { CommandBus, CommandContext, CommandSpec } from './spec.ts'
 
-export interface Route {
+interface Route {
   readonly spec: CommandSpec
   readonly args: Record<string, unknown>
 }

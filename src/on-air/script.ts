@@ -4,12 +4,12 @@ import type { GuildSettings } from '../ports/settings.ts'
 import type { SongFacts } from '../ports/song-facts.ts'
 import type { Angle } from './angle.ts'
 import type { PlayedEntry } from './station.ts'
-import { dataBlock } from '../core/text.ts'
+import { cutAt, dataBlock } from '../core/text.ts'
 import { personaFor } from '../dj/prompts.ts'
 import { RADIO_LONG_CHARS, RADIO_SHORT_CHARS } from '../limits.ts'
 import { anniversaryOf, DAY_MS, freshNews } from './angle.ts'
 
-export interface OnAirInput {
+interface OnAirInput {
   readonly settings: GuildSettings
   readonly track: Track
   readonly long: boolean
@@ -65,7 +65,7 @@ export function lineLimit(long: boolean): number {
   return long ? RADIO_LONG_CHARS : RADIO_SHORT_CHARS
 }
 
-export function lineTarget(long: boolean): number {
+function lineTarget(long: boolean): number {
   return lineLimit(long) - TARGET_SLACK
 }
 
@@ -98,6 +98,10 @@ export function buildOnAirPrompt(input: OnAirInput): string {
   ].join('\n\n')
 }
 
+function titleOrUrl(song: Pick<Track, 'title' | 'url'>): string {
+  return song.title || song.url
+}
+
 function songName(title: string, artist: string | null): string {
   const name = title.trim() || 'Unknown song'
 
@@ -126,7 +130,7 @@ function entry(song: Song): string {
 
 function runLines(input: OnAirInput): string[] {
   const { track } = input
-  const lines = [`Playing now: ${songName(track.title || track.url, track.artist)}`]
+  const lines = [`Playing now: ${songName(titleOrUrl(track), track.artist)}`]
 
   if (track.fromRadio)
     lines.push('Who asked: nobody, it is your own pick')
@@ -144,7 +148,7 @@ function runLines(input: OnAirInput): string[] {
 
   const next = input.upcoming
     .slice(0, MAX_NEXT)
-    .map(song => entry({ ...song, title: song.title || song.url }))
+    .map(song => entry({ ...song, title: titleOrUrl(song) }))
 
   if (next.length > 0)
     lines.push(`Next up, in order: ${next.join(' | ')}`)
@@ -235,7 +239,7 @@ export function sanitizeLine(raw: unknown, maxChars: number): string | null {
   if (text.length <= maxChars)
     return spoken(text)
 
-  const cut = text.slice(0, maxChars)
+  const cut = cutAt(text, maxChars)
   const lastStop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '))
 
   if (lastStop > maxChars / 2)

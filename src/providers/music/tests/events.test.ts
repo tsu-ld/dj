@@ -1,16 +1,14 @@
 import type { Client } from 'discord.js'
 import type { DisTube } from 'distube'
-import type { Logger } from '../../../core/logger.ts'
 import type { QueueView } from '../../../ports/music.ts'
 import type { AudioEndReason, AudioHealth, AudioHealthSession } from '../audio-health.ts'
 import { EventEmitter } from 'node:events'
-import { expect, test } from 'bun:test'
+import { expect, jest, test } from 'bun:test'
 import { Events } from 'distube'
-import { logger } from '../../../core/logger.ts'
+import { captureLog, testTrack as track } from '../../../tests/fixtures.ts'
 import { audioHealth } from '../audio-health.ts'
 import { createEmitter } from '../emitter.ts'
 import { musicEvents } from '../events.ts'
-import { track } from './fakes.ts'
 
 class FakeStream extends EventEmitter {
   killed = 0
@@ -83,14 +81,7 @@ function fakeHealth() {
 }
 
 function wiring(player: ReturnType<typeof fakePlayer>, realHealth?: AudioHealth) {
-  const lines: Array<{ event: string, fields: Record<string, unknown> }> = []
-  const log: Logger = logger({
-    level: 'debug',
-    sink(line) {
-      const parsed = JSON.parse(line) as Record<string, unknown>
-      lines.push({ event: String(parsed.event), fields: parsed })
-    },
-  })
+  const log = captureLog()
   const { emitter } = createEmitter()
   const failures: string[] = []
   const failedSongs: Array<string | null> = []
@@ -111,19 +102,19 @@ function wiring(player: ReturnType<typeof fakePlayer>, realHealth?: AudioHealth)
     leave: () => {},
     viewOf: () => ({}) as QueueView,
     health: realHealth ?? health,
-    logger: log,
+    logger: log.logger,
   })
 
   return {
     events,
     emitter,
-    lines,
+    log,
     failures,
     failedSongs,
     started,
     ended,
-    has: (event: string): boolean => lines.some(line => line.event === event),
-    orphans: (): number => lines.filter(line => line.event === 'music.orphan_stream_failed').length,
+    has: (event: string): boolean => log.events.includes(event),
+    orphans: (): number => log.entries('music.orphan_stream_failed').length,
   }
 }
 
@@ -159,7 +150,7 @@ test('an ffmpeg exit that lost its listener is logged, not reported twice, and n
   expect(() => stream.emit('error', ffmpegExited())).not.toThrow()
   expect(engineSaw).toBe(0)
 
-  expect(harness.lines.find(line => line.event === 'music.orphan_stream_failed')?.fields.level).toBe('warn')
+  expect(harness.log.entries('music.orphan_stream_failed')[0]).toMatchObject({ level: 'warn' })
   expect(harness.failures).toEqual([])
   expect(harness.has('music.playback_error')).toBe(false)
   expect(harness.ended).toEqual([])
@@ -206,41 +197,30 @@ test('a stop clears the session, so the sample timer stops without a skip', () =
   const stream = new FakeStream()
   const queue = fakeQueue(stream)
   const player = fakePlayer(queue)
-  const summaries: Array<Record<string, unknown>> = []
-  const scheduled: Array<{ run: () => void, afterMs: number, cancelled: boolean }> = []
   const now = 0
+  const captured = captureLog()
   const health = audioHealth({
     clock: { now: () => now },
-    logger: logger({
-      level: 'debug',
-      now: () => now,
-      sink(line) {
-        const parsed = JSON.parse(line) as Record<string, unknown>
-
-        if (parsed.event === 'music.audio_health')
-          summaries.push(parsed)
-      },
-    }),
-    timer(run, afterMs) {
-      const entry = { run, afterMs, cancelled: false }
-
-      scheduled.push(entry)
-
-      return () => {
-        entry.cancelled = true
-      }
-    },
+    logger: captured.logger,
   })
   const harness = wiring(player, health)
-  const live = (): number => scheduled.filter(entry => !entry.cancelled).length
 
-  play(queue, player)
-  expect(live()).toBe(1)
+  jest.useFakeTimers()
 
-  harness.emitter.queueCleared({ guildId: 'g1', resetStation: true })
+  try {
+    expect(jest.getTimerCount()).toBe(0)
+    play(queue, player)
+    expect(jest.getTimerCount()).toBe(1)
 
-  expect(live()).toBe(0)
-  expect(summaries.map(fields => fields.reason)).toEqual(['stopped'])
+    harness.emitter.emit('queueCleared', { guildId: 'g1', resetStation: true })
+
+    expect(jest.getTimerCount()).toBe(0)
+    expect(captured.entries('music.audio_health')).toEqual([expect.objectContaining({ reason: 'stopped' })])
+  }
+  finally {
+    health.dispose()
+    jest.useRealTimers()
+  }
 })
 
 test('a finished, cleared or disconnected queue prunes its streams but keeps listening', () => {
@@ -260,7 +240,7 @@ test('a finished, cleared or disconnected queue prunes its streams but keeps lis
   expect(stream.listenerCount('error')).toBe(1)
 
   play(queue, player)
-  harness.emitter.queueCleared({ guildId: 'g1', resetStation: false })
+  harness.emitter.emit('queueCleared', { guildId: 'g1', resetStation: false })
   expect(() => stream.emit('error', ffmpegExited())).not.toThrow()
   expect(harness.orphans()).toBe(2)
   expect(stream.listenerCount('error')).toBe(1)
@@ -304,7 +284,7 @@ test('a voice error after the engine dropped its listeners is logged, never thro
   expect(queue.voice.listenerCount('error')).toBe(1)
 
   expect(() => queue.voice.emit('error', ffmpegExited())).not.toThrow()
-  expect(harness.lines.find(line => line.event === 'music.voice_error')?.fields.level).toBe('warn')
+  expect(harness.log.entries('music.voice_error')[0]).toMatchObject({ level: 'warn' })
   expect(harness.failures).toEqual([])
 })
 

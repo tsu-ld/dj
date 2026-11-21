@@ -1,5 +1,6 @@
 import type { GuildMember, Message } from 'discord.js'
 import type { CommandBus, CommandContext, CommandUi } from '../commands/spec.ts'
+import type { Clock } from '../core/clock.ts'
 import type { Logger } from '../core/logger.ts'
 import type { DecisionOption, DecisionPort } from '../ports/decision.ts'
 import type { MusicPort } from '../ports/music.ts'
@@ -17,7 +18,7 @@ export interface DjAgent {
   ask: (input: { request: string, context: CommandContext, onRefused?: () => void }) => Promise<string | null>
 }
 
-export interface MessageHandlerDeps {
+interface MessageHandlerDeps {
   readonly bus: CommandBus
   readonly music: MusicPort
   readonly settings: SettingsPort
@@ -26,6 +27,7 @@ export interface MessageHandlerDeps {
   readonly decision: DecisionPort
   readonly agent: DjAgent | null
   readonly logger: Logger
+  readonly clock: Clock
   readonly cooldowns: { readonly plainRequestMs: number, readonly djRequestMs: number }
 }
 
@@ -40,8 +42,8 @@ const DJ_OPTION: DecisionOption = {
 }
 
 export function messageHandler(deps: MessageHandlerDeps): (message: Message) => Promise<void> {
-  const plainRequests = cooldown(deps.cooldowns.plainRequestMs)
-  const djRequests = cooldown(deps.cooldowns.djRequestMs)
+  const plainRequests = cooldown(deps.cooldowns.plainRequestMs, deps.clock)
+  const djRequests = cooldown(deps.cooldowns.djRequestMs, deps.clock)
   const djInFlight = new Set<string>()
 
   const inVoice = (guildId: string): boolean => deps.music.status(guildId) !== null
@@ -129,16 +131,12 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
     }
     catch (error) {
       deps.logger.error('discord.dj_failed', error)
-      await message.reply(MESSAGES.djError).catch(() => {})
+      await message.reply(MESSAGES.djError).catch(replyError => deps.logger.warn('discord.reply_failed', { error: errorMessage(replyError) }))
     }
     finally {
       djInFlight.delete(channelId)
       djRequests.mark(channelId)
     }
-  }
-
-  async function playQuery(text: string, context: CommandContext): Promise<void> {
-    await deps.bus.run('query', { query: text }, context)
   }
 
   async function runRoute(text: string, choice: string | null, context: CommandContext, fallback: () => Promise<void>): Promise<void> {
@@ -160,26 +158,14 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
   async function handlePlain(message: Message<true>, member: GuildMember, settings: GuildSettings, text: string): Promise<void> {
     const choice = await decide(text, contextFor(message, member, settings), [...deps.bus.routes, QUERY_OPTION, DJ_OPTION])
     const context = contextFor(message, member, settings)
-
-    if (choice === null || choice === 'query') {
-      await playQuery(text, context)
-
-      return
+    const play = async (): Promise<void> => {
+      await deps.bus.run('query', { query: text }, context)
     }
 
-    if (choice === 'dj') {
-      if (!deps.agent) {
-        await playQuery(text, context)
-
-        return
-      }
-
-      await askDj(message, text, context)
-
-      return
-    }
-
-    await runRoute(text, choice, context, async () => deps.agent ? askDj(message, text, context) : playQuery(text, context))
+    if (choice === null || choice === 'query')
+      await play()
+    else
+      await runRoute(text, choice, context, deps.agent ? async () => askDj(message, text, context) : play)
   }
 
   return async (message) => {
@@ -224,7 +210,7 @@ export function messageHandler(deps: MessageHandlerDeps): (message: Message) => 
     }
     catch (error) {
       deps.logger.error('discord.message_failed', error)
-      await message.reply(MESSAGES.genericError).catch(() => {})
+      await message.reply(MESSAGES.genericError).catch(replyError => deps.logger.warn('discord.reply_failed', { error: errorMessage(replyError) }))
     }
 
     const view = deps.music.view(message.guildId)

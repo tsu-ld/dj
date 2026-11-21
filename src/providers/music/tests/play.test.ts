@@ -5,10 +5,11 @@ import { ChannelType } from 'discord.js'
 import { keyedQueue } from '../../../core/async.ts'
 import { MAX_QUEUE_SIZE } from '../../../limits.ts'
 import { MESSAGES } from '../../../messages.ts'
+import { captureLog, silentLog as log } from '../../../tests/fixtures.ts'
 import { MusicCatalog } from '../catalog.ts'
 import { musicPlay } from '../play.ts'
 import { assertYoutubeUrl } from '../policy.ts'
-import { extractionStub, log, memberOf, rejection, streamStub } from './fakes.ts'
+import { extractionStub, memberOf, rejection, streamStub } from './fakes.ts'
 
 function station(resolve: (input: string) => void, queued = 0): { play: ReturnType<typeof musicPlay>, calls: string[] } {
   const calls: string[] = []
@@ -34,8 +35,8 @@ function station(resolve: (input: string) => void, queued = 0): { play: ReturnTy
   return { play, calls }
 }
 
-function request(value: string): Parameters<ReturnType<typeof musicPlay>>[0] {
-  const guild = { id: 'g1', members: { me: { voice: null } } }
+function request(value: string, me: unknown = { voice: null }): Parameters<ReturnType<typeof musicPlay>>[0] {
+  const guild = { id: 'g1', members: { me } }
   const voiceChannel = { type: ChannelType.GuildVoice, guild, permissionsFor: () => ({ has: () => true }) } as unknown as VoiceBasedChannel
 
   return {
@@ -66,4 +67,32 @@ test('a full queue is refused before the bot joins', async () => {
 
   expect(await rejection(async () => play(request('cumbia')))).toBe(MESSAGES.queueFull(MAX_QUEUE_SIZE))
   expect(calls).toEqual([])
+})
+
+test('a failed disconnect after a failed play is logged instead of left unhandled', async () => {
+  const captured = captureLog()
+  const play = musicPlay({
+    player: {
+      getQueue: () => undefined,
+      async play() {
+        throw new Error('extractor crashed')
+      },
+    } as unknown as DisTube,
+    catalog: new MusicCatalog({ extraction: extractionStub(), stream: streamStub(), logger: log }),
+    audio: { playWelcome: async () => {} },
+    mutations: keyedQueue(),
+    logger: captured.logger,
+  })
+  const me = {
+    voice: {
+      async disconnect() {
+        throw new Error('gateway closed')
+      },
+    },
+  }
+
+  expect(await rejection(async () => play(request('cumbia', me)))).toBe(MESSAGES.playbackError)
+  await new Promise(resolve => setImmediate(resolve))
+
+  expect(captured.entries('music.disconnect_failed')).toEqual([expect.objectContaining({ level: 'warn', error: 'gateway closed' })])
 })

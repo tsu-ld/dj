@@ -14,6 +14,7 @@ export interface AppConfig {
     readonly cacheMaxBytes: number
     readonly cacheMaxAgeMs: number
     readonly extractorCommand: string
+    readonly welcomeFile: string
     readonly metadata: { readonly enabled: true, readonly clientId: string, readonly clientSecret: string } | { readonly enabled: false }
   }
   readonly language: {
@@ -112,9 +113,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     issues.push('DISCORD_TOKEN is required.')
 
   const logLevelRaw = text(env, 'LOG_LEVEL') ?? 'info'
-  const logLevel = isLogLevel(logLevelRaw) ? logLevelRaw : 'info'
+  let logLevel: LogLevel = 'info'
 
-  if (!isLogLevel(logLevelRaw))
+  if (isLogLevel(logLevelRaw))
+    logLevel = logLevelRaw
+  else
     issues.push(`LOG_LEVEL must be one of ${[...LOG_LEVELS].join(', ')}.`)
 
   const languageUrl = httpUrl(env, 'LLM_BASE_URL', issues)
@@ -177,6 +180,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       cacheMaxBytes: 512 * 1024 * 1024,
       cacheMaxAgeMs: 86_400_000,
       extractorCommand: text(env, 'EXTRACTOR_COMMAND') ?? 'yt-dlp',
+      welcomeFile: resolve(import.meta.dirname, '../assets/welcome.mp3'),
       metadata: musicMetadata,
     },
     language,

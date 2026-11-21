@@ -1,27 +1,28 @@
 import { describe, expect, test } from 'bun:test'
+import { testClock } from '../../tests/fixtures.ts'
 import { ttlMap } from '../ttl-map.ts'
 
 describe('ttlMap', () => {
   test('expires entries after the ttl', () => {
-    let now = 0
-    const map = ttlMap<string, number>({ ttlMs: 100, max: 10, now: () => now })
+    const clock = testClock(0)
+    const map = ttlMap<string, number>({ ttlMs: 100, max: 10, clock })
 
     map.set('a', 1)
     expect(map.get('a')).toBe(1)
 
-    now = 101
+    clock.advance(101)
 
     expect(map.get('a')).toBeUndefined()
   })
 
   test('evicts the oldest entry when the cap is reached', () => {
-    let now = 0
-    const map = ttlMap<string, number>({ ttlMs: 1000, max: 2, now: () => now })
+    const clock = testClock(0)
+    const map = ttlMap<string, number>({ ttlMs: 1000, max: 2, clock })
 
     map.set('a', 1)
-    now++
+    clock.advance(1)
     map.set('b', 2)
-    now++
+    clock.advance(1)
     map.set('c', 3)
 
     expect(map.get('a')).toBeUndefined()
@@ -30,15 +31,15 @@ describe('ttlMap', () => {
   })
 
   test('resets the order when a key is written again', () => {
-    let now = 0
-    const map = ttlMap<string, number>({ ttlMs: 1000, max: 2, now: () => now })
+    const clock = testClock(0)
+    const map = ttlMap<string, number>({ ttlMs: 1000, max: 2, clock })
 
     map.set('a', 1)
-    now++
+    clock.advance(1)
     map.set('b', 2)
-    now++
+    clock.advance(1)
     map.set('a', 3)
-    now++
+    clock.advance(1)
     map.set('c', 4)
 
     expect(map.get('a')).toBe(3)

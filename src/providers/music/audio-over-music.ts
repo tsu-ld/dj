@@ -1,29 +1,25 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { Readable } from 'node:stream'
 import type { Logger } from '../../core/logger.ts'
-import type { AudioPlayerLike, MusicAudio, VoiceAccess, VoiceSession } from './audio-types.ts'
+import type { AudioPlayerLike, MusicAudio, VoiceAccess, VoiceConnectionLike, VoiceSession } from './audio-types.ts'
 import { createReadStream, existsSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { AudioPlayerStatus, createAudioPlayer, createAudioResource, VoiceConnectionStatus } from '@discordjs/voice'
+import { AudioPlayerStatus, VoiceConnectionStatus } from '@discordjs/voice'
 import { errorMessage } from '../../core/errors.ts'
-import { waitForAudio } from './audio-wait.ts'
 
 const SPEECH_TIMEOUT_MS = 30_000
 const INTRO_TIMEOUT_MS = 30_000
-const WELCOME_FILE = resolve(import.meta.dirname, '../../../assets/welcome.mp3')
+
+type AudioOutcome = 'idle' | 'error' | 'destroyed' | 'timeout' | 'aborted'
 
 export function audioOverMusic(deps: {
   access: VoiceAccess
   logger: Logger
-  welcomeFile?: string
-  createPlayer?: () => AudioPlayerLike
-  createResource?: (stream: Readable) => unknown
+  welcomeFile: string
+  createPlayer: () => AudioPlayerLike
+  createResource: (stream: Readable) => unknown
 }): MusicAudio {
-  const { access, logger } = deps
-  const createResource = deps.createResource ?? ((stream: Readable): unknown => createAudioResource(stream))
-  const welcomeFile = deps.welcomeFile ?? WELCOME_FILE
+  const { access, logger, welcomeFile, createPlayer, createResource } = deps
   const hasWelcome = existsSync(welcomeFile)
-  const createPlayer = deps.createPlayer ?? ((): AudioPlayerLike => createAudioPlayer())
   const speaking = new Set<string>()
   const greeted = new Set<string>()
   const pending = new Set<Promise<unknown>>()
@@ -182,4 +178,57 @@ export function audioOverMusic(deps: {
   }
 
   return { playClip, playWelcome, dispose }
+}
+
+async function waitForAudio(
+  player: AudioPlayerLike,
+  connection: VoiceConnectionLike,
+  timeoutMs: number,
+  signal: AbortSignal,
+): Promise<AudioOutcome> {
+  return new Promise((resolveOutcome) => {
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    function finish(outcome: AudioOutcome): void {
+      if (settled)
+        return
+
+      settled = true
+      clearTimeout(timer)
+      player.off(AudioPlayerStatus.Idle, onIdle)
+      player.off('error', onError)
+      connection.off(VoiceConnectionStatus.Destroyed, onDestroyed)
+      signal.removeEventListener('abort', onAbort)
+      resolveOutcome(outcome)
+    }
+
+    function onIdle(): void {
+      finish('idle')
+    }
+
+    function onError(): void {
+      finish('error')
+    }
+
+    function onDestroyed(): void {
+      finish('destroyed')
+    }
+
+    function onAbort(): void {
+      finish('aborted')
+    }
+
+    timer = setTimeout(() => finish('timeout'), timeoutMs)
+
+    player.on(AudioPlayerStatus.Idle, onIdle)
+    player.on('error', onError)
+    connection.on(VoiceConnectionStatus.Destroyed, onDestroyed)
+    signal.addEventListener('abort', onAbort, { once: true })
+
+    if (signal.aborted)
+      onAbort()
+    else if (connection.state.status === VoiceConnectionStatus.Destroyed)
+      onDestroyed()
+  })
 }

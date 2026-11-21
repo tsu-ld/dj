@@ -7,6 +7,7 @@ import { ChannelType } from 'discord.js'
 import { keyedQueue } from '../../../core/async.ts'
 import { isPositionInQueue, MAX_QUEUE_SIZE, queueRoom } from '../../../limits.ts'
 import { MESSAGES } from '../../../messages.ts'
+import { silentLog as log, testTrack as track } from '../../../tests/fixtures.ts'
 import { MusicCatalog } from '../catalog.ts'
 import { musicControls } from '../controls.ts'
 import { createEmitter } from '../emitter.ts'
@@ -19,7 +20,7 @@ import {
   skipSong,
 } from '../queue.ts'
 import { voiceChannelProblem } from '../voice.ts'
-import { extractionStub, log, memberOf, rejection, streamStub, track } from './fakes.ts'
+import { extractionStub, memberOf, rejection, streamStub } from './fakes.ts'
 
 test('queue positions are one-based and bounded by the queue', () => {
   expect(isPositionInQueue(2, 1)).toBe(true)
@@ -408,6 +409,7 @@ test('removing a position outside the queue is refused and removes nothing', asy
     expect(await rejection(async () => controls.remove('guild-1', position, listener))).toBe(MESSAGES.removeOutOfRange)
 
   expect(order).toEqual([])
+  expect(controls.view('guild-1')?.size).toBe(3)
 })
 
 test('removing the playing song reports a skip; removing a waiting song does not', async () => {

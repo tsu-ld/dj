@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { testClock } from '../../tests/fixtures.ts'
 import { circuitBreaker, keyedQueue, withTimeout } from '../async.ts'
 import { TimeoutError } from '../errors.ts'
 
@@ -37,14 +38,14 @@ describe('keyedQueue', () => {
 
 describe('circuitBreaker', () => {
   test('opens on a failure and allows one trial after the cooldown', () => {
-    let now = 0
-    const breaker = circuitBreaker({ cooldownMs: 100, now: () => now })
+    const clock = testClock(0)
+    const breaker = circuitBreaker({ cooldownMs: 100, clock })
 
     expect(breaker.allow()).toBe(true)
     breaker.failure()
     expect(breaker.allow()).toBe(false)
 
-    now = 101
+    clock.advance(101)
 
     expect(breaker.allow()).toBe(true)
     expect(breaker.allow()).toBe(false)

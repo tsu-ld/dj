@@ -4,9 +4,11 @@ import { EventEmitter } from 'node:events'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from 'bun:test'
+import { afterEach, expect, test } from 'bun:test'
+import { silentLog as log, removeTempDirs, tempDir } from '../../../tests/fixtures.ts'
 import { audioOverMusic } from '../audio-over-music.ts'
-import { log, tempDir } from './fakes.ts'
+
+afterEach(removeTempDirs)
 
 interface FakePlayer extends AudioPlayerLike {
   readonly pauses: number
@@ -125,25 +127,32 @@ function accessOf(
   }
 }
 
-function audioWith(deps: Omit<Parameters<typeof audioOverMusic>[0], 'logger' | 'createResource'>): ReturnType<typeof audioOverMusic> {
-  return audioOverMusic({ logger: log, createResource: () => ({}), ...deps })
+type AudioDeps = Parameters<typeof audioOverMusic>[0]
+
+function audioWith(deps: Pick<AudioDeps, 'access'> & Partial<Pick<AudioDeps, 'welcomeFile' | 'createPlayer'>>): ReturnType<typeof audioOverMusic> {
+  return audioOverMusic({
+    logger: log,
+    welcomeFile: join(tmpdir(), 'dj-no-welcome-in-this-test.mp3'),
+    createPlayer: () => fakePlayer(),
+    createResource: () => ({}),
+    ...deps,
+  })
 }
 
-function fakeChannel(id = 'guild-1'): VoiceBasedChannel {
-  return { guild: { id } } as unknown as VoiceBasedChannel
+function fakeChannel(): VoiceBasedChannel {
+  return { guild: { id: 'guild-1' } } as unknown as VoiceBasedChannel
 }
 
-async function tempAudio(): Promise<{ file: string, cleanup: () => Promise<void> }> {
-  const { dir, cleanup } = await tempDir()
-  const file = join(dir, 'line.mp3')
+async function tempAudio(): Promise<string> {
+  const file = join(await tempDir(), 'line.mp3')
 
   await writeFile(file, 'fake audio')
 
-  return { file, cleanup }
+  return file
 }
 
 test('the line takes the connection and hands it back to the music', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const speech = fakePlayer({ onPlay: player => queueMicrotask(() => player.emit('idle')) })
   const audio = audioWith({
@@ -160,12 +169,11 @@ test('the line takes the connection and hands it back to the music', async () =>
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('without a voice connection nothing is spoken', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const audio = audioWith({ access: accessOf(null) })
 
   try {
@@ -173,12 +181,11 @@ test('without a voice connection nothing is spoken', async () => {
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('an empty queue never gets a line', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, { songs: [], paused: false }),
@@ -190,7 +197,6 @@ test('an empty queue never gets a line', async () => {
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
@@ -211,7 +217,7 @@ test('a missing clip is skipped without taking the process down', async () => {
 })
 
 test('a paused queue is left alone', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, { songs: [{ name: 'Tema' }], paused: true }),
@@ -223,12 +229,11 @@ test('a paused queue is left alone', async () => {
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('a connection that dies mid-line is not given back to the music', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const speech = fakePlayer({ onStop: player => player.emit('idle') })
   const audio = audioWith({
@@ -247,12 +252,11 @@ test('a connection that dies mid-line is not given back to the music', async () 
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('a pause pressed during the line is applied when the music is back', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const queue = { songs: [{ name: 'Tema' }], paused: false }
   let release = (): void => {}
@@ -281,12 +285,11 @@ test('a pause pressed during the line is applied when the music is back', async 
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('resuming during the line keeps the pause from coming back', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const queue = { songs: [{ name: 'Tema' }], paused: false }
   let release = (): void => {}
@@ -314,12 +317,11 @@ test('resuming during the line keeps the pause from coming back', async () => {
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('a second line does not cut the one already on air', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   let release = (): void => {}
   const speech = fakePlayer({
@@ -344,12 +346,11 @@ test('a second line does not cut the one already on air', async () => {
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('a failed clip settles on the player error instead of waiting for idle', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const speech = fakePlayer({ onPlay: player => player.emit('error', new Error('boom')) })
   const audio = audioWith({
@@ -363,12 +364,11 @@ test('a failed clip settles on the player error instead of waiting for idle', as
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('dispose settles a clip that never reaches idle', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const speech = fakePlayer()
   const audio = audioWith({
@@ -376,21 +376,16 @@ test('dispose settles a clip that never reaches idle', async () => {
     createPlayer: () => speech,
   })
 
-  try {
-    const clip = audio.playClip('g10', file)
+  const clip = audio.playClip('g10', file)
 
-    await new Promise(resolve => setTimeout(resolve, 10))
-    await audio.dispose()
+  await new Promise(resolve => setTimeout(resolve, 10))
+  await audio.dispose()
 
-    expect(await clip).toBe(false)
-  }
-  finally {
-    await cleanup()
-  }
+  expect(await clip).toBe(false)
 })
 
 test('the welcome intro plays once per guild and hands the connection back', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const intro = fakePlayer({ onPlay: player => queueMicrotask(() => player.emit('idle')) })
   let joins = 0
@@ -413,12 +408,11 @@ test('the welcome intro plays once per guild and hands the connection back', asy
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('without a welcome file the bot joins nothing', async () => {
-  const { dir, cleanup } = await tempDir()
+  const dir = await tempDir()
   let joins = 0
   const audio = audioWith({
     access: accessOf(null, undefined, async () => {
@@ -436,12 +430,11 @@ test('without a welcome file the bot joins nothing', async () => {
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('a destroyed connection during the intro is not given to the music', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   const intro = fakePlayer()
   const audio = audioWith({
@@ -461,12 +454,11 @@ test('a destroyed connection during the intro is not given to the music', async 
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })
 
 test('a failed join does not use up the greeting', async () => {
-  const { file, cleanup } = await tempAudio()
+  const file = await tempAudio()
   const session = fakeConnection()
   let joins = 0
   const audio = audioWith({
@@ -490,6 +482,5 @@ test('a failed join does not use up the greeting', async () => {
   }
   finally {
     await audio.dispose()
-    await cleanup()
   }
 })

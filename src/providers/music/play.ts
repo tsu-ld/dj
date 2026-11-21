@@ -4,7 +4,7 @@ import type { Logger } from '../../core/logger.ts'
 import type { PlayRequest, PlayResult } from '../../ports/music.ts'
 import type { MusicAudio } from './audio-types.ts'
 import type { MusicCatalog } from './catalog.ts'
-import { UserError } from '../../core/errors.ts'
+import { errorMessage, UserError } from '../../core/errors.ts'
 import { MAX_QUEUE_SIZE, queueRoom } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
 import { isSupportedMusicUrl, isUrlLike, PolicyError } from './policy.ts'
@@ -35,11 +35,16 @@ export function musicPlay(deps: {
     if (error instanceof PolicyError && error.code === 'UNSUPPORTED_URL')
       return new UserError(MESSAGES.unsupportedUrl)
 
-    logger.error('music.play_failed', error, { guildId: request.voiceChannel.guild.id })
+    const guildId = request.voiceChannel.guild.id
+
+    logger.error('music.play_failed', error, { guildId })
 
     // the bot has already joined voice, and the SDK does not leave when play() fails
-    if (request.kind === 'text' && !player.getQueue(request.voiceChannel.guild.id))
-      void request.voiceChannel.guild.members.me?.voice?.disconnect()
+    if (request.kind === 'text' && !player.getQueue(guildId)) {
+      void request.voiceChannel.guild.members.me?.voice?.disconnect().catch((error: unknown) => {
+        logger.warn('music.disconnect_failed', { guildId, error: errorMessage(error) })
+      })
+    }
 
     return new UserError(MESSAGES.playbackError)
   }

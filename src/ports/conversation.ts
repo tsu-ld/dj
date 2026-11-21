@@ -10,7 +10,7 @@ export interface ToolCall {
   readonly arguments: string
 }
 
-export type ChatRole = 'user' | 'assistant' | 'tool'
+type ChatRole = 'user' | 'assistant' | 'tool'
 
 export interface ChatMessage {
   readonly role: ChatRole

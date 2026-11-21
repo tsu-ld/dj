@@ -1,11 +1,8 @@
 import type { ChatMessage } from '../../ports/conversation.ts'
 import { describe, expect, test } from 'bun:test'
 import { HISTORY_MAX_MESSAGES } from '../../limits.ts'
-import {
-  conversationHistory,
-  trimToWholeExchanges,
-} from '../history.ts'
-import { testClock } from './support.ts'
+import { testClock } from '../../tests/fixtures.ts'
+import { conversationHistory } from '../history.ts'
 
 function exchange(number: number): ChatMessage[] {
   return [
@@ -34,11 +31,19 @@ function hasOrphanToolResult(messages: readonly ChatMessage[]): boolean {
   return false
 }
 
-describe('trimToWholeExchanges', () => {
+function rememberedAfter(messages: readonly ChatMessage[]): readonly ChatMessage[] {
+  const history = conversationHistory({ clock: testClock() })
+
+  history.remember('channel-trim', 'user-a', messages)
+
+  return history.recall('channel-trim', 'user-a')
+}
+
+describe('a remembered conversation is trimmed to whole exchanges', () => {
   test('a conversation under the cap is kept whole', () => {
     const messages = [...exchange(1), ...exchange(2)]
 
-    expect(trimToWholeExchanges(messages)).toEqual(messages)
+    expect(rememberedAfter(messages)).toEqual(messages)
   })
 
   test('trimming never leaves a tool result without its call', () => {
@@ -52,12 +57,12 @@ describe('trimToWholeExchanges', () => {
     ]
 
     expect(hasOrphanToolResult(messages.slice(-HISTORY_MAX_MESSAGES))).toBe(true)
-    expect(hasOrphanToolResult(trimToWholeExchanges(messages))).toBe(false)
+    expect(hasOrphanToolResult(rememberedAfter(messages))).toBe(false)
   })
 
   test('a trimmed conversation starts at a request', () => {
     const messages = [...exchange(1), ...exchange(2), ...exchange(3), ...exchange(4), ...exchange(5)]
-    const trimmed = trimToWholeExchanges(messages)
+    const trimmed = rememberedAfter(messages)
 
     expect(trimmed[0]?.role).toBe('user')
     expect(trimmed).toHaveLength(HISTORY_MAX_MESSAGES)
@@ -65,7 +70,7 @@ describe('trimToWholeExchanges', () => {
 
   test('the most recent exchange always survives', () => {
     const messages = [...exchange(1), ...exchange(2), ...exchange(3), ...exchange(4), ...exchange(5)]
-    const trimmed = trimToWholeExchanges(messages)
+    const trimmed = rememberedAfter(messages)
 
     expect(trimmed.at(-1)).toEqual({ role: 'assistant', content: 'listo 5' })
   })
@@ -76,7 +81,7 @@ describe('trimToWholeExchanges', () => {
       { role: 'assistant', content: 'listo' },
     ]
 
-    expect(trimToWholeExchanges(messages)).toEqual([])
+    expect(rememberedAfter(messages)).toEqual([])
   })
 })
 

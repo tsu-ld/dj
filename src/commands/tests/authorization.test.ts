@@ -1,9 +1,9 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
+import { fakeContext, fakeMember, fakeMusic, fakeUi, fakeVoice, silentLog as log, testView as view } from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
-import { fakeContext, fakeMember, fakeMusic, fakeUi, fakeVoice, log, view } from './fakes.ts'
 
 const CONTROLS: readonly (readonly [string, Record<string, unknown>])[] = [
   ['pause', {}],

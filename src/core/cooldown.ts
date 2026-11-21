@@ -1,13 +1,14 @@
+import type { Clock } from './clock.ts'
 import { ttlMap } from './ttl-map.ts'
 
-export interface Cooldown {
+interface Cooldown {
   has: (key: string) => boolean
   take: (key: string) => boolean
   mark: (key: string) => void
 }
 
-export function cooldown(ms: number, options: { now?: () => number } = {}): Cooldown {
-  const entries = ttlMap<string, true>({ ttlMs: ms, max: 1000, now: options.now })
+export function cooldown(ms: number, clock: Clock): Cooldown {
+  const entries = ttlMap<string, true>({ ttlMs: ms, max: 1000, clock })
 
   return {
     has: key => entries.get(key) === true,

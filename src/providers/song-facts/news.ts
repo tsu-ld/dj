@@ -1,4 +1,5 @@
 import type { SongNews } from '../../ports/song-facts.ts'
+import { NEWS_MAX_AGE_MS } from '../../limits.ts'
 import { containsWords, normalizeName } from './title.ts'
 
 const ITEM = /<item>([\s\S]*?)<\/item>/g
@@ -6,7 +7,6 @@ const TITLE = /<title>([\s\S]*?)<\/title>/
 const PUB_DATE = /<pubDate>([\s\S]*?)<\/pubDate>/
 const SOURCE = /<source[^>]*>([\s\S]*?)<\/source>/
 const MAX_ITEMS = 3
-const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 
 // Google News answers a one-word name in its everyday sense ("Queen" a monarch, "Air" a gas),
 // so such a name needs one of these words in the headline.
@@ -145,7 +145,7 @@ export function parseNews(xml: string, artist: string, now: number): SongNews[] 
 
     const publishedAt = Date.parse(published)
 
-    if (!Number.isFinite(publishedAt) || now - publishedAt > MAX_AGE_MS)
+    if (!Number.isFinite(publishedAt) || now - publishedAt > NEWS_MAX_AGE_MS)
       continue
 
     const source = textOf(block, SOURCE)

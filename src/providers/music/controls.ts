@@ -2,13 +2,13 @@ import type { DisTube, Queue } from 'distube'
 import type { KeyedQueue } from '../../core/async.ts'
 import type { Listener, MusicPort, PlaybackStatus, QueueView } from '../../ports/music.ts'
 import type { MusicCatalog } from './catalog.ts'
-import type { MusicEmitter } from './types.ts'
+import type { MusicEmitter } from './emitter.ts'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { AudioPlayerStatus } from '@discordjs/voice'
 import { UserError } from '../../core/errors.ts'
 import { MESSAGES } from '../../messages.ts'
-import { removeSongAt, skipSong } from './queue.ts'
+import { addressOf, removeSongAt, skipSong } from './queue.ts'
 
 type Controls = Pick<MusicPort, 'pause' | 'resume' | 'toggle' | 'skip' | 'stop' | 'shuffle' | 'remove' | 'radio' | 'seek' | 'view' | 'status'>
 
@@ -33,11 +33,7 @@ export function musicControls(deps: {
   }
 
   function emitState(queue: Queue): void {
-    emitter.stateChanged({
-      guildId: queue.id,
-      view: viewOf(queue),
-      textChannel: queue.textChannel ?? null,
-    })
+    emitter.emit('stateChanged', { ...addressOf(queue), view: viewOf(queue) })
   }
 
   function status(guildId: string): PlaybackStatus | null {
@@ -85,24 +81,20 @@ export function musicControls(deps: {
     return !url.startsWith('file://') || existsSync(fileURLToPath(url))
   }
 
-  function emitSkipped(queue: Queue, by: Listener): void {
+  async function skipCurrent(queue: Queue, by: Listener): Promise<void> {
     const current = queue.songs[0]
 
-    if (!current)
-      return
+    if (current)
+      emitter.emit('trackSkipped', { guildId: queue.id, track: catalog.trackOf(current), by })
 
-    emitter.trackSkipped({
-      guildId: queue.id,
-      track: catalog.trackOf(current),
-      by,
-    })
+    await skipSong(queue, async () => clear(queue, false))
   }
 
   async function clear(queue: Queue, resetStation: boolean): Promise<void> {
     // the SDK's queue.stop() neither disconnects nor emits FINISH
     await queue.stop()
     leave(queue.id)
-    emitter.queueCleared({ guildId: queue.id, resetStation })
+    emitter.emit('queueCleared', { guildId: queue.id, resetStation })
   }
 
   return {
@@ -140,8 +132,7 @@ export function musicControls(deps: {
       await mutations.run(guildId, async () => {
         const queue = requireQueue(guildId)
 
-        emitSkipped(queue, by)
-        await skipSong(queue, async () => clear(queue, false))
+        await skipCurrent(queue, by)
       })
     },
     async stop(guildId, options) {
@@ -170,10 +161,7 @@ export function musicControls(deps: {
 
         const removed = catalog.trackOf(song).title
 
-        await removeSongAt(queue, position, async () => {
-          emitSkipped(queue, by)
-          await skipSong(queue, async () => clear(queue, false))
-        })
+        await removeSongAt(queue, position, async () => skipCurrent(queue, by))
 
         if (player.getQueue(guildId) === queue)
           emitState(queue)

@@ -33,7 +33,7 @@ export function pageSummaryUrl(key: string): string {
   return `${SUMMARY_URL}/${encodeURIComponent(key)}`
 }
 
-export interface PageHit {
+interface PageHit {
   readonly key: string
   readonly title: string
 }

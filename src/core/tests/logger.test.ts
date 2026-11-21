@@ -1,10 +1,11 @@
 import type { LogLevel } from '../logger.ts'
 import { describe, expect, test } from 'bun:test'
+import { testClock } from '../../tests/fixtures.ts'
 import { logger } from '../logger.ts'
 
 function capture(level: LogLevel = 'debug') {
   const lines: string[] = []
-  const log = logger({ level, sink: line => lines.push(line), now: () => 0 })
+  const log = logger({ level, clock: testClock(0), out: { write: text => lines.push(text) } })
 
   return { log, lines, parsed: () => lines.map(line => JSON.parse(line) as Record<string, unknown>) }
 }

@@ -1,7 +1,7 @@
 import type { ProviderFailure } from '../../core/errors.ts'
 import { ProviderError } from '../../core/errors.ts'
 import { isRecord, parseJson } from '../../core/json.ts'
-import { MAX_ERROR_BODY } from '../http-failure.ts'
+import { MAX_ERROR_BODY } from '../endpoint.ts'
 
 const API_BASE = 'https://api.elevenlabs.io/v1'
 const OUTPUT_FORMAT = 'mp3_44100_128'
@@ -16,7 +16,7 @@ export interface SpeechUsage {
   readonly limit: number
 }
 
-export interface SpeechClientConfig {
+interface SpeechClientConfig {
   readonly apiKey: string
   readonly voiceId: string
   readonly model: string
@@ -32,13 +32,13 @@ function detailCode(detail: unknown, key: 'code' | 'status'): string | null {
   return typeof value === 'string' ? value : null
 }
 
-export function isAuthFailure(status: number, detail: unknown): boolean {
+function isAuthFailure(status: number, detail: unknown): boolean {
   return status === 403
     || AUTH_FAILURES.has(detailCode(detail, 'code') ?? '')
     || AUTH_FAILURES.has(detailCode(detail, 'status') ?? '')
 }
 
-export function failureFor(status: number, detail: unknown): ProviderFailure {
+function failureFor(status: number, detail: unknown): ProviderFailure {
   if (isAuthFailure(status, detail))
     return 'fatal'
 

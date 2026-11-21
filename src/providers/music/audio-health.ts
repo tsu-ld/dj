@@ -20,16 +20,6 @@ export interface AudioHealthSession {
 
 export type AudioEndReason = 'finished' | 'skipped' | 'stopped' | 'error'
 
-type Timer = (run: () => void, afterMs: number) => () => void
-
-const systemTimer: Timer = (run, afterMs) => {
-  const handle = setTimeout(run, afterMs)
-
-  handle.unref()
-
-  return () => clearTimeout(handle)
-}
-
 export interface AudioHealth {
   start: (session: AudioHealthSession) => void
   end: (guildId: string, reason: AudioEndReason) => void
@@ -56,11 +46,10 @@ function freshest(current: number, value: number | undefined): number {
   return Math.max(current, Math.round(value))
 }
 
-export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer }): AudioHealth {
+export function audioHealth(deps: { clock: Clock, logger: Logger }): AudioHealth {
   const { clock, logger } = deps
-  const timer = deps.timer ?? systemTimer
   const entries = new Map<string, Entry>()
-  let cancel: (() => void) | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
   let dueAt = 0
   let lastStallLogAt = Number.NEGATIVE_INFINITY
 
@@ -85,11 +74,12 @@ export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer 
 
   function schedule(): void {
     dueAt = clock.now() + SAMPLE_MS
-    cancel = timer(tick, SAMPLE_MS)
+    timer = setTimeout(tick, SAMPLE_MS)
+    timer.unref()
   }
 
   function tick(): void {
-    cancel = null
+    timer = null
 
     const now = clock.now()
     const lagMs = Math.max(0, Math.round(now - dueAt))
@@ -113,8 +103,10 @@ export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer 
   }
 
   function stop(): void {
-    cancel?.()
-    cancel = null
+    if (timer !== null)
+      clearTimeout(timer)
+
+    timer = null
   }
 
   return {
@@ -127,7 +119,7 @@ export function audioHealth(deps: { clock: Clock, logger: Logger, timer?: Timer 
 
       samplePings()
 
-      if (cancel === null)
+      if (timer === null)
         schedule()
     },
     end(guildId, reason) {

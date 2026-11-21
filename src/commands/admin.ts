@@ -1,10 +1,9 @@
 import type { Channel, Message } from 'discord.js'
 import type { CommandContext, CommandData, CommandSpec } from './spec.ts'
 import { PermissionFlagsBits } from 'discord.js'
-import { UserError } from '../core/errors.ts'
+import { errorMessage, UserError } from '../core/errors.ts'
 import { MAX_PERSONA_LENGTH } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
-import { EMPTY_PARAMETERS } from './parameters.ts'
 
 const PERSONA_INTENT = /^(?:(?:s[ée]|act[uú]a|habl[aá]|speak|talk)(?=$|[\s,.:;!?])|persona\s*:)/i
 const LEADING_MENTION = /^\s*<@!?\d+>\s*[,:;]?\s*/
@@ -25,7 +24,7 @@ function requirePermission(context: CommandContext, permission: bigint, message:
 }
 
 function configuredChannel(data: CommandData): string | null {
-  const channelId = data?.channelId
+  const channelId = data.channelId
 
   return typeof channelId === 'string' ? MESSAGES.textChannelConfigured(`<#${channelId}>`) : null
 }
@@ -33,7 +32,6 @@ function configuredChannel(data: CommandData): string | null {
 export const setChannel: CommandSpec = {
   name: 'set_channel',
   description: 'Set the text channel where the bot listens. Use it only when the user\'s own message mentions exactly one channel for the bot.',
-  parameters: EMPTY_PARAMETERS,
   fastRoute: false,
   ack: false,
   authorize(context) {
@@ -49,7 +47,11 @@ export const setChannel: CommandSpec = {
     if (!message || channels.length !== 1 || !target || !guild)
       throw new UserError(channels.length === 1 ? MESSAGES.textChannelInvalid : MESSAGES.channelExplicit)
 
-    const channel = await guild.channels.fetch(target.id).catch(() => null)
+    const channel = await guild.channels.fetch(target.id).catch((error: unknown) => {
+      context.services.logger.warn('command.channel_fetch_failed', { channelId: target.id, error: errorMessage(error) })
+
+      return null
+    })
 
     if (!channel || !channel.isTextBased())
       throw new UserError(MESSAGES.textChannelInvalid)

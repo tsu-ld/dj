@@ -1,10 +1,9 @@
 import type { QueueView } from '../../ports/music.ts'
 import type { CommandSpec } from '../spec.ts'
 import { describe, expect, test } from 'bun:test'
-import { queueOf } from '../../discord/tests/fakes.ts'
+import { fakeContext, fakeMusic, silentLog as log, queueOf } from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
-import { fakeContext, fakeMusic, log } from './fakes.ts'
 
 const bus = commandBus({ specs: commands, logger: log })
 
@@ -29,9 +28,11 @@ describe('command registry', () => {
 
     for (const command of commands) {
       expect(command.description.length).toBeGreaterThan(0)
-      expect(command.parameters.type).toBe('object')
       expect(typeof command.run).toBe('function')
     }
+
+    for (const tool of bus.tools)
+      expect(tool.parameters.type).toBe('object')
   })
 
   test('the model only sees the tools meant for it', () => {

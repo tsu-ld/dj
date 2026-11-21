@@ -1,3 +1,4 @@
+import type { Clock } from './clock.ts'
 import { TimeoutError } from './errors.ts'
 
 export async function withTimeout<T>(promise: Promise<T>, milliseconds: number, message?: string): Promise<T> {
@@ -39,14 +40,13 @@ export function keyedQueue(): KeyedQueue {
   }
 }
 
-export interface CircuitBreaker {
+interface CircuitBreaker {
   allow: () => boolean
   success: () => void
   failure: () => void
 }
 
-export function circuitBreaker(options: { cooldownMs: number, now?: () => number }): CircuitBreaker {
-  const now = options.now ?? (() => Date.now())
+export function circuitBreaker(options: { cooldownMs: number, clock: Clock }): CircuitBreaker {
   let openedAt: number | null = null
   let trialInFlight = false
 
@@ -55,7 +55,7 @@ export function circuitBreaker(options: { cooldownMs: number, now?: () => number
       if (openedAt === null)
         return true
 
-      if (now() - openedAt < options.cooldownMs)
+      if (options.clock.now() - openedAt < options.cooldownMs)
         return false
 
       if (trialInFlight)
@@ -71,7 +71,7 @@ export function circuitBreaker(options: { cooldownMs: number, now?: () => number
     },
     failure() {
       trialInFlight = false
-      openedAt = now()
+      openedAt = options.clock.now()
     },
   }
 }

@@ -1,8 +1,9 @@
-import process from 'node:process'
+import type { Clock } from './clock.ts'
+import { isRecord } from './json.ts'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
-export type LogFields = Record<string, unknown>
+type LogFields = Record<string, unknown>
 
 export interface Logger {
   debug: (event: string, fields?: LogFields) => void
@@ -23,7 +24,7 @@ const SECRET_KEY = /api[_-]?key|authorization|password|secret|token/i
 const MAX_DEPTH = 4
 
 function sanitize(value: unknown, depth = 0): unknown {
-  if (value === null || typeof value !== 'object')
+  if (!Array.isArray(value) && !isRecord(value))
     return value
 
   if (depth >= MAX_DEPTH)
@@ -32,7 +33,7 @@ function sanitize(value: unknown, depth = 0): unknown {
   if (Array.isArray(value))
     return value.slice(0, 20).map(item => sanitize(item, depth + 1))
 
-  return sanitizeFields(value as Record<string, unknown>, depth)
+  return sanitizeFields(value, depth)
 }
 
 function sanitizeFields(fields: LogFields, depth = 0): LogFields {
@@ -52,10 +53,7 @@ function describeError(error: unknown): Record<string, unknown> {
   return { message: String(error) }
 }
 
-export function logger(options: { level: LogLevel, sink?: (line: string) => void, now?: () => number }): Logger {
-  const sink = options.sink ?? ((line: string) => process.stdout.write(`${line}\n`))
-  const now = options.now ?? (() => Date.now())
-
+export function logger(options: { level: LogLevel, clock: Clock, out: { write: (text: string) => unknown } }): Logger {
   function build(base: LogFields): Logger {
     function write(level: LogLevel, event: string, error?: unknown, fields?: LogFields): void {
       if (LEVEL_VALUE[level] < LEVEL_VALUE[options.level])
@@ -63,7 +61,7 @@ export function logger(options: { level: LogLevel, sink?: (line: string) => void
 
       const payload = {
         level,
-        time: new Date(now()).toISOString(),
+        time: new Date(options.clock.now()).toISOString(),
         event,
         ...sanitizeFields(base),
         ...sanitizeFields(fields ?? {}),
@@ -71,10 +69,10 @@ export function logger(options: { level: LogLevel, sink?: (line: string) => void
       }
 
       try {
-        sink(JSON.stringify(payload))
+        options.out.write(`${JSON.stringify(payload)}\n`)
       }
       catch {
-        sink(`{"level":"error","event":"logger.failed","original":${JSON.stringify(event)}}`)
+        options.out.write(`{"level":"error","event":"logger.failed","original":${JSON.stringify(event)}}\n`)
       }
     }
 
