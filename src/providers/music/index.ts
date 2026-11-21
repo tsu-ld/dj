@@ -22,6 +22,8 @@ import { musicPlay } from './play.ts'
 import { currentForStream, queueView } from './queue.ts'
 import { streamResolver } from './stream.ts'
 
+const AUDIO_STREAM_OF_THE_DOWNLOADED_VIDEO = '0:a'
+
 interface MusicEngineDeps {
   client: Client
   config: AppConfig['music']
@@ -41,7 +43,13 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
     logger,
   })
 
-  const stream = streamResolver({ cache, extraction, clock: deps.clock, logger, beforeStream: beforeStreamFor })
+  const stream = streamResolver({
+    cache,
+    extraction,
+    clock: deps.clock,
+    logger,
+    beforeStream: beforeStreamFor,
+  })
   const catalog = new MusicCatalog({ extraction, stream, logger })
 
   const player = new DisTube(deps.client, {
@@ -51,8 +59,7 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
     savePreviousSongs: false,
     ffmpeg: {
       args: {
-        // the downloaded mp4 carries video too; extract only the audio stream
-        output: { map: '0:a' },
+        output: { map: AUDIO_STREAM_OF_THE_DOWNLOADED_VIDEO },
       },
     },
   })
@@ -94,7 +101,7 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
   }
 
   function viewOf(queue: Queue): QueueView {
-    return queueView(queue, song => catalog.trackOf(song))
+    return queueView(queue, (song) => catalog.trackOf(song))
   }
 
   function leave(guildId: string): void {
@@ -104,12 +111,14 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
   function queueForSong(song: Song): Queue | null {
     const guildId = song.member?.guild?.id
 
-    if (guildId !== undefined)
+    if (guildId !== undefined) {
       return player.getQueue(guildId) ?? null
+    }
 
     for (const queue of player.queues.collection.values()) {
-      if (queue.songs[0] === song)
+      if (queue.songs[0] === song) {
         return queue
+      }
     }
 
     return null
@@ -118,8 +127,9 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
   async function beforeStreamFor(song: Song): Promise<void> {
     const queue = queueForSong(song)
 
-    if (!queue || !currentForStream(song, queue))
+    if (!queue || !currentForStream(song, queue)) {
       return
+    }
 
     await deps.beforeStream({ guildId: queue.id, view: viewOf(queue) })
   }
@@ -130,7 +140,7 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
     catalog,
     cache,
     emitter,
-    forgetStream: songId => stream.forget(songId),
+    forgetStream: (songId) => stream.forget(songId),
     leave,
     viewOf,
     health,
@@ -138,7 +148,15 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
   })
 
   const play = musicPlay({ player, catalog, audio, mutations, logger })
-  const controls = musicControls({ player, catalog, mutations, emitter, viewOf, leave, streamReplaced: events.watchStream })
+  const controls = musicControls({
+    player,
+    catalog,
+    mutations,
+    emitter,
+    viewOf,
+    leave,
+    streamReplaced: events.watchStream,
+  })
 
   return {
     play,
@@ -146,24 +164,32 @@ export function musicEngine(deps: MusicEngineDeps): MusicPort {
     audio,
     on: emitter.on,
     async dispose() {
-      if (disposed)
+      if (disposed) {
         return
+      }
 
       disposed = true
 
-      for (const off of events.detach) off()
+      for (const off of events.detach) {
+        off()
+      }
 
       health.dispose()
       await audio.dispose()
 
-      for (const queue of [...player.queues.collection.values()]) {
+      const queuesAtShutdown = [...player.queues.collection.values()]
+
+      for (const queue of queuesAtShutdown) {
         await queue.stop().catch((error: unknown) => {
           logger.warn('music.stop_failed', { guildId: queue.id, error: errorMessage(error) })
         })
       }
 
-      for (const voice of [...player.voices.collection.values()])
+      const voicesAtShutdown = [...player.voices.collection.values()]
+
+      for (const voice of voicesAtShutdown) {
         voice.leave()
+      }
 
       clearEvents()
       stream.dispose()

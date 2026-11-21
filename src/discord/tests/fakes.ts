@@ -14,13 +14,13 @@ import { ComponentType } from 'discord.js'
 import { fakeMember } from '../../tests/fixtures.ts'
 
 interface FakeSentMessage {
-  readonly edits: ViewMessage[]
+  readonly edits: Array<ViewMessage>
   readonly deletions: () => number
   readonly message: Message
 }
 
 function fakeSentMessage(id: string): FakeSentMessage {
-  const edits: ViewMessage[] = []
+  const edits: Array<ViewMessage> = []
   let deletions = 0
   const state = {
     id,
@@ -48,12 +48,12 @@ interface SentRecord extends FakeSentMessage {
 }
 
 interface FakeChannel {
-  readonly sent: SentRecord[]
+  readonly sent: Array<SentRecord>
   readonly channel: GuildTextBasedChannel
 }
 
 export function fakeChannel(id = '2', guildId = '123456789012345678'): FakeChannel {
-  const sent: SentRecord[] = []
+  const sent: Array<SentRecord> = []
   const channel = {
     id,
     guild: { id: guildId },
@@ -80,20 +80,20 @@ interface IncomingOptions {
   botId?: string
   users?: Map<string, unknown>
   channels?: Map<string, unknown>
-  fetchChannel?: (id: string) => unknown
+  fetchChannel?: (id: string) => object | null
   failReact?: boolean
   failReply?: boolean
 }
 
 interface IncomingMessage {
-  readonly replies: string[]
-  readonly reactions: string[]
+  readonly replies: Array<string>
+  readonly reactions: Array<string>
   readonly message: Message
 }
 
 export function fakeIncomingMessage(options: IncomingOptions = {}): IncomingMessage {
-  const replies: string[] = []
-  const reactions: string[] = []
+  const replies: Array<string> = []
+  const reactions: Array<string> = []
   const botId = options.botId ?? '999'
   const channelId = options.channelId ?? '2'
   const guildId = 'guildId' in options ? options.guildId : '123456789012345678'
@@ -117,16 +117,18 @@ export function fakeIncomingMessage(options: IncomingOptions = {}): IncomingMess
     },
     inGuild: () => guildId !== null,
     async reply(payload: string | { content?: string }) {
-      if (options.failReply)
+      if (options.failReply) {
         throw new Error('Missing Permissions')
+      }
 
-      replies.push(typeof payload === 'string' ? payload : payload.content ?? '')
+      replies.push(typeof payload === 'string' ? payload : (payload.content ?? ''))
 
       return value
     },
     async react(emoji: string) {
-      if (options.failReact)
+      if (options.failReact) {
         throw new Error('Missing Permissions')
+      }
 
       reactions.push(emoji)
 
@@ -147,23 +149,23 @@ interface InteractionOptions {
 
 interface CardEdit extends ViewMessage {
   readonly content?: string | null
-  readonly embeds?: readonly unknown[]
+  readonly embeds?: ReadonlyArray<unknown>
 }
 
 interface InteractionRecorder {
-  readonly replies: (string | InteractionReplyOptions)[]
-  readonly followUps: InteractionReplyOptions[]
-  readonly editReplies: (string | InteractionEditReplyOptions)[]
-  readonly edits: CardEdit[]
+  readonly replies: Array<string | InteractionReplyOptions>
+  readonly followUps: Array<InteractionReplyOptions>
+  readonly editReplies: Array<string | InteractionEditReplyOptions>
+  readonly edits: Array<CardEdit>
   readonly deferredUpdates: () => number
   readonly interaction: ButtonInteraction
 }
 
 export function fakeInteraction(options: InteractionOptions): InteractionRecorder {
-  const replies: (string | InteractionReplyOptions)[] = []
-  const followUps: InteractionReplyOptions[] = []
-  const editReplies: (string | InteractionEditReplyOptions)[] = []
-  const edits: CardEdit[] = []
+  const replies: Array<string | InteractionReplyOptions> = []
+  const followUps: Array<InteractionReplyOptions> = []
+  const editReplies: Array<string | InteractionEditReplyOptions> = []
+  const edits: Array<CardEdit> = []
   const member = options.member ?? fakeMember()
   let deferred = 0
   const message = {
@@ -192,8 +194,9 @@ export function fakeInteraction(options: InteractionOptions): InteractionRecorde
       followUps.push(payload)
     },
     async editReply(payload: string | InteractionEditReplyOptions) {
-      if (options.failEditReply)
+      if (options.failEditReply) {
         throw new Error('edit reply failed')
+      }
 
       editReplies.push(payload)
     },
@@ -209,23 +212,30 @@ export function fakeInteraction(options: InteractionOptions): InteractionRecorde
   }
 }
 
-export function contentOf(value: string | { readonly content?: string | null } | undefined): string | undefined {
-  if (value === undefined)
+export function contentOf(
+  value: string | { readonly content?: string | null } | undefined,
+): string | undefined {
+  if (value === undefined) {
     return undefined
+  }
 
-  return typeof value === 'string' ? value : value.content ?? undefined
+  return typeof value === 'string' ? value : (value.content ?? undefined)
 }
 
-export function textsOf(message: ViewMessage | undefined): string[] {
-  return (message?.components ?? []).flatMap(container => container.toJSON().components.flatMap((component) => {
-    if (component.type === ComponentType.TextDisplay)
-      return [component.content]
+export function textsOf(message: ViewMessage | undefined): Array<string> {
+  return (message?.components ?? []).flatMap((container) =>
+    container.toJSON().components.flatMap((component) => {
+      if (component.type === ComponentType.TextDisplay) {
+        return [component.content]
+      }
 
-    if (component.type === ComponentType.Section)
-      return component.components.map(child => child.content)
+      if (component.type === ComponentType.Section) {
+        return component.components.map((child) => child.content)
+      }
 
-    return []
-  }))
+      return []
+    }),
+  )
 }
 
 export function cardText(message: ViewMessage | undefined): string {
@@ -240,32 +250,38 @@ interface ButtonInfo {
   readonly emoji: string | null
 }
 
-export function buttonsOf(message: ViewMessage): ButtonInfo[] {
-  return message.components.flatMap(container => container.toJSON().components.flatMap((component) => {
-    if (component.type !== ComponentType.ActionRow)
-      return []
-
-    return component.components.flatMap((child) => {
-      if (child.type !== ComponentType.Button || !('custom_id' in child))
+export function buttonsOf(message: ViewMessage): Array<ButtonInfo> {
+  return message.components.flatMap((container) =>
+    container.toJSON().components.flatMap((component) => {
+      if (component.type !== ComponentType.ActionRow) {
         return []
+      }
 
-      return [{
-        customId: child.custom_id,
-        label: child.label ?? '',
-        disabled: child.disabled ?? false,
-        style: child.style,
-        emoji: child.emoji?.name ?? null,
-      }]
-    })
-  }))
+      return component.components.flatMap((child) => {
+        if (child.type !== ComponentType.Button || !('custom_id' in child)) {
+          return []
+        }
+
+        return [
+          {
+            customId: child.custom_id,
+            label: child.label ?? '',
+            disabled: child.disabled ?? false,
+            style: child.style,
+            emoji: child.emoji?.name ?? null,
+          },
+        ]
+      })
+    }),
+  )
 }
 
 export interface RepliesRecorder extends RepliesPort {
-  readonly said: string[]
+  readonly said: Array<string>
 }
 
 export function fakeReplies(): RepliesRecorder {
-  const said: string[] = []
+  const said: Array<string> = []
 
   return {
     said,
@@ -276,13 +292,13 @@ export function fakeReplies(): RepliesRecorder {
 }
 
 export interface SlotRecorder extends MessageSlot {
-  readonly reposts: SlotPayload[]
-  readonly shown: { readonly view: QueueView, readonly channel: GuildTextBasedChannel }[]
+  readonly reposts: Array<SlotPayload>
+  readonly shown: Array<{ readonly view: QueueView; readonly channel: GuildTextBasedChannel }>
 }
 
 export function fakeSlot(): SlotRecorder {
-  const reposts: SlotPayload[] = []
-  const shown: { view: QueueView, channel: GuildTextBasedChannel }[] = []
+  const reposts: Array<SlotPayload> = []
+  const shown: Array<{ view: QueueView; channel: GuildTextBasedChannel }> = []
 
   return {
     reposts,

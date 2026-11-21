@@ -1,6 +1,12 @@
 import type { Clock } from '../core/clock.ts'
 import type { Angle } from './angle.ts'
-import { RADIO_LONG_EVERY, RADIO_MEMORY_MS, RADIO_MEMORY_SIZE, RADIO_SILENT_EVERY, RADIO_SPEAK_EVERY } from '../limits.ts'
+import {
+  RADIO_LONG_EVERY,
+  RADIO_MEMORY_MS,
+  RADIO_MEMORY_SIZE,
+  RADIO_SILENT_EVERY,
+  RADIO_SPEAK_EVERY,
+} from '../limits.ts'
 
 interface StationSong {
   readonly id: string
@@ -25,12 +31,12 @@ interface PlayedSong extends StationSong, PlayedEntry {
 export interface StationRun {
   readonly lastId: string | null
   readonly last: PlayedEntry | null
-  readonly earlier: readonly PlayedEntry[]
+  readonly earlier: ReadonlyArray<PlayedEntry>
 }
 
 const MAX_EARLIER = 3
 
-interface Station {
+export interface Station {
   recordSong: (guildId: string, song: StationSong) => number
   nextSongIndex: (guildId: string) => number
   songOnAir: (guildId: string) => string | null
@@ -52,16 +58,16 @@ export function shouldSpeak(index: number, fromRadio: boolean): boolean {
 
 export function onAirStation(deps: { clock: Clock }): Station {
   const { clock } = deps
-  const songs = new Map<string, { count: number, songId: string | null }>()
+  const songs = new Map<string, { count: number; songId: string | null }>()
   const lines = new Map<string, number>()
-  const history = new Map<string, PlayedSong[]>()
+  const history = new Map<string, Array<PlayedSong>>()
   const angles = new Map<string, Angle>()
   const failed = new Set<string>()
 
-  function recent(guildId: string): readonly PlayedSong[] {
+  function recent(guildId: string): ReadonlyArray<PlayedSong> {
     const now = clock.now()
 
-    return (history.get(guildId) ?? []).filter(song => now - song.at <= RADIO_MEMORY_MS)
+    return (history.get(guildId) ?? []).filter((song) => now - song.at <= RADIO_MEMORY_MS)
   }
 
   function nextSongIndex(guildId: string): number {
@@ -106,17 +112,23 @@ export function onAirStation(deps: { clock: Clock }): Station {
     },
     markSkipped(guildId, songId, by) {
       const played = history.get(guildId) ?? []
-      const index = played.findLastIndex(song => song.id === songId)
+      const index = played.findLastIndex((song) => song.id === songId)
       const song = played[index]
 
-      if (song)
+      if (song) {
         played[index] = { ...song, skippedBy: by }
+      }
     },
     forgetFailed(guildId, songId) {
       const played = history.get(guildId) ?? []
       const onAir = songs.get(guildId)?.songId ?? null
 
-      if (songId !== null && songId === onAir && !failed.has(guildId) && played.at(-1)?.id === onAir) {
+      if (
+        songId !== null &&
+        songId === onAir &&
+        !failed.has(guildId) &&
+        played.at(-1)?.id === onAir
+      ) {
         played.pop()
         failed.add(guildId)
       }
@@ -136,8 +148,9 @@ export function onAirStation(deps: { clock: Clock }): Station {
     endSession(guildId) {
       const counted = songs.get(guildId)
 
-      if (counted)
+      if (counted) {
         songs.set(guildId, { count: counted.count, songId: null })
+      }
     },
     reset(guildId) {
       lines.delete(guildId)

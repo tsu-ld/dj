@@ -9,15 +9,29 @@ import { commandBus } from '../../commands/bus.ts'
 import { commands } from '../../commands/index.ts'
 import { UserError } from '../../core/errors.ts'
 import { MESSAGES } from '../../messages.ts'
-import { captureLog, fakeMember, fakeMusic, fakeSettings, fakeVoice, silentLog as log, queueOf, testTrack as track, testView as view } from '../../tests/fixtures.ts'
+import {
+  captureLog,
+  fakeMember,
+  fakeMusic,
+  fakeSettings,
+  fakeVoice,
+  silentLog as log,
+  queueOf,
+  testTrack as track,
+  testView as view,
+} from '../../tests/fixtures.ts'
 import { interactionHandler } from '../interactions.ts'
 import { buttonsOf, cardText, contentOf, fakeChannel, fakeInteraction, fakeSlot } from './fakes.ts'
 
-function setup(options: { music?: MusicRecorder, slot?: SlotRecorder, logger?: Logger } = {}): {
-  handler: (interaction: Interaction) => Promise<void>
-  music: MusicRecorder
-  slot: SlotRecorder
-} {
+interface ButtonSetup {
+  readonly handler: (interaction: Interaction) => Promise<void>
+  readonly music: MusicRecorder
+  readonly slot: SlotRecorder
+}
+
+function setup(
+  options: { music?: MusicRecorder; slot?: SlotRecorder; logger?: Logger } = {},
+): ButtonSetup {
   const music = options.music ?? fakeMusic()
   const slot = options.slot ?? fakeSlot()
   const logger = options.logger ?? log
@@ -30,6 +44,12 @@ function setup(options: { music?: MusicRecorder, slot?: SlotRecorder, logger?: L
   })
 
   return { handler, music, slot }
+}
+
+function rejectingWith(message: string): () => Promise<never> {
+  return async () => {
+    throw new Error(message)
+  }
 }
 
 describe('now-playing buttons', () => {
@@ -49,7 +69,7 @@ describe('now-playing buttons', () => {
 
   test('the confirmation clear stops the music and marks the message', async () => {
     const recorder = fakeInteraction({ customId: 'nc:clear:yes' })
-    const calls: [string, { resetStation?: boolean } | undefined][] = []
+    const calls: Array<[string, { resetStation?: boolean } | undefined]> = []
     const music = fakeMusic({
       view: () => view(),
       async stop(guildId, options) {
@@ -158,7 +178,7 @@ describe('now-playing buttons', () => {
   })
 
   test('a timeline button jumps the song it was drawn for', async () => {
-    const seeks: [string, string, number][] = []
+    const seeks: Array<[string, string, number]> = []
     const recorder = fakeInteraction({ customId: 'np:seek:40:abc' })
     const { handler } = setup({
       music: fakeMusic({
@@ -196,7 +216,9 @@ describe('now-playing buttons', () => {
   test('a timeline button needs the member in the voice channel', async () => {
     const member = fakeMember({ voiceChannel: fakeVoice('7'), botVoiceChannel: fakeVoice('8') })
     const recorder = fakeInteraction({ customId: 'np:seek:40:abc', member })
-    const { handler, music } = setup({ music: fakeMusic({ view: () => view({ current: track({ id: 'abc' }) }) }) })
+    const { handler, music } = setup({
+      music: fakeMusic({ view: () => view({ current: track({ id: 'abc' }) }) }),
+    })
 
     await handler(recorder.interaction)
 
@@ -247,18 +269,16 @@ describe('now-playing buttons', () => {
   })
 
   test('a failure report Discord rejects is logged as a warning', async () => {
-    const warnings: string[] = []
+    const warnings: Array<string> = []
     const logger: Logger = {
       debug: () => {},
       info: () => {},
-      warn: event => warnings.push(event),
+      warn: (event) => warnings.push(event),
       error: () => {},
       child: () => logger,
     }
     const recorder = fakeInteraction({ customId: 'np:skip' })
-    const rejected = async (): Promise<never> => {
-      throw new Error('Unknown interaction')
-    }
+    const rejected = rejectingWith('Unknown interaction')
 
     Object.assign(recorder.interaction, { followUp: rejected, reply: rejected })
 
@@ -280,9 +300,7 @@ describe('now-playing buttons', () => {
   test('a member fetch Discord rejects is logged and the clicker gets the generic message', async () => {
     const { logger, events: warnings } = captureLog()
     const recorder = fakeInteraction({ customId: 'np:skip' })
-    const rejected = async (): Promise<never> => {
-      throw new Error('Unknown Member')
-    }
+    const rejected = rejectingWith('Unknown Member')
 
     Object.assign(recorder.interaction, { member: null, guild: { members: { fetch: rejected } } })
 
@@ -307,7 +325,7 @@ describe('now-playing buttons', () => {
 
   test('non-button interactions are ignored', async () => {
     const recorder = fakeInteraction({ customId: 'np:clear' })
-    const notAButton = { ...recorder.interaction, isButton: () => false } as unknown as Interaction
+    const notAButton = Object.assign(recorder.interaction, { isButton: () => false })
     const { handler } = setup()
 
     await handler(notAButton)
@@ -334,7 +352,7 @@ describe('queue pagination', () => {
 
     const buttons = message ? buttonsOf(message) : []
 
-    expect(buttons.map(button => button.customId)).toEqual(['nq:prev:2', 'nq:next:2'])
+    expect(buttons.map((button) => button.customId)).toEqual(['nq:prev:2', 'nq:next:2'])
     expect(buttons[0]?.disabled).toBe(false)
     expect(buttons[1]?.disabled).toBe(true)
   })
@@ -375,16 +393,24 @@ describe('queue pagination', () => {
 })
 
 describe('buttons while the bot is in voice', () => {
-  const inVoice: Pick<MusicPort, 'status'> = { status: () => ({ state: 'playing', playbackDurationMs: 0 }) }
+  const inVoice: Pick<MusicPort, 'status'> = {
+    status: () => ({ state: 'playing', playbackDurationMs: 0 }),
+  }
 
   test('a confirmation in voice sends no follow-up', async () => {
     const recorder = fakeInteraction({ customId: 'np:radio' })
     let toggled = 0
-    const { handler } = setup({ music: fakeMusic({ ...inVoice, view: () => view(), async radio() {
-      toggled++
+    const { handler } = setup({
+      music: fakeMusic({
+        ...inVoice,
+        view: () => view(),
+        async radio() {
+          toggled++
 
-      return true
-    } }) })
+          return true
+        },
+      }),
+    })
 
     await handler(recorder.interaction)
 
@@ -395,12 +421,17 @@ describe('buttons while the bot is in voice', () => {
   })
 
   test('a refusal in voice is still sent', async () => {
-    const recorder = fakeInteraction({ customId: 'np:radio', member: fakeMember({ voiceChannel: null, botVoiceChannel: fakeVoice() }) })
+    const recorder = fakeInteraction({
+      customId: 'np:radio',
+      member: fakeMember({ voiceChannel: null, botVoiceChannel: fakeVoice() }),
+    })
     const { handler, music } = setup({ music: fakeMusic({ ...inVoice, view: () => view() }) })
 
     await handler(recorder.interaction)
 
     expect(music.calls).toEqual([])
-    expect(recorder.followUps).toEqual([{ content: MESSAGES.sameVoiceChannel, flags: MessageFlags.Ephemeral }])
+    expect(recorder.followUps).toEqual([
+      { content: MESSAGES.sameVoiceChannel, flags: MessageFlags.Ephemeral },
+    ])
   })
 })

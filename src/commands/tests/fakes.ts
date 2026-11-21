@@ -14,8 +14,8 @@ export function voiceContext(options: ContextOptions = {}): VoiceContext {
 
 export interface MessageOptions {
   content?: string
-  channels?: readonly { readonly id: string, readonly name?: string }[]
-  fetchChannel?: (id: string) => unknown
+  channels?: ReadonlyArray<{ readonly id: string; readonly name?: string }>
+  fetchChannel?: (id: string) => object | null
 }
 
 export function fakeMessage(options: MessageOptions = {}): Message {
@@ -23,17 +23,18 @@ export function fakeMessage(options: MessageOptions = {}): Message {
   const value = {
     content: options.content ?? '',
     mentions: {
-      channels: new Map(channels.map(channel => [channel.id, channel])),
+      channels: new Map(channels.map((channel) => [channel.id, channel])),
       users: new Map(),
     },
     guild: {
       members: { me: {} },
       channels: {
         async fetch(id: string) {
-          if (options.fetchChannel)
+          if (options.fetchChannel) {
             return options.fetchChannel(id)
+          }
 
-          return channels.find(channel => channel.id === id) ?? null
+          return channels.find((channel) => channel.id === id) ?? null
         },
       },
     },

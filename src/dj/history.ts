@@ -3,31 +3,30 @@ import type { ChatMessage } from '../ports/conversation.ts'
 import { ttlMap } from '../core/ttl-map.ts'
 import { HISTORY_IDLE_MS, HISTORY_MAX_MESSAGES } from '../limits.ts'
 
-const MAX_CONVERSATIONS = 1_000
+const MAX_CONVERSATIONS = 1000
 
 function conversationKey(channelId: string, userId: string | null): string {
   return userId !== null ? `${channelId}:${userId}` : channelId
 }
 
-// The endpoint rejects a tool result not preceded by the assistant message
-// carrying its tool call, so the cut starts at a request.
-function trimToWholeExchanges(messages: readonly ChatMessage[]): ChatMessage[] {
+function trimToStartAtARequest(messages: ReadonlyArray<ChatMessage>): Array<ChatMessage> {
   const recent = messages.slice(-HISTORY_MAX_MESSAGES)
-  const firstRequestIndex = recent.findIndex(message => message.role === 'user')
+  const firstRequestIndex = recent.findIndex((message) => message.role === 'user')
 
-  if (firstRequestIndex < 0)
+  if (firstRequestIndex < 0) {
     return []
+  }
 
   return recent.slice(firstRequestIndex)
 }
 
 interface ConversationHistory {
-  recall: (channelId: string, userId: string | null) => readonly ChatMessage[]
-  remember: (channelId: string, userId: string | null, messages: readonly ChatMessage[]) => void
+  recall: (channelId: string, userId: string | null) => ReadonlyArray<ChatMessage>
+  remember: (channelId: string, userId: string | null, messages: ReadonlyArray<ChatMessage>) => void
 }
 
 export function conversationHistory(options: { clock: Clock }): ConversationHistory {
-  const entries = ttlMap<string, readonly ChatMessage[]>({
+  const entries = ttlMap<string, ReadonlyArray<ChatMessage>>({
     ttlMs: HISTORY_IDLE_MS,
     max: MAX_CONVERSATIONS,
     clock: options.clock,
@@ -38,7 +37,7 @@ export function conversationHistory(options: { clock: Clock }): ConversationHist
       return entries.get(conversationKey(channelId, userId)) ?? []
     },
     remember(channelId, userId, messages) {
-      entries.set(conversationKey(channelId, userId), trimToWholeExchanges(messages))
+      entries.set(conversationKey(channelId, userId), trimToStartAtARequest(messages))
     },
   }
 }

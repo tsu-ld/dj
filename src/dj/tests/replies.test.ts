@@ -4,14 +4,26 @@ import type { TestClock } from '../../tests/fixtures.ts'
 import { describe, expect, test } from 'bun:test'
 import { ERROR_ANNOUNCE_MS } from '../../limits.ts'
 import { MESSAGES } from '../../messages.ts'
-import { captureLog, fakeSettings, fakeTextChannel, scriptedModel, settle, silentLog, testClock, textReply } from '../../tests/fixtures.ts'
+import {
+  captureLog,
+  fakeSettings,
+  fakeTextChannel,
+  scriptedModel,
+  settle,
+  silentLog,
+  testClock,
+  textReply,
+} from '../../tests/fixtures.ts'
 import { djReplies } from '../replies.ts'
 import { testMessage } from './support.ts'
 
 const settingsPort = fakeSettings({ persona: 'un dj pirata' })
 const settings = settingsPort.current()
 
-function replier(model: ConversationPort | null, options: { logger?: Logger, clock?: TestClock } = {}): ReturnType<typeof djReplies> {
+function replier(
+  model: ConversationPort | null,
+  options: { logger?: Logger; clock?: TestClock } = {},
+): ReturnType<typeof djReplies> {
   return djReplies({
     model,
     logger: options.logger ?? silentLog,
@@ -24,7 +36,10 @@ function nullReply(): ConversationPort {
   return scriptedModel([() => ({ text: null, toolCalls: [] })])
 }
 
-function playbackError(textChannel: ReturnType<typeof fakeTextChannel>['channel'] | null, guildId = 'g1') {
+function playbackError(
+  textChannel: ReturnType<typeof fakeTextChannel>['channel'] | null,
+  guildId = 'g1',
+) {
   return { guildId, songId: null, cleanupAfterError: true, textChannel }
 }
 
@@ -41,7 +56,7 @@ describe('djReplies', () => {
     expect(channel.typing.count).toBe(1)
     expect(model.requests[0]?.messages).toEqual([{ role: 'user', content: 'Done.' }])
     expect(model.requests[0]?.instructions).toContain('un dj pirata')
-    expect(model.requests[0]?.timeoutMs).toBe(5_000)
+    expect(model.requests[0]?.timeoutMs).toBe(5000)
     expect(model.requests[0]?.maxOutputTokens).toBe(200)
     expect(model.requests[0]?.sessionId).toBe('chan-1')
   })
@@ -61,9 +76,11 @@ describe('djReplies', () => {
     const channel = fakeTextChannel()
     const { message, replies } = testMessage(channel.channel)
     const logs = captureLog()
-    const model = scriptedModel([() => {
-      throw new Error('upstream exploded')
-    }])
+    const model = scriptedModel([
+      () => {
+        throw new Error('upstream exploded')
+      },
+    ])
     const port = replier(model, { logger: logs.logger })
 
     await port.say(message, settings, 'I need permissions to join.')
@@ -89,9 +106,11 @@ describe('djReplies', () => {
   test('the announcement falls back to the plain text when the model fails', async () => {
     const channel = fakeTextChannel()
     const logs = captureLog()
-    const model = scriptedModel([() => {
-      throw new Error('upstream exploded')
-    }])
+    const model = scriptedModel([
+      () => {
+        throw new Error('upstream exploded')
+      },
+    ])
     const port = replier(model, { logger: logs.logger })
 
     port.playbackError(playbackError(channel.channel))
@@ -115,12 +134,12 @@ describe('djReplies', () => {
   test('a rewritten line is clamped to a Discord message', async () => {
     const channel = fakeTextChannel()
     const { message, replies } = testMessage(channel.channel)
-    const model = scriptedModel([() => textReply('x'.repeat(2_500))])
+    const model = scriptedModel([() => textReply('x'.repeat(2500))])
     const port = replier(model)
 
     await port.say(message, settings, 'Done.')
 
-    expect(replies[0]?.length).toBe(2_000)
+    expect(replies[0]?.length).toBe(2000)
   })
 
   test('a failed typing indicator does not stop the reply', async () => {
@@ -179,7 +198,12 @@ describe('djReplies', () => {
     const channel = fakeTextChannel()
     const clock = testClock(1_000_000)
     const port = replier(nullReply(), { clock })
-    const payload = { guildId: 'g1', songId: 'song-1', cleanupAfterError: true, textChannel: channel.channel }
+    const payload = {
+      guildId: 'g1',
+      songId: 'song-1',
+      cleanupAfterError: true,
+      textChannel: channel.channel,
+    }
 
     port.playbackError(payload)
     await settle()

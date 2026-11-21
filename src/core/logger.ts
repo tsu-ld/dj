@@ -1,9 +1,19 @@
 import type { Clock } from './clock.ts'
-import { isRecord } from './json.ts'
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
-type LogFields = Record<string, unknown>
+type LogValue = null | undefined | boolean | number | string | ReadonlyArray<LogValue> | LogFields
+
+interface LogFields {
+  readonly [key: string]: LogValue
+}
+
+interface ErrorDescription {
+  readonly name?: string
+  readonly message: string
+  readonly stack?: string | undefined
+  readonly cause?: ErrorDescription
+}
 
 export interface Logger {
   debug: (event: string, fields?: LogFields) => void
@@ -22,57 +32,77 @@ const LEVEL_VALUE: Record<LogLevel, number> = {
 
 const SECRET_KEY = /api[_-]?key|authorization|password|secret|token/i
 const MAX_DEPTH = 4
+const DEPTH_LIMIT = '[depth limit]'
 
-function sanitize(value: unknown, depth = 0): unknown {
-  if (!Array.isArray(value) && !isRecord(value))
+function sanitize(value: LogValue, depth = 0): LogValue {
+  if (typeof value !== 'object' || value === null) {
     return value
+  }
 
-  if (depth >= MAX_DEPTH)
-    return '[depth limit]'
+  if (depth >= MAX_DEPTH) {
+    return DEPTH_LIMIT
+  }
 
-  if (Array.isArray(value))
-    return value.slice(0, 20).map(item => sanitize(item, depth + 1))
+  if (isLogList(value)) {
+    return value.slice(0, 20).map((item) => sanitize(item, depth + 1))
+  }
 
   return sanitizeFields(value, depth)
 }
 
-function sanitizeFields(fields: LogFields, depth = 0): LogFields {
-  return Object.fromEntries(Object.entries(fields).map(([key, entry]) => [key, SECRET_KEY.test(key) ? '[redacted]' : sanitize(entry, depth + 1)]))
+function isLogList(value: ReadonlyArray<LogValue> | LogFields): value is ReadonlyArray<LogValue> {
+  return Array.isArray(value)
 }
 
-function describeError(error: unknown): Record<string, unknown> {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-      ...(error.cause === undefined ? {} : { cause: describeError(error.cause) }),
-    }
+function sanitizeFields(fields: LogFields, depth = 0): LogFields {
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, entry]) => [
+      key,
+      SECRET_KEY.test(key) ? '[redacted]' : sanitize(entry, depth + 1),
+    ]),
+  )
+}
+
+function describeError(error: unknown): ErrorDescription {
+  if (!(error instanceof Error)) {
+    return { message: String(error) }
   }
 
-  return { message: String(error) }
+  const description = { name: error.name, message: error.message, stack: error.stack }
+
+  if (error.cause === undefined) {
+    return description
+  }
+
+  return { ...description, cause: describeError(error.cause) }
 }
 
-export function logger(options: { level: LogLevel, clock: Clock, out: { write: (text: string) => unknown } }): Logger {
+export function logger(options: {
+  level: LogLevel
+  clock: Clock
+  out: { write: (text: string) => void }
+}): Logger {
   function build(base: LogFields): Logger {
     function write(level: LogLevel, event: string, error?: unknown, fields?: LogFields): void {
-      if (LEVEL_VALUE[level] < LEVEL_VALUE[options.level])
+      if (LEVEL_VALUE[level] < LEVEL_VALUE[options.level]) {
         return
+      }
 
-      const payload = {
+      const entry = {
         level,
         time: new Date(options.clock.now()).toISOString(),
         event,
         ...sanitizeFields(base),
         ...sanitizeFields(fields ?? {}),
-        ...(error === undefined ? {} : { error: describeError(error) }),
       }
+      const payload = error === undefined ? entry : { ...entry, error: describeError(error) }
 
       try {
         options.out.write(`${JSON.stringify(payload)}\n`)
-      }
-      catch {
-        options.out.write(`{"level":"error","event":"logger.failed","original":${JSON.stringify(event)}}\n`)
+      } catch {
+        options.out.write(
+          `{"level":"error","event":"logger.failed","original":${JSON.stringify(event)}}\n`,
+        )
       }
     }
 
@@ -81,7 +111,7 @@ export function logger(options: { level: LogLevel, clock: Clock, out: { write: (
       info: (event, fields) => write('info', event, undefined, fields),
       warn: (event, fields) => write('warn', event, undefined, fields),
       error: (event, error, fields) => write('error', event, error, fields),
-      child: fields => build({ ...base, ...fields }),
+      child: (fields) => build({ ...base, ...fields }),
     }
   }
 

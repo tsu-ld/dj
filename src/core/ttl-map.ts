@@ -11,20 +11,22 @@ interface Entry<V> {
   expiresAt: number
 }
 
-export function ttlMap<K, V>(options: { ttlMs: number, max: number, clock: Clock }): TtlMap<K, V> {
+export function ttlMap<K, V>(options: { ttlMs: number; max: number; clock: Clock }): TtlMap<K, V> {
   const entries = new Map<K, Entry<V>>()
 
   function prune(at: number): void {
     for (const [key, entry] of entries) {
-      if (entry.expiresAt <= at)
+      if (entry.expiresAt <= at) {
         entries.delete(key)
+      }
     }
 
     while (entries.size > options.max) {
       const oldest = entries.keys().next()
 
-      if (oldest.done)
+      if (oldest.done) {
         return
+      }
 
       entries.delete(oldest.value)
     }
@@ -34,8 +36,9 @@ export function ttlMap<K, V>(options: { ttlMs: number, max: number, clock: Clock
     get(key) {
       const entry = entries.get(key)
 
-      if (!entry)
+      if (!entry) {
         return undefined
+      }
 
       if (entry.expiresAt <= options.clock.now()) {
         entries.delete(key)

@@ -17,12 +17,24 @@ import {
 import { djAgent } from '../conversation.ts'
 import { call, failed, ok, refused, testBus, toolReply } from './support.ts'
 
-function toolMessages(messages: readonly { role: string, content: string | null }[]): { role: string, content: string | null }[] {
-  return messages.filter(message => message.role === 'tool')
+function toolMessages(
+  messages: ReadonlyArray<{ role: string; content: string | null }>,
+): Array<{ role: string; content: string | null }> {
+  return messages.filter((message) => message.role === 'tool')
 }
 
-function testAgent(model: ConversationPort, deps: Partial<Omit<Parameters<typeof djAgent>[0], 'model'>> = {}) {
-  return djAgent({ model, bus: testBus(), settings: fakeSettings(), logger: silentLog, clock: testClock(), ...deps })
+function testAgent(
+  model: ConversationPort,
+  deps: Partial<Omit<Parameters<typeof djAgent>[0], 'model'>> = {},
+) {
+  return djAgent({
+    model,
+    bus: testBus(),
+    settings: fakeSettings(),
+    logger: silentLog,
+    clock: testClock(),
+    ...deps,
+  })
 }
 
 describe('djAgent', () => {
@@ -80,24 +92,28 @@ describe('djAgent', () => {
 
   test('the deadline stops tool rounds and throws when nothing happened', async () => {
     const clock = testClock()
-    const model = scriptedModel([() => {
-      clock.advance(60_001)
+    const model = scriptedModel([
+      () => {
+        clock.advance(60_001)
 
-      return toolReply(call('call_1', 'skip'))
-    }])
+        return toolReply(call('call_1', 'skip'))
+      },
+    ])
     const bus = testBus()
     const agent = testAgent(model, { bus, clock })
 
-    await expect(agent.ask({ request: 'hacelo', context: fakeContext() }))
-      .rejects
-      .toThrow(/ran out of time/)
+    await expect(agent.ask({ request: 'hacelo', context: fakeContext() })).rejects.toThrow(
+      /ran out of time/,
+    )
     expect(bus.calls).toHaveLength(0)
   })
 
   test('the deadline after acting returns the short confirmation', async () => {
     const clock = testClock()
     const settings = fakeSettings()
-    const model = scriptedModel([() => toolReply(call('call_1', 'set_persona', '{"persona":"un dj"}'))])
+    const model = scriptedModel([
+      () => toolReply(call('call_1', 'set_persona', '{"persona":"un dj"}')),
+    ])
     const bus = testBus(async () => {
       await settings.update('123456789012345678', { persona: 'un dj' })
       clock.advance(60_001)
@@ -114,7 +130,10 @@ describe('djAgent', () => {
 
   test('a deadline that hits between two tool calls skips the second one', async () => {
     const clock = testClock()
-    const model = scriptedModel([() => toolReply(call('call_1', 'skip'), call('call_2', 'skip')), () => textReply('ok')])
+    const model = scriptedModel([
+      () => toolReply(call('call_1', 'skip'), call('call_2', 'skip')),
+      () => textReply('ok'),
+    ])
     const bus = testBus(() => {
       clock.advance(60_001)
 
@@ -136,35 +155,62 @@ describe('djAgent', () => {
   })
 
   test('a refused or failed tool is reported to the caller, a successful one is not', async () => {
-    const outcomes: Record<string, CommandOutcome> = { ok: ok(), refused: refused('no permission'), failed: failed(new Error('boom')) }
-    const problems: string[] = []
+    const outcomes = new Map<string, CommandOutcome>([
+      ['ok', ok()],
+      ['refused', refused('no permission')],
+      ['failed', failed(new Error('boom'))],
+    ])
+    const problems: Array<string> = []
 
     for (const name of ['ok', 'refused', 'failed']) {
-      const agent = testAgent(scriptedModel([() => toolReply(call('call_1', name)), () => textReply('listo')]), { bus: testBus(() => outcomes[name] ?? ok()) })
+      const agent = testAgent(
+        scriptedModel([() => toolReply(call('call_1', name)), () => textReply('listo')]),
+        { bus: testBus(() => outcomes.get(name) ?? ok()) },
+      )
 
-      await agent.ask({ request: 'hacelo', context: fakeContext(), onRefused: () => problems.push(name) })
+      await agent.ask({
+        request: 'hacelo',
+        context: fakeContext(),
+        onRefused: () => problems.push(name),
+      })
     }
 
     expect(problems).toEqual(['refused', 'failed'])
   })
 
   test('a tool stopped by the deadline, the call cap or malformed arguments is reported to the caller', async () => {
-    const problems: string[] = []
+    const problems: Array<string> = []
 
-    async function ask(name: string, reply: () => ReturnType<typeof toolReply>, clock = testClock()): Promise<void> {
+    async function ask(
+      name: string,
+      reply: () => ReturnType<typeof toolReply>,
+      clock = testClock(),
+    ): Promise<void> {
       const agent = testAgent(scriptedModel([reply, () => textReply('listo')]), { clock })
 
-      await agent.ask({ request: 'hacelo', context: fakeContext(), onRefused: () => problems.push(name) })
+      await agent.ask({
+        request: 'hacelo',
+        context: fakeContext(),
+        onRefused: () => problems.push(name),
+      })
     }
 
     const clock = testClock()
 
-    await expect(ask('deadline', () => {
-      clock.advance(60_001)
+    await expect(
+      ask(
+        'deadline',
+        () => {
+          clock.advance(60_001)
 
-      return toolReply(call('call_1', 'skip'))
-    }, clock)).rejects.toThrow('The DJ ran out of time before answering.')
-    await ask('cap', () => toolReply(...Array.from({ length: 5 }, (_, index) => call(`call_${index}`, 'skip'))))
+          return toolReply(call('call_1', 'skip'))
+        },
+        clock,
+      ),
+    ).rejects.toThrow('The DJ ran out of time before answering.')
+    await ask('cap', () =>
+      toolReply(...Array.from({ length: 5 }, (_, index) => call(`call_${index}`, 'skip'))),
+    )
     await ask('malformed', () => toolReply(call('call_1', 'skip', 'not json')))
 
     expect(problems).toEqual(['deadline', 'cap', 'malformed'])
@@ -173,19 +219,18 @@ describe('djAgent', () => {
   test('tool outcomes keep the data, the refusal and the failure apart', async () => {
     const logs = captureLog()
     const model = scriptedModel([
-      () => toolReply(
-        call('call_1', 'with_data'),
-        call('call_3', 'refused'),
-        call('call_4', 'failed'),
-      ),
+      () =>
+        toolReply(call('call_1', 'with_data'), call('call_3', 'refused'), call('call_4', 'failed')),
       () => textReply('listo'),
     ])
     const bus = testBus((name) => {
-      if (name === 'with_data')
+      if (name === 'with_data') {
         return ok({ queued: 2 })
+      }
 
-      if (name === 'refused')
+      if (name === 'refused') {
         return refused('no permission')
+      }
 
       return failed(new Error('boom'))
     })
@@ -195,7 +240,7 @@ describe('djAgent', () => {
 
     const results = toolMessages(model.requests[1]?.messages ?? [])
 
-    expect(results.map(result => result.content)).toEqual([
+    expect(results.map((result) => result.content)).toEqual([
       '{"queued":2}',
       '{"error":"no permission"}',
       '{"error":"the player could not do that"}',
@@ -230,8 +275,9 @@ describe('djAgent', () => {
     await agent.ask({ request: 'hacelo', context: fakeContext() })
 
     expect(bus.calls).toHaveLength(0)
-    expect(toolMessages(model.requests[1]?.messages ?? [])[0]?.content)
-      .toBe('{"error":"those arguments were not valid JSON"}')
+    expect(toolMessages(model.requests[1]?.messages ?? [])[0]?.content).toBe(
+      '{"error":"those arguments were not valid JSON"}',
+    )
   })
 
   test('nothing said and nothing acted returns null', async () => {
@@ -245,8 +291,7 @@ describe('djAgent', () => {
     const model = scriptedModel([() => toolReply(call('call_1', 'skip')), () => textReply('')])
     const agent = testAgent(model)
 
-    expect(await agent.ask({ request: 'skippea', context: fakeContext() }))
-      .toBe(MESSAGES.djActed)
+    expect(await agent.ask({ request: 'skippea', context: fakeContext() })).toBe(MESSAGES.djActed)
   })
 
   test('the closing call is tool-free', async () => {
@@ -269,12 +314,7 @@ describe('djAgent', () => {
   })
 
   test('at most eight tools run across three rounds', async () => {
-    const fourCalls = [
-      call('a', 'skip'),
-      call('b', 'skip'),
-      call('c', 'skip'),
-      call('d', 'skip'),
-    ]
+    const fourCalls = [call('a', 'skip'), call('b', 'skip'), call('c', 'skip'), call('d', 'skip')]
     const model = scriptedModel([
       () => toolReply(...fourCalls),
       () => toolReply(...fourCalls),
@@ -285,8 +325,9 @@ describe('djAgent', () => {
     const agent = testAgent(model, { bus })
 
     const reply = await agent.ask({ request: 'hacelo', context: fakeContext() })
-    const capped = toolMessages(model.requests[3]?.messages ?? [])
-      .filter(result => result.content === '{"error":"too many tool calls; try fewer at once"}')
+    const capped = toolMessages(model.requests[3]?.messages ?? []).filter(
+      (result) => result.content === '{"error":"too many tool calls; try fewer at once"}',
+    )
 
     expect(reply).toBe('ok')
     expect(bus.calls).toHaveLength(8)
@@ -294,14 +335,16 @@ describe('djAgent', () => {
   })
 
   test('a failure before acting is thrown to the caller', async () => {
-    const model = scriptedModel([() => {
-      throw new Error('upstream exploded')
-    }])
+    const model = scriptedModel([
+      () => {
+        throw new Error('upstream exploded')
+      },
+    ])
     const agent = testAgent(model)
 
-    await expect(agent.ask({ request: 'hola', context: fakeContext() }))
-      .rejects
-      .toThrow('upstream exploded')
+    await expect(agent.ask({ request: 'hola', context: fakeContext() })).rejects.toThrow(
+      'upstream exploded',
+    )
   })
 
   test('a failure after acting is confirmed and remembered without a dangling call', async () => {
@@ -320,7 +363,7 @@ describe('djAgent', () => {
     expect(await agent.ask({ request: 'hola', context })).toBe('hola')
 
     expect(logs.events).toContain('dj.failed_after_acting')
-    expect(model.requests[2]?.messages.map(message => message.role)).toEqual([
+    expect(model.requests[2]?.messages.map((message) => message.role)).toEqual([
       'user',
       'assistant',
       'tool',
@@ -329,8 +372,11 @@ describe('djAgent', () => {
   })
 
   test('a tool call does not ack or confirm through the command ui', async () => {
-    const seen: string[] = []
-    const model = scriptedModel([() => toolReply(call('call_1', 'set_channel')), () => textReply('listo')])
+    const seen: Array<string> = []
+    const model = scriptedModel([
+      () => toolReply(call('call_1', 'set_channel')),
+      () => textReply('listo'),
+    ])
     const bus = testBus(async (_name, _args, context) => {
       await context.ui.reply('confirmed')
       await context.ui.ack()
@@ -365,7 +411,7 @@ describe('djAgent', () => {
 
   test('the answer is clamped to a Discord message', async () => {
     const channel = fakeTextChannel()
-    const model = scriptedModel([() => textReply('x'.repeat(2_500))])
+    const model = scriptedModel([() => textReply('x'.repeat(2500))])
     const agent = testAgent(model)
 
     const reply = await agent.ask({
@@ -373,7 +419,7 @@ describe('djAgent', () => {
       context: fakeContext({ textChannel: channel.channel }),
     })
 
-    expect(reply?.length).toBe(2_000)
+    expect(reply?.length).toBe(2000)
     expect(channel.typing.count).toBe(1)
   })
 
@@ -383,7 +429,10 @@ describe('djAgent', () => {
     const model = scriptedModel([() => textReply('hola')])
     const agent = testAgent(model, { logger: logs.logger })
 
-    const reply = await agent.ask({ request: 'hola', context: fakeContext({ textChannel: channel.channel }) })
+    const reply = await agent.ask({
+      request: 'hola',
+      context: fakeContext({ textChannel: channel.channel }),
+    })
     await settle()
 
     expect(reply).toBe('hola')

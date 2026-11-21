@@ -1,13 +1,24 @@
 import type { Message } from 'discord.js'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
-import { fakeContext, fakeMusic, fakeUi, silentLog as log, testTrack as track, testView as view } from '../../tests/fixtures.ts'
+import {
+  fakeContext,
+  fakeMusic,
+  fakeUi,
+  silentLog as log,
+  testTrack as track,
+  testView as view,
+} from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
 
 describe('queue commands', () => {
   test('queue shows the live queue and never reacts', async () => {
-    const fresh = view({ current: track({ title: 'Ahora' }), size: 2, upcoming: [track({ id: '2', title: 'Después' })] })
+    const fresh = view({
+      current: track({ title: 'Ahora' }),
+      size: 2,
+      upcoming: [track({ id: '2', title: 'Después' })],
+    })
     const ui = fakeUi()
     const music = fakeMusic({ view: () => fresh })
     const bus = commandBus({ specs: commands, logger: log })
@@ -20,7 +31,7 @@ describe('queue commands', () => {
   })
 
   test('remove takes a valid position from the live queue', async () => {
-    const positions: number[] = []
+    const positions: Array<number> = []
     const music = fakeMusic({
       view: () => view({ size: 3 }),
       async remove(_guildId, position) {
@@ -51,7 +62,7 @@ describe('queue commands', () => {
   })
 
   test('clear stops the music and resets the station', async () => {
-    const calls: [string, { resetStation?: boolean } | undefined][] = []
+    const calls: Array<[string, { resetStation?: boolean } | undefined]> = []
     const music = fakeMusic({
       view: () => view(),
       async stop(guildId, options) {

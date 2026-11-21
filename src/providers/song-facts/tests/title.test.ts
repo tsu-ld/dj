@@ -1,14 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import { cacheKey, containsWords, eitherContains, parseTitle } from '../title.ts'
 
-function bareTrack(title: string): { artist: null, title: string, explicit: false } {
+function bareTrack(title: string) {
   return { artist: null, title, explicit: false }
 }
 
 describe('parseTitle decorations', () => {
   test('production notes in brackets are dropped', () => {
     expect(parseTitle('One More Time (Official Video)', null)).toEqual(bareTrack('One More Time'))
-    expect(parseTitle('One More Time (Official Music Video)', null)).toEqual(bareTrack('One More Time'))
+    expect(parseTitle('One More Time (Official Music Video)', null)).toEqual(
+      bareTrack('One More Time'),
+    )
     expect(parseTitle('One More Time [Audio]', null)).toEqual(bareTrack('One More Time'))
     expect(parseTitle('One More Time (Lyrics)', null)).toEqual(bareTrack('One More Time'))
     expect(parseTitle('One More Time (Remastered 2009)', null)).toEqual(bareTrack('One More Time'))
@@ -16,11 +18,17 @@ describe('parseTitle decorations', () => {
   })
 
   test('a channel name after a pipe is dropped', () => {
-    expect(parseTitle('One More Time (Official Video) | Daft Punk VEVO', null)).toEqual(bareTrack('One More Time'))
+    expect(parseTitle('One More Time (Official Video) | Daft Punk VEVO', null)).toEqual(
+      bareTrack('One More Time'),
+    )
   })
 
   test('a song named after a decoration word survives', () => {
-    expect(parseTitle('Lana Del Rey - Video Games', null)).toEqual({ artist: 'Lana Del Rey', title: 'Video Games', explicit: true })
+    expect(parseTitle('Lana Del Rey - Video Games', null)).toEqual({
+      artist: 'Lana Del Rey',
+      title: 'Video Games',
+      explicit: true,
+    })
   })
 
   test('a featured credit is dropped', () => {
@@ -55,7 +63,11 @@ describe('parseTitle', () => {
   })
 
   test('no artist anywhere stays null', () => {
-    expect(parseTitle('One More Time', null)).toEqual({ artist: null, title: 'One More Time', explicit: false })
+    expect(parseTitle('One More Time', null)).toEqual({
+      artist: null,
+      title: 'One More Time',
+      explicit: false,
+    })
   })
 })
 
@@ -77,18 +89,21 @@ describe('eitherContains', () => {
 
 describe('containsWords', () => {
   test('a summary that names the artist is accepted', () => {
-    expect(containsWords('One More Time is a song by the French duo Daft Punk.', 'Daft Punk')).toBe(true)
+    expect(containsWords('One More Time is a song by the French duo Daft Punk.', 'Daft Punk')).toBe(
+      true,
+    )
     expect(containsWords('One More Time is a song by Dua Lipa.', 'Daft Punk')).toBe(false)
   })
 })
 
 describe('cacheKey', () => {
   test('the same song in different casing shares one key, another song does not', () => {
-    expect(cacheKey({ artist: 'Daft Punk', title: 'One More Time', explicit: true }))
-      .toBe(cacheKey({ artist: 'daft punk', title: 'one more time', explicit: true }))
-    expect(cacheKey({ artist: 'Daft Punk', title: 'One More Time', explicit: true }))
-      .not
-      .toBe(cacheKey({ artist: 'Daft Punk', title: 'Digital Love', explicit: true }))
+    expect(cacheKey({ artist: 'Daft Punk', title: 'One More Time', explicit: true })).toBe(
+      cacheKey({ artist: 'daft punk', title: 'one more time', explicit: true }),
+    )
+    expect(cacheKey({ artist: 'Daft Punk', title: 'One More Time', explicit: true })).not.toBe(
+      cacheKey({ artist: 'Daft Punk', title: 'Digital Love', explicit: true }),
+    )
   })
 })
 

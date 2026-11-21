@@ -8,7 +8,18 @@ import { describe, expect, test } from 'bun:test'
 import { commandBus } from '../../commands/bus.ts'
 import { commands } from '../../commands/index.ts'
 import { MESSAGES } from '../../messages.ts'
-import { captureLog, collector, fakeMember, fakeMusic, fakeSettings, fakeVoice, silentLog as log, settle, testClock, testView as view } from '../../tests/fixtures.ts'
+import {
+  captureLog,
+  collector,
+  fakeMember,
+  fakeMusic,
+  fakeSettings,
+  fakeVoice,
+  silentLog as log,
+  settle,
+  testClock,
+  testView as view,
+} from '../../tests/fixtures.ts'
 import { messageHandler } from '../messages.ts'
 import { fakeIncomingMessage, fakeReplies, fakeSlot } from './fakes.ts'
 
@@ -22,17 +33,19 @@ interface SetupOptions {
   agent?: DjAgent | null
   replies?: RepliesRecorder
   slot?: SlotRecorder
-  cooldowns?: { plainRequestMs: number, djRequestMs: number }
+  cooldowns?: { plainRequestMs: number; djRequestMs: number }
   logger?: Logger
 }
 
-function setup(options: SetupOptions = {}): {
-  handler: ReturnType<typeof messageHandler>
-  music: MusicPort
-  replies: RepliesRecorder
-  slot: SlotRecorder
-  settings: SettingsPort
-} {
+interface HandlerSetup {
+  readonly handler: ReturnType<typeof messageHandler>
+  readonly music: MusicPort
+  readonly replies: RepliesRecorder
+  readonly slot: SlotRecorder
+  readonly settings: SettingsPort
+}
+
+function setup(options: SetupOptions = {}): HandlerSetup {
   const music = options.music ?? fakeMusic()
   const replies = options.replies ?? fakeReplies()
   const slot = options.slot ?? fakeSlot()
@@ -47,14 +60,14 @@ function setup(options: SetupOptions = {}): {
     agent: options.agent ?? null,
     logger: options.logger ?? log,
     clock: testClock(),
-    cooldowns: options.cooldowns ?? { plainRequestMs: 2_000, djRequestMs: 15_000 },
+    cooldowns: options.cooldowns ?? { plainRequestMs: 2000, djRequestMs: 15_000 },
   })
 
   return { handler, music, replies, slot, settings }
 }
 
-function fakeDecision(choice: string | null): DecisionPort & { inputs: DecisionInput[] } {
-  const inputs: DecisionInput[] = []
+function fakeDecision(choice: string | null): DecisionPort & { inputs: Array<DecisionInput> } {
+  const inputs: Array<DecisionInput> = []
 
   return {
     inputs,
@@ -163,7 +176,7 @@ describe('messageHandler mentions', () => {
       content: '<@999> <#456>',
       users: BOT,
       channels: new Map([['456', { id: '456' }]]),
-      fetchChannel: id => (id === '456' ? channel : null),
+      fetchChannel: (id) => (id === '456' ? channel : null),
     })
 
     await handler(message.message)
@@ -175,9 +188,19 @@ describe('messageHandler mentions', () => {
 
 describe('messageHandler plain queries', () => {
   test('two plain queries from the same user are rate limited', async () => {
-    const { handler, replies } = setup({ cooldowns: { plainRequestMs: 10_000, djRequestMs: 15_000 } })
-    const first = fakeIncomingMessage({ guildId: '222222222222222222', authorId: 'rate-user', content: 'hola' })
-    const second = fakeIncomingMessage({ guildId: '222222222222222222', authorId: 'rate-user', content: 'hola' })
+    const { handler, replies } = setup({
+      cooldowns: { plainRequestMs: 10_000, djRequestMs: 15_000 },
+    })
+    const first = fakeIncomingMessage({
+      guildId: '222222222222222222',
+      authorId: 'rate-user',
+      content: 'hola',
+    })
+    const second = fakeIncomingMessage({
+      guildId: '222222222222222222',
+      authorId: 'rate-user',
+      content: 'hola',
+    })
 
     await handler(first.message)
     await handler(second.message)
@@ -187,7 +210,7 @@ describe('messageHandler plain queries', () => {
   })
 
   test('plain text outside the listening channel is ignored', async () => {
-    const requests: PlayRequest[] = []
+    const requests: Array<PlayRequest> = []
     const { handler } = setup({
       music: collector(requests),
     })
@@ -200,11 +223,14 @@ describe('messageHandler plain queries', () => {
   })
 
   test('plain text in the listening channel plays the search', async () => {
-    const requests: PlayRequest[] = []
+    const requests: Array<PlayRequest> = []
     const { handler, slot } = setup({
       music: collector(requests, {}, { view: () => view({ size: 1 }) }),
     })
-    const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: fakeVoice() }) })
+    const message = fakeIncomingMessage({
+      content: 'cumbia',
+      member: fakeMember({ voiceChannel: fakeVoice() }),
+    })
 
     await handler(message.message)
 
@@ -220,12 +246,8 @@ describe('messageHandler plain intent', () => {
     const room = fakeVoice()
     const member = fakeMember({ voiceChannel: room, botVoiceChannel: room })
     const music = fakeMusic({ view: () => view({ size: 2 }) })
-    let decided: (choice: string) => void = () => {}
-    const decision: DecisionPort = {
-      choose: async () => new Promise((resolve) => {
-        decided = resolve
-      }),
-    }
+    const decided = Promise.withResolvers<string | null>()
+    const decision: DecisionPort = { choose: async () => decided.promise }
     const { handler, replies } = setup({ decision, music })
     const message = fakeIncomingMessage({ content: 'skip', member })
 
@@ -233,7 +255,7 @@ describe('messageHandler plain intent', () => {
 
     await settle()
     Object.assign(member.voice, { channel: null })
-    decided('skip')
+    decided.resolve('skip')
     await handled
 
     expect(music.calls).not.toContain('skip')
@@ -251,12 +273,15 @@ describe('messageHandler plain intent', () => {
   })
 
   test('plain text the router reads as a song plays the search', async () => {
-    const requests: PlayRequest[] = []
+    const requests: Array<PlayRequest> = []
     const { handler } = setup({
       decision: fakeDecision('query'),
       music: collector(requests, {}, { view: () => view({ size: 1 }) }),
     })
-    const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: fakeVoice() }) })
+    const message = fakeIncomingMessage({
+      content: 'cumbia',
+      member: fakeMember({ voiceChannel: fakeVoice() }),
+    })
 
     await handler(message.message)
 
@@ -265,7 +290,7 @@ describe('messageHandler plain intent', () => {
   })
 
   test('plain text the router gives to the dj reaches the agent', async () => {
-    const requests: string[] = []
+    const requests: Array<string> = []
     const agent: DjAgent = {
       async ask(input) {
         requests.push(input.request)
@@ -283,12 +308,15 @@ describe('messageHandler plain intent', () => {
   })
 
   test('a dj choice without a configured model falls back to the search', async () => {
-    const requests: PlayRequest[] = []
+    const requests: Array<PlayRequest> = []
     const { handler } = setup({
       decision: fakeDecision('dj'),
       music: collector(requests, {}, { view: () => view({ size: 1 }) }),
     })
-    const message = fakeIncomingMessage({ content: 'rock nacional', member: fakeMember({ voiceChannel: fakeVoice() }) })
+    const message = fakeIncomingMessage({
+      content: 'rock nacional',
+      member: fakeMember({ voiceChannel: fakeVoice() }),
+    })
 
     await handler(message.message)
 
@@ -296,7 +324,7 @@ describe('messageHandler plain intent', () => {
   })
 
   test('a failed decision falls back to the search', async () => {
-    const requests: PlayRequest[] = []
+    const requests: Array<PlayRequest> = []
     const decision: DecisionPort = {
       async choose() {
         throw new Error('jev down')
@@ -306,7 +334,10 @@ describe('messageHandler plain intent', () => {
       decision,
       music: collector(requests, {}, { view: () => view({ size: 1 }) }),
     })
-    const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: fakeVoice() }) })
+    const message = fakeIncomingMessage({
+      content: 'cumbia',
+      member: fakeMember({ voiceChannel: fakeVoice() }),
+    })
 
     await handler(message.message)
 
@@ -321,7 +352,7 @@ describe('messageHandler plain intent', () => {
     await handler(message.message)
 
     const input = decision.inputs[0]
-    const names = input?.options.map(option => option.name) ?? []
+    const names = input?.options.map((option) => option.name) ?? []
 
     expect(names).toContain('query')
     expect(names).toContain('dj')
@@ -329,7 +360,7 @@ describe('messageHandler plain intent', () => {
   })
 
   test('a confident route with missing arguments goes to the dj', async () => {
-    const requests: string[] = []
+    const requests: Array<string> = []
     const agent: DjAgent = {
       async ask(input) {
         requests.push(input.request)
@@ -380,7 +411,7 @@ describe('messageHandler dj requests', () => {
     expect(music.calls).toContain('skip')
 
     const input = decision.inputs[0]
-    const names = input?.options.map(option => option.name) ?? []
+    const names = input?.options.map((option) => option.name) ?? []
 
     expect(names).toContain('skip')
     expect(names).toContain('pause')
@@ -391,7 +422,7 @@ describe('messageHandler dj requests', () => {
   })
 
   test('a routed remove uses the parsed queue position', async () => {
-    const positions: number[] = []
+    const positions: Array<number> = []
     const { handler } = setup({
       decision: fakeDecision('remove'),
       music: fakeMusic({
@@ -411,7 +442,7 @@ describe('messageHandler dj requests', () => {
   })
 
   test('an unparsed request goes to the dj with the live context', async () => {
-    const inputs: { request: string, guildId: string }[] = []
+    const inputs: Array<{ request: string; guildId: string }> = []
     const agent: DjAgent = {
       async ask(input) {
         inputs.push({ request: input.request, guildId: input.context.guildId })
@@ -470,12 +501,8 @@ describe('messageHandler dj requests', () => {
   })
 
   test('one dj request per channel is in flight at a time', async () => {
-    let release: (reply: string | null) => void = () => {}
-    const agent: DjAgent = {
-      ask: async () => new Promise((resolve) => {
-        release = resolve
-      }),
-    }
+    const release = Promise.withResolvers<string | null>()
+    const agent: DjAgent = { ask: async () => release.promise }
     const { handler } = setup({ agent })
     const first = fakeIncomingMessage({ content: '<@999> uno', users: BOT })
     const second = fakeIncomingMessage({ content: '<@999> dos', users: BOT })
@@ -488,7 +515,7 @@ describe('messageHandler dj requests', () => {
 
     expect(second.replies).toEqual([MESSAGES.djBusy])
 
-    release('listo')
+    release.resolve('listo')
     await running
 
     expect(first.replies).toEqual(['listo'])
@@ -540,7 +567,9 @@ describe('messageHandler failures', () => {
 
     await handler(message.message)
 
-    expect(captured.entries('discord.reply_failed')).toEqual([expect.objectContaining({ error: 'Missing Permissions' })])
+    expect(captured.entries('discord.reply_failed')).toEqual([
+      expect.objectContaining({ error: 'Missing Permissions' }),
+    ])
   })
 
   test('a dj failure answer that cannot be sent is logged', async () => {
@@ -557,23 +586,31 @@ describe('messageHandler failures', () => {
 
     await handler(message.message)
 
-    expect(captured.entries('discord.reply_failed')).toEqual([expect.objectContaining({ error: 'Missing Permissions' })])
+    expect(captured.entries('discord.reply_failed')).toEqual([
+      expect.objectContaining({ error: 'Missing Permissions' }),
+    ])
   })
 })
 
-describe('messageHandler while the bot is in voice', () => {
-  const inVoice: Pick<MusicPort, 'status'> = { status: () => ({ state: 'playing', playbackDurationMs: 0 }) }
+function answeringAgent(answer: string | null): DjAgent {
+  return {
+    async ask() {
+      return answer
+    },
+  }
+}
 
-  function answeringAgent(answer: string | null): DjAgent {
-    return {
-      async ask() {
-        return answer
-      },
-    }
+describe('messageHandler while the bot is in voice', () => {
+  const inVoice: Pick<MusicPort, 'status'> = {
+    status: () => ({ state: 'playing', playbackDurationMs: 0 }),
   }
 
   test('a dj answer in voice is a reaction, not a message', async () => {
-    const { handler } = setup({ decision: fakeDecision('dj'), agent: answeringAgent('Dale'), music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const { handler } = setup({
+      decision: fakeDecision('dj'),
+      agent: answeringAgent('Dale'),
+      music: fakeMusic({ ...inVoice, view: () => view() }),
+    })
     const message = fakeIncomingMessage({ content: 'poneme algo tranqui' })
 
     await handler(message.message)
@@ -590,7 +627,11 @@ describe('messageHandler while the bot is in voice', () => {
         return 'No puedo saltearla desde otro canal'
       },
     }
-    const { handler } = setup({ decision: fakeDecision('dj'), agent, music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const { handler } = setup({
+      decision: fakeDecision('dj'),
+      agent,
+      music: fakeMusic({ ...inVoice, view: () => view() }),
+    })
     const message = fakeIncomingMessage({ content: 'saltéala' })
 
     await handler(message.message)
@@ -600,7 +641,11 @@ describe('messageHandler while the bot is in voice', () => {
   })
 
   test('a failed reaction does not report the dj as unreachable', async () => {
-    const { handler } = setup({ decision: fakeDecision('dj'), agent: answeringAgent('Dale'), music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const { handler } = setup({
+      decision: fakeDecision('dj'),
+      agent: answeringAgent('Dale'),
+      music: fakeMusic({ ...inVoice, view: () => view() }),
+    })
     const message = fakeIncomingMessage({ content: 'poneme algo tranqui', failReact: true })
 
     await handler(message.message)
@@ -610,8 +655,14 @@ describe('messageHandler while the bot is in voice', () => {
 
   test('a song request in voice is acknowledged with a reaction', async () => {
     const voice = fakeVoice()
-    const { handler, replies } = setup({ decision: fakeDecision('query'), music: fakeMusic({ ...inVoice, view: () => view() }) })
-    const message = fakeIncomingMessage({ content: 'cumbia', member: fakeMember({ voiceChannel: voice, botVoiceChannel: voice }) })
+    const { handler, replies } = setup({
+      decision: fakeDecision('query'),
+      music: fakeMusic({ ...inVoice, view: () => view() }),
+    })
+    const message = fakeIncomingMessage({
+      content: 'cumbia',
+      member: fakeMember({ voiceChannel: voice, botVoiceChannel: voice }),
+    })
 
     await handler(message.message)
 
@@ -620,7 +671,11 @@ describe('messageHandler while the bot is in voice', () => {
   })
 
   test('a silent dj in voice still says it had no answer', async () => {
-    const { handler } = setup({ decision: fakeDecision('dj'), agent: answeringAgent(null), music: fakeMusic({ ...inVoice, view: () => view() }) })
+    const { handler } = setup({
+      decision: fakeDecision('dj'),
+      agent: answeringAgent(null),
+      music: fakeMusic({ ...inVoice, view: () => view() }),
+    })
     const message = fakeIncomingMessage({ content: 'poneme algo tranqui' })
 
     await handler(message.message)
@@ -630,9 +685,15 @@ describe('messageHandler while the bot is in voice', () => {
   })
 
   test('a command confirmation in voice is a reaction, not a message', async () => {
-    const { handler, replies } = setup({ decision: fakeDecision('radio'), music: fakeMusic({ ...inVoice, view: () => view(), radio: async () => true }) })
+    const { handler, replies } = setup({
+      decision: fakeDecision('radio'),
+      music: fakeMusic({ ...inVoice, view: () => view(), radio: async () => true }),
+    })
     const voice = fakeVoice()
-    const message = fakeIncomingMessage({ content: 'prendé la radio', member: fakeMember({ voiceChannel: voice, botVoiceChannel: voice }) })
+    const message = fakeIncomingMessage({
+      content: 'prendé la radio',
+      member: fakeMember({ voiceChannel: voice, botVoiceChannel: voice }),
+    })
 
     await handler(message.message)
 
@@ -642,8 +703,14 @@ describe('messageHandler while the bot is in voice', () => {
   })
 
   test('a refusal in voice is still a message', async () => {
-    const { handler, replies } = setup({ decision: fakeDecision('radio'), music: fakeMusic({ ...inVoice, view: () => view() }) })
-    const message = fakeIncomingMessage({ content: 'prendé la radio', member: fakeMember({ voiceChannel: null, botVoiceChannel: fakeVoice() }) })
+    const { handler, replies } = setup({
+      decision: fakeDecision('radio'),
+      music: fakeMusic({ ...inVoice, view: () => view() }),
+    })
+    const message = fakeIncomingMessage({
+      content: 'prendé la radio',
+      member: fakeMember({ voiceChannel: null, botVoiceChannel: fakeVoice() }),
+    })
 
     await handler(message.message)
 
@@ -652,9 +719,15 @@ describe('messageHandler while the bot is in voice', () => {
   })
 
   test('out of voice the confirmation is still a message', async () => {
-    const { handler, replies } = setup({ decision: fakeDecision('radio'), music: fakeMusic({ view: () => view(), radio: async () => true }) })
+    const { handler, replies } = setup({
+      decision: fakeDecision('radio'),
+      music: fakeMusic({ view: () => view(), radio: async () => true }),
+    })
     const voice = fakeVoice()
-    const message = fakeIncomingMessage({ content: 'prendé la radio', member: fakeMember({ voiceChannel: voice, botVoiceChannel: voice }) })
+    const message = fakeIncomingMessage({
+      content: 'prendé la radio',
+      member: fakeMember({ voiceChannel: voice, botVoiceChannel: voice }),
+    })
 
     await handler(message.message)
 

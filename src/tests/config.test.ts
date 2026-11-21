@@ -60,6 +60,8 @@ describe('loadConfig', () => {
   test('enables speech only with key and voice', () => {
     expect(loadConfig({ ...TOKEN, SPEECH_API_KEY: 'key' }).speech.enabled).toBe(false)
     expect(loadConfig({ ...TOKEN, SPEECH_VOICE_ID: 'voice' }).speech.enabled).toBe(false)
-    expect(loadConfig({ ...TOKEN, SPEECH_API_KEY: 'key', SPEECH_VOICE_ID: 'voice' }).speech.enabled).toBe(true)
+    expect(
+      loadConfig({ ...TOKEN, SPEECH_API_KEY: 'key', SPEECH_VOICE_ID: 'voice' }).speech.enabled,
+    ).toBe(true)
   })
 })

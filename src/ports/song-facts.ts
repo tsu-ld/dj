@@ -13,10 +13,10 @@ export interface SongFacts {
   readonly genre: string | null
   readonly artistSummary: string | null
   readonly songSummary: string | null
-  readonly news: readonly SongNews[]
+  readonly news: ReadonlyArray<SongNews>
 }
 
 export interface SongFactsPort {
-  lookup: (input: { title: string, artist: string | null }) => Promise<SongFacts | null>
-  cached: (input: { title: string, artist: string | null }) => SongFacts | null
+  lookup: (input: { title: string; artist: string | null }) => Promise<SongFacts | null>
+  cached: (input: { title: string; artist: string | null }) => SongFacts | null
 }

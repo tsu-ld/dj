@@ -1,33 +1,37 @@
 const RECENT_TITLES = 30
 
-// A YouTube mix offers what just played under another upload: "The Chain (2004
-// Remaster)", "Fleetwood Mac - The Chain - Remastered 2004".
-export function titleKeys(title: string): string[] {
-  const bare = title
+interface RecentTitles {
+  readonly add: (guildId: string, title: string) => void
+  readonly of: (guildId: string) => ReadonlyArray<string>
+}
+
+function withoutUploadVariantNotes(title: string): string {
+  return title
     .toLowerCase()
-    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replaceAll(/\([^)]*\)|\[[^\]]*\]/g, ' ')
     .replace(/\s-\s[^-]*\bremaster(?:ed)?\b[^-]*$/, ' ')
-    .replace(/\s+/g, ' ')
+    .replaceAll(/\s+/g, ' ')
     .trim()
+}
+
+export function titleKeys(title: string): Array<string> {
+  const bare = withoutUploadVariantNotes(title)
   const dash = bare.indexOf(' - ')
   const name = dash === -1 ? '' : bare.slice(dash + 3).trim()
 
-  return [bare, name].filter(key => key !== '')
+  return [bare, name].filter((key) => key !== '')
 }
 
 export function sameSong(title: string, heard: ReadonlySet<string>): boolean {
-  return titleKeys(title).some(key => heard.has(key))
+  return titleKeys(title).some((key) => heard.has(key))
 }
 
-export function recentTitles(): {
-  add: (guildId: string, title: string) => void
-  of: (guildId: string) => readonly string[]
-} {
-  const byGuild = new Map<string, string[]>()
+export function recentTitles(): RecentTitles {
+  const byGuild = new Map<string, Array<string>>()
 
   return {
     add(guildId, title) {
-      byGuild.set(guildId, [...byGuild.get(guildId) ?? [], title].slice(-RECENT_TITLES))
+      byGuild.set(guildId, [...(byGuild.get(guildId) ?? []), title].slice(-RECENT_TITLES))
     },
     of(guildId) {
       return byGuild.get(guildId) ?? []

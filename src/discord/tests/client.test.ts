@@ -19,35 +19,39 @@ describe('discordClient', () => {
   })
 })
 
-describe('waitForGateway', () => {
-  function probe(outcomes: ReadonlyArray<'ok' | 'down' | 'error'>, signal = new AbortController().signal) {
-    const urls: string[] = []
-    const slept: number[] = []
-    let call = 0
+function probe(
+  outcomes: ReadonlyArray<'ok' | 'down' | 'error'>,
+  signal = new AbortController().signal,
+) {
+  const urls: Array<string> = []
+  const slept: Array<number> = []
+  let call = 0
 
-    return {
-      urls,
-      slept,
-      probe: {
-        logger: log,
-        signal,
-        sleep: async (milliseconds: number) => {
-          slept.push(milliseconds)
-        },
-        fetch: async (url: string) => {
-          urls.push(url)
-
-          const outcome = outcomes[Math.min(call++, outcomes.length - 1)]
-
-          if (outcome === 'error')
-            throw new TypeError('getaddrinfo ETIMEOUT discord.com')
-
-          return { ok: outcome === 'ok' }
-        },
+  return {
+    urls,
+    slept,
+    probe: {
+      logger: log,
+      signal,
+      sleep: async (milliseconds: number) => {
+        slept.push(milliseconds)
       },
-    }
-  }
+      fetch: async (url: string) => {
+        urls.push(url)
 
+        const outcome = outcomes[Math.min(call++, outcomes.length - 1)]
+
+        if (outcome === 'error') {
+          throw new TypeError('getaddrinfo ETIMEOUT discord.com')
+        }
+
+        return { ok: outcome === 'ok' }
+      },
+    },
+  }
+}
+
+describe('waitForGateway', () => {
   test('a reachable gateway is used at once', async () => {
     const fake = probe(['ok'])
 
@@ -62,7 +66,7 @@ describe('waitForGateway', () => {
 
     await waitForGateway(fake.probe)
 
-    expect(fake.slept).toEqual([1_000, 2_000, 4_000])
+    expect(fake.slept).toEqual([1000, 2000, 4000])
     expect(fake.urls).toHaveLength(4)
   })
 
@@ -71,7 +75,7 @@ describe('waitForGateway', () => {
 
     await waitForGateway(fake.probe)
 
-    expect(fake.slept).toEqual([1_000, 2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000])
+    expect(fake.slept).toEqual([1000, 2000, 4000, 8000, 15_000, 30_000, 30_000, 30_000])
     expect(fake.urls).toHaveLength(9)
   })
 
@@ -86,7 +90,7 @@ describe('waitForGateway', () => {
 
     await waitForGateway(fake.probe)
 
-    expect(fake.slept).toEqual([1_000])
+    expect(fake.slept).toEqual([1000])
     expect(fake.urls).toHaveLength(1)
   })
 })

@@ -6,19 +6,19 @@ const ROOT = resolve(import.meta.dirname, '../..')
 const SRC = join(ROOT, 'src')
 const MAX_SOURCE_LINES = 300
 
-function sourceFiles(directory: string): string[] {
-  const files: string[] = []
+function sourceFiles(directory: string): Array<string> {
+  const files: Array<string> = []
 
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name)
 
     if (entry.isDirectory()) {
-      if (entry.name === 'tests')
+      if (entry.name === 'tests') {
         continue
+      }
 
       files.push(...sourceFiles(path))
-    }
-    else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
+    } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
       files.push(path)
     }
   }
@@ -26,37 +26,40 @@ function sourceFiles(directory: string): string[] {
   return files
 }
 
-function importsOf(file: string): string[] {
+function importsOf(file: string): Array<string> {
   const source = readFileSync(file, 'utf8')
 
-  return [...source.matchAll(/(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]([^'"]+)['"]/g)]
-    .map(match => match[1])
-    .filter((specifier): specifier is string => specifier !== undefined)
-    .filter(specifier => specifier.startsWith('.'))
-    .map(specifier => resolve(dirname(file), specifier))
+  return [
+    ...source.matchAll(/(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]([^'"]+)['"]/g),
+  ].flatMap((match) => {
+    const specifier = match[1]
+
+    return specifier?.startsWith('.') ? [resolve(dirname(file), specifier)] : []
+  })
 }
 
 function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+  return source.replaceAll(/\/\*[\s\S]*?\*\//g, '').replaceAll(/\/\/.*$/gm, '')
 }
 
 function areaOf(file: string): string {
-  if (file === join(SRC, 'app.ts') || file === join(SRC, 'index.ts'))
+  if (file === join(SRC, 'app.ts') || file === join(SRC, 'index.ts')) {
     return 'app'
+  }
 
   const parts = relative(SRC, file).split(sep)
 
-  return parts.length === 1 ? 'root' : parts[0] ?? 'root'
+  return parts.length === 1 ? 'root' : (parts[0] ?? 'root')
 }
 
 const files = sourceFiles(SRC)
-const imports = new Map(files.map(file => [file, importsOf(file)]))
+const imports = new Map(files.map((file) => [file, importsOf(file)]))
 
 test('every relative import points at a real file', () => {
   const missing = [...imports].flatMap(([file, targets]) =>
     targets
-      .filter(target => !existsSync(target))
-      .map(target => `${relative(SRC, file)} -> ${relative(SRC, target)}`),
+      .filter((target) => !existsSync(target))
+      .map((target) => `${relative(SRC, file)} -> ${relative(SRC, target)}`),
   )
 
   expect(missing).toEqual([])
@@ -64,14 +67,15 @@ test('every relative import points at a real file', () => {
 
 test('the source graph is acyclic', () => {
   const state = new Map<string, 'visiting' | 'done'>()
-  const cycles: string[] = []
+  const cycles: Array<string> = []
 
-  function visit(file: string, stack: string[]): void {
-    if (state.get(file) === 'done')
+  function visit(file: string, stack: Array<string>): void {
+    if (state.get(file) === 'done') {
       return
+    }
 
     if (state.get(file) === 'visiting') {
-      cycles.push([...stack, file].map(path => relative(SRC, path)).join(' -> '))
+      cycles.push([...stack, file].map((path) => relative(SRC, path)).join(' -> '))
 
       return
     }
@@ -79,48 +83,53 @@ test('the source graph is acyclic', () => {
     state.set(file, 'visiting')
 
     for (const target of imports.get(file) ?? []) {
-      if (files.includes(target))
+      if (files.includes(target)) {
         visit(target, [...stack, file])
+      }
     }
 
     state.set(file, 'done')
   }
 
-  for (const file of files)
+  for (const file of files) {
     visit(file, [])
+  }
 
   expect(cycles).toEqual([])
 })
 
-const FORBIDDEN: Record<string, readonly string[]> = {
-  'providers': ['commands', 'discord', 'dj', 'on-air', 'app'],
-  'root': ['providers', 'commands', 'discord', 'dj', 'on-air', 'app'],
-  'dj': ['providers', 'discord', 'on-air', 'app'],
-  'on-air': ['providers', 'discord', 'commands', 'app'],
-  'commands': ['providers', 'discord', 'dj', 'on-air', 'app'],
-  'discord': ['providers', 'dj', 'on-air', 'app'],
-  'ports': ['providers', 'discord', 'dj', 'on-air', 'commands', 'app'],
-  'core': ['ports', 'providers', 'discord', 'dj', 'on-air', 'commands', 'root', 'app'],
-}
+const FORBIDDEN = new Map<string, ReadonlyArray<string>>([
+  ['providers', ['commands', 'discord', 'dj', 'on-air', 'app']],
+  ['root', ['providers', 'commands', 'discord', 'dj', 'on-air', 'app']],
+  ['dj', ['providers', 'discord', 'on-air', 'app']],
+  ['on-air', ['providers', 'discord', 'commands', 'app']],
+  ['commands', ['providers', 'discord', 'dj', 'on-air', 'app']],
+  ['discord', ['providers', 'dj', 'on-air', 'app']],
+  ['ports', ['providers', 'discord', 'dj', 'on-air', 'commands', 'app']],
+  ['core', ['ports', 'providers', 'discord', 'dj', 'on-air', 'commands', 'root', 'app']],
+])
 
 test('no area imports a layer above it', () => {
-  const violations: string[] = []
+  const violations: Array<string> = []
 
   for (const [file, targets] of imports) {
     const from = areaOf(file)
-    const forbidden = FORBIDDEN[from]
+    const forbidden = FORBIDDEN.get(from)
 
-    if (!forbidden)
+    if (!forbidden) {
       continue
+    }
 
     for (const target of targets) {
-      if (!existsSync(target))
+      if (!existsSync(target)) {
         continue
+      }
 
       const to = areaOf(target)
 
-      if (forbidden.includes(to))
+      if (forbidden.includes(to)) {
         violations.push(`${relative(SRC, file)} (${from}) -> ${relative(SRC, target)} (${to})`)
+      }
     }
   }
 
@@ -128,25 +137,45 @@ test('no area imports a layer above it', () => {
 })
 
 test('a provider technology name never leaks into a path', () => {
-  const names = ['distube', 'yt-dlp', 'ytdlp', 'elevenlabs', 'openai', 'jev', 'systemone', 'spotify', 'ffmpeg', 'deepseek', 'typesafe', 'opencode', 'mediaplex', 'davey', 'deezer', 'wikipedia']
+  const names = [
+    'distube',
+    'yt-dlp',
+    'ytdlp',
+    'elevenlabs',
+    'openai',
+    'jev',
+    'systemone',
+    'spotify',
+    'ffmpeg',
+    'deepseek',
+    'typesafe',
+    'opencode',
+    'mediaplex',
+    'davey',
+    'deezer',
+    'wikipedia',
+  ]
   const leaked = files
-    .map(file => relative(SRC, file).toLowerCase())
-    .filter(path => names.some(name => path.includes(name)))
+    .map((file) => relative(SRC, file).toLowerCase())
+    .filter((path) => names.some((name) => path.includes(name)))
 
   expect(leaked).toEqual([])
 })
 
 test('only the configuration module reads the environment', () => {
   const readers = files
-    .filter(file => /\b(?:process|Bun)\.env\b/.test(stripComments(readFileSync(file, 'utf8'))))
-    .map(file => relative(SRC, file))
+    .filter((file) => /\b(?:process|Bun)\.env\b/.test(stripComments(readFileSync(file, 'utf8'))))
+    .map((file) => relative(SRC, file))
 
   expect(readers).toEqual(['config.ts'])
 })
 
 test('no source file outgrows a single concern', () => {
   const large = files
-    .map(file => ({ file: relative(SRC, file), lines: readFileSync(file, 'utf8').split('\n').length }))
+    .map((file) => ({
+      file: relative(SRC, file),
+      lines: readFileSync(file, 'utf8').split('\n').length,
+    }))
     .filter(({ lines }) => lines > MAX_SOURCE_LINES)
 
   expect(large).toEqual([])

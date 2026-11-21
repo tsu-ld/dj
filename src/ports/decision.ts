@@ -1,3 +1,5 @@
+import type { JsonRecord } from '../core/json.ts'
+
 export interface DecisionOption {
   readonly name: string
   readonly description: string
@@ -5,8 +7,8 @@ export interface DecisionOption {
 
 export interface DecisionInput {
   readonly text: string
-  readonly state: Record<string, unknown>
-  readonly options: readonly DecisionOption[]
+  readonly state: JsonRecord
+  readonly options: ReadonlyArray<DecisionOption>
   readonly sessionId: string
 }
 

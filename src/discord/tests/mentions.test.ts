@@ -5,13 +5,18 @@ import { fakeIncomingMessage } from './fakes.ts'
 const BOT_ID = '123'
 const MUSIC = { id: '456', name: 'music' }
 
-function mention(content: string, { mentioned = true, channels = [] }: { mentioned?: boolean, channels?: typeof MUSIC[] } = {}): ReturnType<typeof readMention> {
-  return readMention(fakeIncomingMessage({
-    content,
-    botId: BOT_ID,
-    users: mentioned ? new Map([[BOT_ID, {}]]) : new Map(),
-    channels: new Map(channels.map(channel => [channel.id, channel])),
-  }).message)
+function mention(
+  content: string,
+  { mentioned = true, channels = [] }: { mentioned?: boolean; channels?: Array<typeof MUSIC> } = {},
+): ReturnType<typeof readMention> {
+  return readMention(
+    fakeIncomingMessage({
+      content,
+      botId: BOT_ID,
+      users: mentioned ? new Map([[BOT_ID, {}]]) : new Map(),
+      channels: new Map(channels.map((channel) => [channel.id, channel])),
+    }).message,
+  )
 }
 
 describe('readMention', () => {
@@ -45,7 +50,7 @@ describe('readMention', () => {
   test('channel mentions travel with the message', () => {
     const result = mention(`<@${BOT_ID}> escuchá en <#${MUSIC.id}>`, { channels: [MUSIC] })
 
-    expect(result.channelMentions.map(channel => channel.id)).toEqual([MUSIC.id])
+    expect(result.channelMentions.map((channel) => channel.id)).toEqual([MUSIC.id])
     expect(result.text).toBe(`escuchá en <#${MUSIC.id}>`)
   })
 })

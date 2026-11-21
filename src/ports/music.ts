@@ -20,7 +20,7 @@ export interface Listener {
 
 export interface QueueView {
   readonly current: Track | null
-  readonly upcoming: readonly Track[]
+  readonly upcoming: ReadonlyArray<Track>
   readonly paused: boolean
   readonly radio: boolean
   readonly size: number
@@ -32,10 +32,11 @@ interface PlayRequestFrom {
   readonly textChannel: GuildTextBasedChannel
 }
 
-export type PlayRequest = PlayRequestFrom & (
-  | { readonly kind: 'text', readonly value: string }
-  | { readonly kind: 'tracks', readonly value: readonly string[] }
-)
+export type PlayRequest = PlayRequestFrom &
+  (
+    | { readonly kind: 'text'; readonly value: string }
+    | { readonly kind: 'tracks'; readonly value: ReadonlyArray<string> }
+  )
 
 export interface PlayResult {
   readonly added: number
@@ -49,14 +50,24 @@ export interface BeforeStreamInput {
 }
 
 export interface MusicEventMap {
-  trackQueued: { guildId: string, track: Track, view: QueueView, textChannel: GuildTextBasedChannel | null }
-  playlistQueued: { guildId: string, view: QueueView, textChannel: GuildTextBasedChannel | null }
-  trackStarted: { guildId: string, view: QueueView, textChannel: GuildTextBasedChannel | null }
-  stateChanged: { guildId: string, view: QueueView, textChannel: GuildTextBasedChannel | null }
-  trackSkipped: { guildId: string, track: Track, by: Listener }
+  trackQueued: {
+    guildId: string
+    track: Track
+    view: QueueView
+    textChannel: GuildTextBasedChannel | null
+  }
+  playlistQueued: { guildId: string; view: QueueView; textChannel: GuildTextBasedChannel | null }
+  trackStarted: { guildId: string; view: QueueView; textChannel: GuildTextBasedChannel | null }
+  stateChanged: { guildId: string; view: QueueView; textChannel: GuildTextBasedChannel | null }
+  trackSkipped: { guildId: string; track: Track; by: Listener }
   queueEnded: { guildId: string }
-  queueCleared: { guildId: string, resetStation: boolean }
-  playbackError: { guildId: string, songId: string | null, textChannel: GuildTextBasedChannel | null, cleanupAfterError: boolean }
+  queueCleared: { guildId: string; resetStation: boolean }
+  playbackError: {
+    guildId: string
+    songId: string | null
+    textChannel: GuildTextBasedChannel | null
+    cleanupAfterError: boolean
+  }
   disconnected: { guildId: string }
 }
 
@@ -83,6 +94,9 @@ export interface MusicPort {
   view: (guildId: string) => QueueView | null
   status: (guildId: string) => PlaybackStatus | null
   readonly audio: AudioOverMusic
-  on: <K extends keyof MusicEventMap>(event: K, listener: (payload: MusicEventMap[K]) => void) => () => void
+  on: <K extends keyof MusicEventMap>(
+    event: K,
+    listener: (payload: MusicEventMap[K]) => void,
+  ) => () => void
   dispose: () => Promise<void>
 }

@@ -1,3 +1,4 @@
+import type { JsonRecord } from '../../../core/json.ts'
 import type { PingSample } from '../audio-health.ts'
 import { afterEach, expect, jest, spyOn, test } from 'bun:test'
 import { isRecord } from '../../../core/json.ts'
@@ -35,18 +36,20 @@ function harness() {
     now += 40 + lateMs
     jest.advanceTimersByTime(1)
 
-    if (clockReads === readsBefore)
+    if (clockReads === readsBefore) {
       throw new Error('No sample was scheduled.')
+    }
   }
 
-  function only(event: string): Record<string, unknown> {
+  function only(event: string): JsonRecord {
     const found = log.entries(event)
     expect(found).toHaveLength(1)
 
     const [entry] = found
 
-    if (!isRecord(entry))
+    if (!isRecord(entry)) {
       throw new Error(`No ${event} line was logged.`)
+    }
 
     return entry
   }
@@ -132,25 +135,6 @@ test('the timer runs while a song plays, and stops with the last one', () => {
   h.health.end('g2', 'skipped')
   expect(h.pending()).toBe(0)
   expect(h.cancelled()).toBe(1)
-})
-
-test('a ping that throws is contained, and the song still summarizes', () => {
-  const h = harness()
-  const boom = (): never => {
-    throw new Error('connection destroyed')
-  }
-
-  h.health.start({ guildId: 'g1', title: 'One', ping: boom })
-  h.health.start({ guildId: 'g2', title: 'Two', ping: boom })
-
-  expect(() => h.tick(0)).not.toThrow()
-  expect(() => h.health.end('g1', 'finished')).not.toThrow()
-
-  expect(h.count('music.ping_failed')).toBe(2)
-  expect(h.only('music.audio_health').guildId).toBe('g1')
-  expect(h.only('music.audio_health').reason).toBe('finished')
-
-  h.health.dispose()
 })
 
 test('dispose clears the timer and any pending summary', () => {

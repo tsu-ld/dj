@@ -26,10 +26,11 @@ beforeEach(async () => {
 afterEach(async () => {
   restoreFetch()
 
-  if (previousTmp === undefined)
+  if (previousTmp === undefined) {
     delete process.env.TMPDIR
-  else
+  } else {
     process.env.TMPDIR = previousTmp
+  }
 
   await removeTempDirs()
 })
@@ -55,23 +56,33 @@ function audioBody(): Response {
   return new Response(new Uint8Array([1, 2, 3]), { status: 200 })
 }
 
-function providerFetch(options: {
-  usage?: () => Response
-  audio?: () => Response
-} = {}): FetchCalls {
+function providerFetch(
+  options: {
+    usage?: () => Response
+    audio?: () => Response
+  } = {},
+): FetchCalls {
   return stubFetch(async (input) => {
-    if (String(input).includes('/user/subscription'))
+    if (String(input).includes('/user/subscription')) {
       return options.usage?.() ?? usageBody(0, 100_000)
+    }
 
     return options.audio?.() ?? audioBody()
   })
 }
 
-function synthesizer(deps: { logger?: Logger, clock?: Clock } = {}): SpeechPort {
-  return speechSynthesizer({ config: config(), logger: deps.logger ?? captureLog().logger, clock: deps.clock ?? testClock() })
+function synthesizer(deps: { logger?: Logger; clock?: Clock } = {}): SpeechPort {
+  return speechSynthesizer({
+    config: config(),
+    logger: deps.logger ?? captureLog().logger,
+    clock: deps.clock ?? testClock(),
+  })
 }
 
-async function lineAgainstQuota(used: number, length: number): Promise<{ aired: boolean, synthesized: number }> {
+async function lineAgainstQuota(
+  used: number,
+  length: number,
+): Promise<{ aired: boolean; synthesized: number }> {
   restoreFetch()
 
   const fetch = providerFetch({ usage: () => usageBody(used, 10_000) })
@@ -83,8 +94,8 @@ async function lineAgainstQuota(used: number, length: number): Promise<{ aired: 
 describe('the monthly quota', () => {
   test('a line only fits while the monthly quota covers it', async () => {
     expect(await lineAgainstQuota(0, 110)).toEqual({ aired: true, synthesized: 1 })
-    expect(await lineAgainstQuota(9_950, 110)).toEqual({ aired: false, synthesized: 0 })
-    expect(await lineAgainstQuota(9_950, 50)).toEqual({ aired: true, synthesized: 1 })
+    expect(await lineAgainstQuota(9950, 110)).toEqual({ aired: false, synthesized: 0 })
+    expect(await lineAgainstQuota(9950, 50)).toEqual({ aired: true, synthesized: 1 })
   })
 })
 
@@ -117,12 +128,13 @@ describe('rendering', () => {
     const speech = synthesizer()
     const file = await speech.synthesize('Hola')
 
-    if (file === null)
+    if (file === null) {
       throw new Error('Expected a clip')
+    }
 
     expect(dirname(file)).toBe(join(directory, 'dj-speech'))
     expect(basename(file)).toMatch(/^tts-1000000-[a-z0-9]+\.mp3$/)
-    expect([...await readFile(file)]).toEqual([1, 2, 3])
+    expect([...(await readFile(file))]).toEqual([1, 2, 3])
     expect(existsSync(file)).toBe(true)
 
     await speech.dispose()
@@ -137,8 +149,9 @@ describe('rendering', () => {
     const first = await speech.synthesize('Uno')
     const second = await speech.synthesize('Dos')
 
-    if (first === null || second === null)
+    if (first === null || second === null) {
       throw new Error('Expected two clips')
+    }
 
     await speech.dispose()
 
@@ -156,15 +169,18 @@ describe('cleanup', () => {
     const speech = synthesizer({ logger: capture.logger })
     const file = await speech.synthesize('Hola')
 
-    if (file === null)
+    if (file === null) {
       throw new Error('Expected a clip')
+    }
 
     await rm(file)
     await mkdir(file)
     await writeFile(join(file, 'blocker'), '')
     await speech.dispose()
 
-    expect(capture.entries('speech.clip_delete_failed')).toEqual([expect.objectContaining({ level: 'warn', path: file })])
+    expect(capture.entries('speech.clip_delete_failed')).toEqual([
+      expect.objectContaining({ level: 'warn', path: file }),
+    ])
   })
 })
 
@@ -202,8 +218,9 @@ describe('quota', () => {
     const capture = captureLog()
 
     stubFetch(async (input) => {
-      if (String(input).includes('/user/subscription'))
+      if (String(input).includes('/user/subscription')) {
         return new Response('nope', { status: 500 })
+      }
 
       return audioBody()
     })
@@ -238,8 +255,12 @@ describe('quota', () => {
 
       audioCalls++
 
-      if (audioCalls === 1)
-        return new Response('{"detail":{"code":"quota_exceeded","status":"max_character_limit_exceeded"}}', { status: 401 })
+      if (audioCalls === 1) {
+        return new Response(
+          '{"detail":{"code":"quota_exceeded","status":"max_character_limit_exceeded"}}',
+          { status: 401 },
+        )
+      }
 
       return audioBody()
     })
@@ -263,7 +284,10 @@ describe('quota', () => {
 describe('credentials', () => {
   test('a rejected key latches the provider until restart', async () => {
     const fetch = providerFetch({
-      audio: () => new Response('{"detail":{"code":"unauthorized","status":"invalid_api_key"}}', { status: 401 }),
+      audio: () =>
+        new Response('{"detail":{"code":"unauthorized","status":"invalid_api_key"}}', {
+          status: 401,
+        }),
     })
     const capture = captureLog()
 
@@ -304,8 +328,9 @@ describe('failures', () => {
 
   test('an invalid subscription shape is a failed read, not an empty quota', async () => {
     stubFetch(async (input) => {
-      if (String(input).includes('/user/subscription'))
-        return json({ character_count: null, character_limit: 10000 })
+      if (String(input).includes('/user/subscription')) {
+        return json({ character_count: null, character_limit: 10_000 })
+      }
 
       return audioBody()
     })

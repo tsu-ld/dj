@@ -8,10 +8,17 @@ type Station = ReturnType<typeof onAirStation>
 type StationSong = Parameters<Station['recordSong']>[1]
 
 function song(id: string, extra: Partial<StationSong> = {}): StationSong {
-  return { id, title: id.toUpperCase(), artist: null, requestedBy: null, fromRadio: false, ...extra }
+  return {
+    id,
+    title: id.toUpperCase(),
+    artist: null,
+    requestedBy: null,
+    fromRadio: false,
+    ...extra,
+  }
 }
 
-function runOf(station: Station): PlayedEntry[] {
+function runOf(station: Station): Array<PlayedEntry> {
   const { last, earlier } = station.run('g1')
 
   return last === null ? [] : [...earlier.toReversed(), last]
@@ -20,7 +27,7 @@ function runOf(station: Station): PlayedEntry[] {
 describe('cadence', () => {
   test('the first line and every second after it are long', () => {
     const station = onAirStation({ clock: testClock() })
-    const long: boolean[] = []
+    const long: Array<boolean> = []
 
     for (let line = 0; line < 6; line++) {
       long.push(station.shouldUseLongLine('g1'))
@@ -51,13 +58,25 @@ describe('cadence', () => {
   })
 
   test('one requested song in three runs without a line', () => {
-    expect([1, 2, 3, 4, 5, 6].map(index => shouldSpeak(index, false)))
-      .toEqual([true, true, false, true, true, false])
+    expect([1, 2, 3, 4, 5, 6].map((index) => shouldSpeak(index, false))).toEqual([
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+    ])
   })
 
   test('autoplay songs talk even less', () => {
-    expect([1, 2, 3, 4, 5, 6].map(index => shouldSpeak(index, true)))
-      .toEqual([false, false, true, false, false, true])
+    expect([1, 2, 3, 4, 5, 6].map((index) => shouldSpeak(index, true))).toEqual([
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+    ])
   })
 
   test('ending a session keeps the cadence', () => {
@@ -109,8 +128,9 @@ describe('run and session', () => {
 
     expect(station.run('g1')).toEqual({ lastId: null, last: null, earlier: [] })
 
-    for (const id of ['a', 'b', 'c', 'd'])
+    for (const id of ['a', 'b', 'c', 'd']) {
       station.recordSong('g1', song(id, { requestedBy: 'tsu', artist: 'Band' }))
+    }
 
     station.recordSong('g1', song('e', { fromRadio: true }))
     station.markSkipped('g1', 'e', 'Ana')
@@ -119,7 +139,9 @@ describe('run and session', () => {
 
     expect(run.lastId).toBe('e')
     expect(run.last).toMatchObject({ title: 'E', fromRadio: true, skippedBy: 'Ana' })
-    expect(run.earlier.map(entry => [entry.title, entry.artist, entry.requestedBy, entry.skippedBy])).toEqual([
+    expect(
+      run.earlier.map((entry) => [entry.title, entry.artist, entry.requestedBy, entry.skippedBy]),
+    ).toEqual([
       ['D', 'Band', 'tsu', null],
       ['C', 'Band', 'tsu', null],
       ['B', 'Band', 'tsu', null],
@@ -134,7 +156,7 @@ describe('run and session', () => {
     station.recordSong('g1', song('a'))
     station.markSkipped('g1', 'a', 'Ana')
 
-    expect(runOf(station).map(played => played.skippedBy)).toEqual([null, null, 'Ana'])
+    expect(runOf(station).map((played) => played.skippedBy)).toEqual([null, null, 'Ana'])
   })
 
   test('the first line of a session follows the start, a disconnect and a reset', () => {
@@ -181,7 +203,9 @@ describe('recent songs', () => {
     station.recordSong('g1', song('b', { title: 'La Luna', fromRadio: true }))
     station.recordSong('g1', song('a', { title: 'Matador', requestedBy: 'tsu' }))
 
-    expect(runOf(station).map(played => [played.title, played.requestedBy, played.fromRadio])).toEqual([
+    expect(
+      runOf(station).map((played) => [played.title, played.requestedBy, played.fromRadio]),
+    ).toEqual([
       ['Matador', 'tsu', false],
       ['La Luna', null, true],
       ['Matador', 'tsu', false],
@@ -191,10 +215,11 @@ describe('recent songs', () => {
   test('the run shows the newest songs of a long window', () => {
     const station = onAirStation({ clock: testClock() })
 
-    for (let index = 0; index < RADIO_MEMORY_SIZE + 3; index++)
+    for (let index = 0; index < RADIO_MEMORY_SIZE + 3; index++) {
       station.recordSong('g1', song(String(index)))
+    }
 
-    expect(runOf(station).map(played => played.title)).toEqual(
+    expect(runOf(station).map((played) => played.title)).toEqual(
       Array.from({ length: 4 }, (_, index) => String(RADIO_MEMORY_SIZE + index - 1)),
     )
     expect(station.run('g1').lastId).toBe(String(RADIO_MEMORY_SIZE + 2))

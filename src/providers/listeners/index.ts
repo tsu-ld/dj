@@ -1,11 +1,22 @@
 import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
+import type { JsonRecord } from '../../core/json.ts'
 import type { ListenersPort } from '../../ports/listeners.ts'
-import type { ArtistStat, SongStat } from './stats.ts'
+import type { ArtistStat, SongStat, StatTable } from './stats.ts'
 import { isRecord } from '../../core/json.ts'
 import { normalizeTitle } from '../../core/text.ts'
 import { jsonMapFile, normalizeMap } from '../json-file.ts'
-import { bumpArtist, countOf, keepTop, MAX_MEMBERS, MAX_SONGS, timestampOf, topArtists, topSong, WRITE_DELAY_MS } from './stats.ts'
+import {
+  bumpArtist,
+  countOf,
+  keepTop,
+  MAX_MEMBERS,
+  MAX_SONGS,
+  timestampOf,
+  topArtists,
+  topSong,
+  WRITE_DELAY_MS,
+} from './stats.ts'
 
 interface StoredMember {
   name: string
@@ -19,21 +30,24 @@ type StoredGuild = Record<string, StoredMember>
 
 function normalizeCounts<T>(
   value: unknown,
-  stat: (key: string, entry: Record<string, unknown>, count: number) => T,
-): Record<string, T> {
-  if (!isRecord(value))
+  stat: (key: string, entry: JsonRecord, count: number) => T,
+): StatTable<T> {
+  if (!isRecord(value)) {
     return {}
+  }
 
-  const stats: Record<string, T> = {}
+  const stats: StatTable<T> = {}
 
   for (const [key, entry] of Object.entries(value)) {
-    if (!key || !isRecord(entry))
+    if (!key || !isRecord(entry)) {
       continue
+    }
 
     const count = countOf(entry.count)
 
-    if (count > 0)
+    if (count > 0) {
       stats[key] = stat(key, entry, count)
+    }
   }
 
   return stats
@@ -48,12 +62,16 @@ function normalizeSongs(value: unknown): Record<string, SongStat> {
 }
 
 function normalizeArtists(value: unknown): Record<string, ArtistStat> {
-  return normalizeCounts(value, (_, artist, count) => ({ count, lastRequested: timestampOf(artist.lastRequested) }))
+  return normalizeCounts(value, (_, artist, count) => ({
+    count,
+    lastRequested: timestampOf(artist.lastRequested),
+  }))
 }
 
 function normalizeMember(value: unknown): StoredMember | null {
-  if (!isRecord(value) || typeof value.name !== 'string')
+  if (!isRecord(value) || typeof value.name !== 'string') {
     return null
+  }
 
   return {
     name: value.name,
@@ -67,28 +85,42 @@ function normalizeMember(value: unknown): StoredMember | null {
 function capMembers(guild: StoredGuild): void {
   const ids = Object.keys(guild)
 
-  if (ids.length <= MAX_MEMBERS)
+  if (ids.length <= MAX_MEMBERS) {
     return
+  }
 
   ids.sort((left, right) => (guild[left]?.lastSeen ?? 0) - (guild[right]?.lastSeen ?? 0))
 
-  for (const id of ids.slice(0, ids.length - MAX_MEMBERS))
+  for (const id of ids.slice(0, ids.length - MAX_MEMBERS)) {
     delete guild[id]
+  }
 }
 
-export async function listenersStore(deps: { path: string, logger: Logger, clock: Clock }): Promise<ListenersPort> {
+export async function listenersStore(deps: {
+  path: string
+  logger: Logger
+  clock: Clock
+}): Promise<ListenersPort> {
   const { clock } = deps
-  const store = jsonMapFile({ path: deps.path, name: 'listeners', logger: deps.logger, entry: value => normalizeMap(value, normalizeMember) })
+  const store = jsonMapFile({
+    path: deps.path,
+    name: 'listeners',
+    logger: deps.logger,
+    entry: (value) => normalizeMap(value, normalizeMember),
+  })
   const file = await store.read()
   let timer: ReturnType<typeof setTimeout> | null = null
 
   function schedule(): void {
-    if (timer)
+    if (timer) {
       return
+    }
 
     timer = setTimeout(() => {
       timer = null
-      void store.write(file).catch(error => deps.logger.error('listeners.persist_failed', error))
+      void store
+        .write(file)
+        .catch((error: unknown) => deps.logger.error('listeners.persist_failed', error))
     }, WRITE_DELAY_MS)
   }
 
@@ -130,21 +162,26 @@ export async function listenersStore(deps: { path: string, logger: Logger, clock
 
       if (key) {
         const previous = member.songs[key]
-        const next = { ...member.songs, [key]: { title: song.title, count: (previous?.count ?? 0) + 1, lastRequested: at } }
+        const next = {
+          ...member.songs,
+          [key]: { title: song.title, count: (previous?.count ?? 0) + 1, lastRequested: at },
+        }
 
         member.songs = keepTop(next, MAX_SONGS, key)
       }
 
-      if (typeof song.artist === 'string' && song.artist.length > 0)
+      if (typeof song.artist === 'string' && song.artist.length > 0) {
         member.artists = bumpArtist(member.artists, song.artist, at)
+      }
 
       schedule()
     },
     profile(guildId, listenerId) {
       const member = file[guildId]?.[listenerId]
 
-      if (!member)
+      if (!member) {
         return null
+      }
 
       return {
         name: member.name,

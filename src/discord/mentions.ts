@@ -2,7 +2,7 @@ import type { Channel, Message } from 'discord.js'
 
 interface Mention {
   readonly botMentioned: boolean
-  readonly channelMentions: readonly Channel[]
+  readonly channelMentions: ReadonlyArray<Channel>
   readonly text: string
 }
 
@@ -19,9 +19,13 @@ export function readMention(message: Message): Mention {
   return { botMentioned, channelMentions, text }
 }
 
-export function isChannelConfiguration(text: string, channelMentions: readonly { readonly id: string }[]): boolean {
-  if (channelMentions.length !== 1)
+export function isChannelConfiguration(
+  text: string,
+  channelMentions: ReadonlyArray<{ readonly id: string }>,
+): boolean {
+  if (channelMentions.length !== 1) {
     return false
+  }
 
   const [channel] = channelMentions
 

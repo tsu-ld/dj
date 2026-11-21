@@ -11,14 +11,14 @@
 
 Most music bots are jukeboxes with a command line. **dj** is built to feel like a person running the station:
 
-| Instead of | dj |
-|---|---|
-| Learning `/play`, `/skip`, `/queue` | You type in the channel: `skip this one`, `play something chill`, a band, a link |
-| Dead air between songs | A short spoken intro in the gap before the song. The music waits for it. |
-| "Added to queue" after every request | A ✅ while it is on air; the live card shows the rest |
-| Autoplay looping the same few hits | Radio that avoids songs it played recently, remasters included |
-| Trivia from the model's imagination | Facts from Deezer, Wikipedia and recent news; the host is told to state nothing else as fact |
-| Everyone treated the same | It remembers who asks for what: favorite songs, artists, request milestones |
+| Instead of                           | dj                                                                                           |
+| ------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Learning `/play`, `/skip`, `/queue`  | You type in the channel: `skip this one`, `play something chill`, a band, a link             |
+| Dead air between songs               | A short spoken intro in the gap before the song. The music waits for it.                     |
+| "Added to queue" after every request | A ✅ while it is on air; the live card shows the rest                                        |
+| Autoplay looping the same few hits   | Radio that avoids songs it played recently, remasters included                               |
+| Trivia from the model's imagination  | Facts from Deezer, Wikipedia and recent news; the host is told to state nothing else as fact |
+| Everyone treated the same            | It remembers who asks for what: favorite songs, artists, request milestones                  |
 
 <p align="center">
   <img src="docs/assets/a-night-on-air.gif" alt="tsu asks for the best LoL Worlds anthems and gets a checkmark; the song ends, the host says a short line about tsu's request in the gap, and the next song starts after it; tsu says skip this one and gets a checkmark" width="760">
@@ -52,6 +52,7 @@ With a voice configured, the DJ speaks in the gap before a song starts. The song
 </p>
 
 One card per server shows:
+
 - what is playing and who asked for it;
 - a progress bar that moves every 15 seconds;
 - the next three songs;
@@ -78,7 +79,8 @@ Turn the radio on and related songs keep playing after the queue runs dry. It re
 ## Quick start
 
 You need:
-- **[Bun](https://bun.sh) 1.4+**;
+
+- **[Bun](https://bun.sh) 1.4.5+**;
 - **FFmpeg** and **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** on `PATH`;
 - a bot from the [Discord developer portal](https://discord.com/developers/applications) with the **Message Content** intent on, invited with View Channels, Send Messages, Embed Links, Add Reactions, Read Message History, Connect and Speak.
 
@@ -92,13 +94,13 @@ Then, as someone with **Manage Channels**, type `@DJ #music` in the channel it s
 
 With only the token, you get a music bot: searches, links, the card and its buttons. **The full station needs three more pieces.** Plain-language controls need the router, conversation needs the DJ, and spoken lines need both the DJ and a voice:
 
-| Set | And you get |
-|---|---|
-| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | **The DJ**: conversation, song picks, in-character replies and the writing of every spoken line. Point `LLM_BASE_URL` at the full `/responses` URL of an OpenAI-compatible endpoint. The default model is `deepseek-v4-flash`. |
-| `DECISION_BASE_URL`, `DECISION_API_KEY`, `DECISION_MODEL` | **The router** that turns plain messages into controls, searches or DJ requests, using a System One endpoint such as [Jev](https://typesafe.ai). Without it, plain messages are searched and only mentions reach the DJ. |
-| `SPEECH_API_KEY`, `SPEECH_VOICE_ID`, `SPEECH_MODEL_ID` | **The voice on air** ([ElevenLabs](https://elevenlabs.io), `eleven_v4` by default). A Spanish (Argentina) voice from their library suits the default show. |
-| `MUSIC_METADATA_CLIENT_ID`, `MUSIC_METADATA_CLIENT_SECRET` | Spotify's official API for Spotify links, before the web fallback. |
-| `assets/welcome.mp3` | A short intro the first time it joins voice in a server after it starts. |
+| Set                                                        | And you get                                                                                                                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`                 | **The DJ**: conversation, song picks, in-character replies and the writing of every spoken line. Point `LLM_BASE_URL` at the full `/responses` URL of an OpenAI-compatible endpoint. The default model is `deepseek-v4-flash`. |
+| `DECISION_BASE_URL`, `DECISION_API_KEY`, `DECISION_MODEL`  | **The router** that turns plain messages into controls, searches or DJ requests, using a System One endpoint such as [Jev](https://typesafe.ai). Without it, plain messages are searched and only mentions reach the DJ.       |
+| `SPEECH_API_KEY`, `SPEECH_VOICE_ID`, `SPEECH_MODEL_ID`     | **The voice on air** ([ElevenLabs](https://elevenlabs.io), `eleven_v4` by default). A Spanish (Argentina) voice from their library suits the default show.                                                                     |
+| `MUSIC_METADATA_CLIENT_ID`, `MUSIC_METADATA_CLIENT_SECRET` | Spotify's official API for Spotify links, before the web fallback.                                                                                                                                                             |
+| `assets/welcome.mp3`                                       | A short intro the first time it joins voice in a server after it starts.                                                                                                                                                       |
 
 ## How a song goes on air
 
@@ -119,6 +121,6 @@ sequenceDiagram
 
 - [VISION.md](VISION.md): what dj is, the tenets that decide trade-offs, and what it will never be.
 - [AGENTS.md](AGENTS.md): commands, the map of the code, the words we use and how we write it.
-- `bun run check` runs lint, typecheck and the tests, exactly as CI does.
+- `bun check` formats, lints and type-checks; `bun test` runs the tests. CI runs both.
 
 MIT licensed.

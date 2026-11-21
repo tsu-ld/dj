@@ -11,7 +11,10 @@ export class ProviderError extends Error {
   readonly failure: ProviderFailure
   readonly status: number | null
 
-  constructor(message: string, options: { failure: ProviderFailure, status?: number, cause?: unknown }) {
+  constructor(
+    message: string,
+    options: { failure: ProviderFailure; status?: number; cause?: unknown },
+  ) {
     super(message, { cause: options.cause })
     this.name = 'ProviderError'
     this.failure = options.failure
@@ -27,8 +30,8 @@ export class TimeoutError extends Error {
 }
 
 export class ConfigError extends Error {
-  constructor(issues: readonly string[]) {
-    super(`Invalid configuration:\n${issues.map(issue => `- ${issue}`).join('\n')}`)
+  constructor(issues: ReadonlyArray<string>) {
+    super(`Invalid configuration:\n${issues.map((issue) => `- ${issue}`).join('\n')}`)
     this.name = 'ConfigError'
   }
 }

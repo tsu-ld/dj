@@ -11,7 +11,9 @@ type DecisionConfig = Extract<AppConfig['decision'], { enabled: true }>
 const INSTRUCTIONS = 'What does the user want the bot to do? Pick the single option that fits best.'
 
 async function decide(config: DecisionConfig, input: DecisionInput): Promise<string | null> {
-  const criteria = Object.fromEntries(input.options.map(option => [option.name, option.description]))
+  const criteria = Object.fromEntries(
+    input.options.map((option) => [option.name, option.description]),
+  )
 
   const response = await fetch(config.baseUrl, {
     method: 'POST',
@@ -26,29 +28,32 @@ async function decide(config: DecisionConfig, input: DecisionInput): Promise<str
     signal: AbortSignal.timeout(config.timeoutMs),
   })
 
-  if (!response.ok)
+  if (!response.ok) {
     throw await failedResponse('Decision endpoint', response)
+  }
 
   const payload = parseJson(await response.text())
 
   if (!isRecord(payload)) {
-    throw new ProviderError(
-      'Decision endpoint returned an invalid payload',
-      { failure: 'retryable', status: response.status },
-    )
+    throw new ProviderError('Decision endpoint returned an invalid payload', {
+      failure: 'retryable',
+      status: response.status,
+    })
   }
 
   const answers = payload.answers
   const answer = isRecord(answers) ? answers.action : undefined
 
-  if (!isRecord(answer))
+  if (!isRecord(answer)) {
     return null
+  }
 
   const confidence = typeof answer.confidence === 'number' ? answer.confidence : 0
   const choice = typeof answer.choice === 'string' ? answer.choice : null
 
-  if (choice === null || confidence < config.minConfidence)
+  if (choice === null || confidence < config.minConfidence) {
     return null
+  }
 
   return Object.hasOwn(criteria, choice) ? choice : null
 }
@@ -59,8 +64,9 @@ export function intentClassifier(deps: {
 }): DecisionPort {
   const { config, clock } = deps
 
-  if (!config.enabled)
+  if (!config.enabled) {
     return { choose: async () => null }
+  }
 
   const breaker = circuitBreaker({
     cooldownMs: config.retryAfterMs,
@@ -69,8 +75,9 @@ export function intentClassifier(deps: {
 
   return {
     async choose(input) {
-      if (!breaker.allow())
+      if (!breaker.allow()) {
         return null
+      }
 
       try {
         const choice = await decide(config, input)
@@ -78,8 +85,7 @@ export function intentClassifier(deps: {
         breaker.success()
 
         return choice
-      }
-      catch (error) {
+      } catch (error) {
         breaker.failure()
 
         throw mapFailure(error)

@@ -19,14 +19,22 @@ class FakeStream extends EventEmitter {
 }
 
 class FakeVoice extends EventEmitter {
-  constructor(public stream: FakeStream, readonly connection = { ping: { ws: 44 as number | undefined, udp: 58 as number | undefined } }) {
+  stream: FakeStream
+  readonly connection = { ping: { ws: 44 as number | undefined, udp: 58 as number | undefined } }
+
+  constructor(stream: FakeStream) {
     super()
+    this.stream = stream
   }
 }
 
 interface FakeQueue {
   readonly id: string
-  readonly songs: Array<{ readonly id: string, readonly name: string, readonly stream: { playFromSource: boolean } }>
+  readonly songs: Array<{
+    readonly id: string
+    readonly name: string
+    readonly stream: { playFromSource: boolean }
+  }>
   readonly textChannel: null
   readonly voice: FakeVoice
 }
@@ -43,17 +51,17 @@ function fakeQueue(stream: FakeStream): FakeQueue {
 function fakePlayer(queue: FakeQueue) {
   const bus = new EventEmitter()
   const player = {
-    on(event: string, listener: (...args: never[]) => void) {
-      bus.on(event, listener as (...args: unknown[]) => void)
+    on(event: string, listener: (...args: Array<never>) => void) {
+      bus.on(event, listener as (...args: Array<unknown>) => void)
 
       return player
     },
-    off(event: string, listener: (...args: never[]) => void) {
-      bus.off(event, listener as (...args: unknown[]) => void)
+    off(event: string, listener: (...args: Array<never>) => void) {
+      bus.off(event, listener as (...args: Array<unknown>) => void)
 
       return player
     },
-    emit(event: string, ...args: unknown[]) {
+    emit(event: string, ...args: Array<unknown>) {
       return bus.emit(event, ...args)
     },
     getQueue: () => queue,
@@ -65,8 +73,8 @@ function fakePlayer(queue: FakeQueue) {
 }
 
 function fakeHealth() {
-  const started: AudioHealthSession[] = []
-  const ended: Array<{ guildId: string, reason: AudioEndReason }> = []
+  const started: Array<AudioHealthSession> = []
+  const ended: Array<{ guildId: string; reason: AudioEndReason }> = []
   const health: AudioHealth = {
     start(session) {
       started.push(session)
@@ -83,7 +91,7 @@ function fakeHealth() {
 function wiring(player: ReturnType<typeof fakePlayer>, realHealth?: AudioHealth) {
   const log = captureLog()
   const { emitter } = createEmitter()
-  const failures: string[] = []
+  const failures: Array<string> = []
   const failedSongs: Array<string | null> = []
   const { health, started, ended } = fakeHealth()
 
@@ -95,7 +103,10 @@ function wiring(player: ReturnType<typeof fakePlayer>, realHealth?: AudioHealth)
   const events = musicEvents({
     player: player as unknown as DisTube,
     client: { on: () => {}, off: () => {} } as unknown as Client,
-    catalog: { trackOf: (value: { id: string, name?: string }) => track({ id: value.id, title: value.name ?? value.id }) } as never,
+    catalog: {
+      trackOf: (value: { id: string; name?: string }) =>
+        track({ id: value.id, title: value.name ?? value.id }),
+    } as never,
     cache: { prefetch: () => {} } as never,
     emitter,
     forgetStream: () => {},
@@ -169,7 +180,7 @@ test('an orphan error leaves the song now playing with its session running', () 
   stream.emit('error', ffmpegExited())
   player.emit(Events.FINISH_SONG, queue, queue.songs[0])
 
-  expect(harness.started.map(session => session.guildId)).toEqual(['g1'])
+  expect(harness.started.map((session) => session.guildId)).toEqual(['g1'])
   expect(harness.ended).toEqual([{ guildId: 'g1', reason: 'finished' }])
 })
 
@@ -215,9 +226,10 @@ test('a stop clears the session, so the sample timer stops without a skip', () =
     harness.emitter.emit('queueCleared', { guildId: 'g1', resetStation: true })
 
     expect(jest.getTimerCount()).toBe(0)
-    expect(captured.entries('music.audio_health')).toEqual([expect.objectContaining({ reason: 'stopped' })])
-  }
-  finally {
+    expect(captured.entries('music.audio_health')).toEqual([
+      expect.objectContaining({ reason: 'stopped' }),
+    ])
+  } finally {
     health.dispose()
     jest.useRealTimers()
   }

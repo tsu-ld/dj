@@ -47,7 +47,9 @@ describe('dataBlock', () => {
 describe('normalizeTitle', () => {
   test('drops bracketed tags, case and extra spaces', () => {
     expect(normalizeTitle('  Matador (Official Video) [HD] ')).toBe('matador')
-    expect(normalizeTitle('Radiohead - Karma Police (Official Video)')).toBe(normalizeTitle('radiohead -  KARMA POLICE'))
+    expect(normalizeTitle('Radiohead - Karma Police (Official Video)')).toBe(
+      normalizeTitle('radiohead -  KARMA POLICE'),
+    )
   })
 
   test('a title that is only tags is empty', () => {

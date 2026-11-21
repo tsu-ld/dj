@@ -21,7 +21,13 @@ const ANNIVERSARY_WINDOW_DAYS = 3
 const REQUEST_MILESTONES = new Set([1, 5, 10, 25, 50, 100])
 const RELEASE_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
 
-const ORDER: readonly Exclude<Angle, 'welcome' | 'run'>[] = ['listener', 'anniversary', 'story', 'news', 'fact']
+const ORDER: ReadonlyArray<Exclude<Angle, 'welcome' | 'run'>> = [
+  'listener',
+  'anniversary',
+  'story',
+  'news',
+  'fact',
+]
 
 interface Anniversary {
   readonly years: number
@@ -31,41 +37,53 @@ interface Anniversary {
 export function anniversaryOf(facts: SongFacts | null, now: number): Anniversary | null {
   const date = RELEASE_DATE.exec(facts?.releaseDate ?? '')
 
-  if (!date)
+  if (!date) {
     return null
+  }
 
   const [year, month, day] = [Number(date[1]), Number(date[2]), Number(date[3])]
   const today = new Date(now)
   const todayStart = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
 
-  for (const candidate of [today.getUTCFullYear() - 1, today.getUTCFullYear(), today.getUTCFullYear() + 1]) {
+  for (const candidate of [
+    today.getUTCFullYear() - 1,
+    today.getUTCFullYear(),
+    today.getUTCFullYear() + 1,
+  ]) {
     const days = Math.round((Date.UTC(candidate, month - 1, day) - todayStart) / DAY_MS)
     const years = candidate - year
 
-    if (Math.abs(days) <= ANNIVERSARY_WINDOW_DAYS && years > 0)
+    if (Math.abs(days) <= ANNIVERSARY_WINDOW_DAYS && years > 0) {
       return { years, days }
+    }
   }
 
   return null
 }
 
-export function freshNews(facts: SongFacts | null, now: number): readonly SongNews[] {
-  return (facts?.news ?? []).filter(item => now - item.publishedAt <= NEWS_MAX_AGE_MS)
+export function freshNews(facts: SongFacts | null, now: number): ReadonlyArray<SongNews> {
+  return (facts?.news ?? []).filter((item) => now - item.publishedAt <= NEWS_MAX_AGE_MS)
 }
 
 function isListenerMilestone(track: Track, listener: ListenerProfile | null): boolean {
-  if (listener === null || track.fromRadio)
+  if (listener === null || track.fromRadio) {
     return false
+  }
 
-  if (REQUEST_MILESTONES.has(listener.requests + 1))
+  if (REQUEST_MILESTONES.has(listener.requests + 1)) {
     return true
+  }
 
-  if (listener.topSong !== null && normalizeTitle(listener.topSong.title) === normalizeTitle(track.title))
+  if (
+    listener.topSong !== null &&
+    normalizeTitle(listener.topSong.title) === normalizeTitle(track.title)
+  ) {
     return true
+  }
 
   const artist = track.artist?.trim().toLowerCase() ?? ''
 
-  return artist !== '' && listener.topArtists.some(top => top.trim().toLowerCase() === artist)
+  return artist !== '' && listener.topArtists.some((top) => top.trim().toLowerCase() === artist)
 }
 
 function fits(angle: Exclude<Angle, 'welcome' | 'run'>, input: AngleInput): boolean {
@@ -86,8 +104,9 @@ function fits(angle: Exclude<Angle, 'welcome' | 'run'>, input: AngleInput): bool
 }
 
 export function pickAngle(input: AngleInput): Angle {
-  if (input.first)
+  if (input.first) {
     return 'welcome'
+  }
 
-  return ORDER.find(angle => angle !== input.lastAngle && fits(angle, input)) ?? 'run'
+  return ORDER.find((angle) => angle !== input.lastAngle && fits(angle, input)) ?? 'run'
 }

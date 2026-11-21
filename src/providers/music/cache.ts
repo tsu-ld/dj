@@ -19,17 +19,16 @@ export interface AudioCache {
   dispose: () => void
 }
 
-// yt-dlp leaves <id>.<ext>.part and .ytdl files mid-download
-function isPartial(file: string): boolean {
+function isUnfinishedDownload(file: string): boolean {
   return file.endsWith('.part') || file.endsWith('.ytdl')
 }
 
-function finishedAudioFile(files: readonly string[], id: string): string | undefined {
-  return files.find(file => file.startsWith(`${id}.`) && !isPartial(file))
+function finishedAudioFile(files: ReadonlyArray<string>, id: string): string | undefined {
+  return files.find((file) => file.startsWith(`${id}.`) && !isUnfinishedDownload(file))
 }
 
 function safeFileId(id: unknown): string {
-  return String(id ?? '').replace(/[^\w-]/g, '_')
+  return String(id ?? '').replaceAll(/[^\w-]/g, '_')
 }
 
 export function audioCache(deps: {
@@ -44,10 +43,11 @@ export function audioCache(deps: {
   const prefetching = new Set<string>()
   let disposed = false
 
-  async function filesIn(dirPath: string): Promise<string[]> {
+  async function filesIn(dirPath: string): Promise<Array<string>> {
     return readdir(dirPath).catch((error: unknown) => {
-      if (!isRecord(error) || error.code !== 'ENOENT')
+      if (!isRecord(error) || error.code !== 'ENOENT') {
         logger.warn('music.cache_unreadable', { error: errorMessage(error) })
+      }
 
       return []
     })
@@ -61,15 +61,16 @@ export function audioCache(deps: {
 
   async function cleanOldFiles(): Promise<void> {
     const now = Date.now()
-    const kept: Array<{ path: string, size: number, mtimeMs: number }> = []
+    const kept: Array<{ path: string; size: number; mtimeMs: number }> = []
     let removedBytes = 0
 
     for (const file of await filesIn(dir)) {
       const path = join(dir, file)
       const info = await stat(path).catch(() => null)
 
-      if (!info?.isFile())
+      if (!info?.isFile()) {
         continue
+      }
 
       if (now - info.mtimeMs > maxAgeMs) {
         await rm(path, { force: true })
@@ -77,23 +78,26 @@ export function audioCache(deps: {
         continue
       }
 
-      if (!isPartial(file))
+      if (!isUnfinishedDownload(file)) {
         kept.push({ path, size: info.size, mtimeMs: info.mtimeMs })
+      }
     }
 
     let totalBytes = kept.reduce((sum, file) => sum + file.size, 0)
 
     for (const file of kept.sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-      if (totalBytes <= maxBytes)
+      if (totalBytes <= maxBytes) {
         break
+      }
 
       await rm(file.path, { force: true })
       totalBytes -= file.size
       removedBytes += file.size
     }
 
-    if (removedBytes > 0)
+    if (removedBytes > 0) {
       logger.info('music.cache_cleaned', { bytes: removedBytes })
+    }
   }
 
   async function downloadFile(url: string, id: string): Promise<string> {
@@ -102,15 +106,17 @@ export function audioCache(deps: {
 
     const existing = finishedAudioFile(await filesIn(dir), id)
 
-    if (existing !== undefined)
+    if (existing !== undefined) {
       return join(dir, existing)
+    }
 
     await extraction.download(url, join(dir, `${id}.%(ext)s`))
 
     const file = finishedAudioFile(await filesIn(dir), id)
 
-    if (file === undefined)
+    if (file === undefined) {
       throw new Error('The extractor downloaded audio but no file was found.')
+    }
 
     return join(dir, file)
   }
@@ -119,8 +125,9 @@ export function audioCache(deps: {
     const fileId = safeFileId(id)
     const pending = downloads.get(fileId)
 
-    if (pending)
+    if (pending) {
       return pending
+    }
 
     const task = downloadFile(url, fileId).finally(() => downloads.delete(fileId))
 
@@ -129,17 +136,22 @@ export function audioCache(deps: {
     return task
   }
 
-  function prefetch(
-    candidate: PrefetchCandidate | null | undefined,
-    guildId: string,
-  ): void {
-    if (!candidate || disposed || prefetching.has(guildId))
+  function prefetch(candidate: PrefetchCandidate | null | undefined, guildId: string): void {
+    if (!candidate || disposed || prefetching.has(guildId)) {
       return
+    }
 
     const url = candidate.url
 
-    if (url === undefined || url === null || url === '' || candidate.isLive === true || !isYoutubeUrl(url))
+    if (
+      url === undefined ||
+      url === null ||
+      url === '' ||
+      candidate.isLive === true ||
+      !isYoutubeUrl(url)
+    ) {
       return
+    }
 
     prefetching.add(guildId)
 

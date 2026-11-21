@@ -38,14 +38,16 @@ test('queue room is what remains under the cap', () => {
 
 test('the queue is capped after the current song and reports what it dropped', () => {
   const names = Array.from({ length: MAX_QUEUE_SIZE + 1 }, (_, index) => `song-${index}`)
-  const queue = { songs: names.map(name => ({ name })) }
+  const queue = { songs: names.map((name) => ({ name })) }
 
   expect(capQueue(queue)).toBe(1)
-  expect(queue.songs.map(song => song.name)).toEqual(names.slice(0, MAX_QUEUE_SIZE))
+  expect(queue.songs.map((song) => song.name)).toEqual(names.slice(0, MAX_QUEUE_SIZE))
 })
 
 test('a queue under the cap is left untouched', () => {
-  const queue = { songs: Array.from({ length: MAX_QUEUE_SIZE - 1 }, (_, index) => ({ name: `song-${index}` })) }
+  const queue = {
+    songs: Array.from({ length: MAX_QUEUE_SIZE - 1 }, (_, index) => ({ name: `song-${index}` })),
+  }
 
   expect(capQueue(queue)).toBe(0)
   expect(queue.songs).toHaveLength(MAX_QUEUE_SIZE - 1)
@@ -60,7 +62,7 @@ test('removing a song keeps the rest of the queue in order', async () => {
   })
 
   expect(skipped).toBe(false)
-  expect(queue.songs.map(song => song.name)).toEqual(['a', 'c'])
+  expect(queue.songs.map((song) => song.name)).toEqual(['a', 'c'])
 })
 
 test('removing the current song skips it instead of splicing', async () => {
@@ -145,11 +147,11 @@ test('the view maps the current song, every upcoming song and the queue state', 
       paused: true,
       autoplay: true,
     },
-    song => track({ id: song.id, title: song.id, fromRadio: song.id === 'c' }),
+    (song) => track({ id: song.id, title: song.id, fromRadio: song.id === 'c' }),
   )
 
   expect(view.current?.id).toBe('a')
-  expect(view.upcoming.map(song => song.id)).toEqual(['b', 'c'])
+  expect(view.upcoming.map((song) => song.id)).toEqual(['b', 'c'])
   expect(view.upcoming[1]?.fromRadio).toBe(true)
   expect(view.size).toBe(3)
   expect(view.paused).toBe(true)
@@ -210,18 +212,29 @@ test('cleanup only runs when the failed song left the live queue empty', () => {
   expect(shouldCleanupAfterError(queue, undefined)).toBe(false)
 })
 
-function station(options: { status?: AudioPlayerStatus, songs?: (catalog: MusicCatalog) => Song[] } = {}): {
+interface StationOptions {
+  status?: AudioPlayerStatus | undefined
+  songs?: (catalog: MusicCatalog) => Array<Song>
+}
+
+interface ControlledStation {
   controls: ReturnType<typeof musicControls>
-  order: string[]
-  seeks: number[]
+  order: Array<string>
+  seeks: Array<number>
   skipped: Array<MusicEventMap['trackSkipped']>
   cleared: Array<MusicEventMap['queueCleared']>
   setPlaybackTime: (seconds: number) => void
-} {
-  const catalog = new MusicCatalog({ extraction: extractionStub(), stream: streamStub(), logger: log })
+}
+
+function station(options: StationOptions = {}): ControlledStation {
+  const catalog = new MusicCatalog({
+    extraction: extractionStub(),
+    stream: streamStub(),
+    logger: log,
+  })
   const songs = options.songs?.(catalog) ?? [catalog.buildSong({ id: 'a', title: 'A' }, {})]
-  const order: string[] = []
-  const seeks: number[] = []
+  const order: Array<string> = []
+  const seeks: Array<number> = []
   const skipped: Array<MusicEventMap['trackSkipped']> = []
   const cleared: Array<MusicEventMap['queueCleared']> = []
   const queue = {
@@ -264,7 +277,7 @@ function station(options: { status?: AudioPlayerStatus, songs?: (catalog: MusicC
     catalog,
     mutations: keyedQueue(),
     emitter,
-    viewOf: current => queueView(current, song => catalog.trackOf(song)),
+    viewOf: (current) => queueView(current, (song) => catalog.trackOf(song)),
     leave: () => order.push('leave'),
     streamReplaced: () => order.push('streamReplaced'),
   })
@@ -281,17 +294,32 @@ function station(options: { status?: AudioPlayerStatus, songs?: (catalog: MusicC
   }
 }
 
-function seekStation(options: { status?: AudioPlayerStatus, isLive?: boolean, duration?: number, copyDuration?: number, url?: string } = {}): ReturnType<typeof station> {
+function seekStation(
+  options: {
+    status?: AudioPlayerStatus
+    isLive?: boolean
+    duration?: number
+    copyDuration?: number
+    url?: string
+  } = {},
+): ControlledStation {
   return station({
     status: options.status,
     songs(catalog) {
-      const song = catalog.buildSong({ id: 'a', title: 'A', duration: options.duration ?? 200, is_live: options.isLive ?? false }, {})
+      const song = catalog.buildSong(
+        {
+          id: 'a',
+          title: 'A',
+          duration: options.duration ?? 200,
+          is_live: options.isLive ?? false,
+        },
+        {},
+      )
       const url = options.url ?? 'https://rr1.googlevideo.com/videoplayback?id=a'
 
       if (options.copyDuration === undefined) {
         song.stream = { playFromSource: true, url }
-      }
-      else {
+      } else {
         const copy = catalog.buildSong({ id: 'yt', title: 'A', duration: options.copyDuration }, {})
 
         copy.stream = { playFromSource: true, url }
@@ -303,10 +331,13 @@ function seekStation(options: { status?: AudioPlayerStatus, isLive?: boolean, du
   })
 }
 
-function skipStation(): ReturnType<typeof station> {
+function skipStation(): ControlledStation {
   return station({
-    songs: catalog => [
-      catalog.buildSong({ id: 'a', title: 'A', artist: 'Soda Stereo' }, { member: memberOf('200000000000000007', 'tsu') }),
+    songs: (catalog) => [
+      catalog.buildSong(
+        { id: 'a', title: 'A', artist: 'Soda Stereo' },
+        { member: memberOf('200000000000000007', 'tsu') },
+      ),
       catalog.buildSong({ id: 'b', title: 'B' }, {}),
       catalog.buildSong({ id: 'c', title: 'C' }, {}),
     ],
@@ -365,7 +396,9 @@ test('only a song that is playing seeks: not one buffering, paused, live or of u
   ]
 
   for (const station of stations) {
-    expect(await rejection(async () => station.controls.seek('guild-1', 'a', 40))).toBe(MESSAGES.seekUnavailable)
+    expect(await rejection(async () => station.controls.seek('guild-1', 'a', 40))).toBe(
+      MESSAGES.seekUnavailable,
+    )
     expect(station.seeks).toEqual([])
   }
 })
@@ -405,8 +438,11 @@ test('a skip reports who skipped the playing song, before skipping', async () =>
 test('removing a position outside the queue is refused and removes nothing', async () => {
   const { controls, order } = skipStation()
 
-  for (const position of [0, 4, 1.5, Number.NaN])
-    expect(await rejection(async () => controls.remove('guild-1', position, listener))).toBe(MESSAGES.removeOutOfRange)
+  for (const position of [0, 4, 1.5, Number.NaN]) {
+    expect(await rejection(async () => controls.remove('guild-1', position, listener))).toBe(
+      MESSAGES.removeOutOfRange,
+    )
+  }
 
   expect(order).toEqual([])
   expect(controls.view('guild-1')?.size).toBe(3)
@@ -420,24 +456,31 @@ test('removing the playing song reports a skip; removing a waiting song does not
 
   expect(await controls.remove('guild-1', 1, listener)).toBe('A')
   expect(order).toEqual(['stateChanged', 'trackSkipped', 'skip', 'stateChanged'])
-  expect(skipped.map(event => [event.track.id, event.by.name])).toEqual([['a', 'ana']])
+  expect(skipped.map((event) => [event.track.id, event.by.name])).toEqual([['a', 'ana']])
 })
 
 const guild = { members: { me: { id: 'bot' } } }
 
-function voiceChannel({ type = ChannelType.GuildVoice, permissions = { has: () => true } }: {
+function voiceChannel({
+  type = ChannelType.GuildVoice,
+  permissions = { has: () => true },
+}: {
   type?: ChannelType
-  permissions?: { has: (permission: readonly bigint[]) => boolean } | null
-} = {}): { type: ChannelType, guild: typeof guild, permissionsFor: () => typeof permissions } {
+  permissions?: { has: (permission: ReadonlyArray<bigint>) => boolean } | null
+} = {}) {
   return { type, guild, permissionsFor: () => permissions }
 }
 
 test('a stage channel needs speaker permission', () => {
-  expect(voiceChannelProblem(voiceChannel({ type: ChannelType.GuildStageVoice }))).toBe(MESSAGES.stageChannelPermissions)
+  expect(voiceChannelProblem(voiceChannel({ type: ChannelType.GuildStageVoice }))).toBe(
+    MESSAGES.stageChannelPermissions,
+  )
 })
 
 test('a channel where the bot cannot connect and speak is rejected', () => {
-  expect(voiceChannelProblem(voiceChannel({ permissions: { has: () => false } }))).toBe(MESSAGES.botPermissions)
+  expect(voiceChannelProblem(voiceChannel({ permissions: { has: () => false } }))).toBe(
+    MESSAGES.botPermissions,
+  )
   expect(voiceChannelProblem(voiceChannel({ permissions: null }))).toBe(MESSAGES.botPermissions)
 })
 

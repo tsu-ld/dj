@@ -11,10 +11,15 @@ import { musicPlay } from '../play.ts'
 import { assertYoutubeUrl } from '../policy.ts'
 import { extractionStub, memberOf, rejection, streamStub } from './fakes.ts'
 
-function station(resolve: (input: string) => void, queued = 0): { play: ReturnType<typeof musicPlay>, calls: string[] } {
-  const calls: string[] = []
+interface PlayStation {
+  play: ReturnType<typeof musicPlay>
+  calls: Array<string>
+}
+
+function station(resolve: (input: string) => void, queued = 0): PlayStation {
+  const calls: Array<string> = []
   const player = {
-    getQueue: () => queued === 0 ? undefined : { songs: Array.from({ length: queued }) },
+    getQueue: () => (queued === 0 ? undefined : { songs: Array.from({ length: queued }) }),
     async play(_channel: unknown, input: string) {
       calls.push('play')
       resolve(input)
@@ -35,9 +40,16 @@ function station(resolve: (input: string) => void, queued = 0): { play: ReturnTy
   return { play, calls }
 }
 
-function request(value: string, me: unknown = { voice: null }): Parameters<ReturnType<typeof musicPlay>>[0] {
+function request(
+  value: string,
+  me: unknown = { voice: null },
+): Parameters<ReturnType<typeof musicPlay>>[0] {
   const guild = { id: 'g1', members: { me } }
-  const voiceChannel = { type: ChannelType.GuildVoice, guild, permissionsFor: () => ({ has: () => true }) } as unknown as VoiceBasedChannel
+  const voiceChannel = {
+    type: ChannelType.GuildVoice,
+    guild,
+    permissionsFor: () => ({ has: () => true }),
+  } as unknown as VoiceBasedChannel
 
   return {
     kind: 'text',
@@ -49,23 +61,31 @@ function request(value: string, me: unknown = { voice: null }): Parameters<Retur
 }
 
 test('a music host the catalog cannot resolve is answered as an unsupported link', async () => {
-  const { play, calls } = station(input => assertYoutubeUrl(input))
+  const { play, calls } = station((input) => assertYoutubeUrl(input))
 
-  expect(await rejection(async () => play(request('https://open.spotify.com/artist/4tZwfgrHOc3mvqYlEYSvVi')))).toBe(MESSAGES.unsupportedUrl)
+  expect(
+    await rejection(async () =>
+      play(request('https://open.spotify.com/artist/4tZwfgrHOc3mvqYlEYSvVi')),
+    ),
+  ).toBe(MESSAGES.unsupportedUrl)
   expect(calls).toEqual(['welcome', 'play'])
 })
 
 test('a link outside the music hosts is refused before the bot joins', async () => {
   const { play, calls } = station(() => {})
 
-  expect(await rejection(async () => play(request('https://example.com/song.mp3')))).toBe(MESSAGES.unsupportedUrl)
+  expect(await rejection(async () => play(request('https://example.com/song.mp3')))).toBe(
+    MESSAGES.unsupportedUrl,
+  )
   expect(calls).toEqual([])
 })
 
 test('a full queue is refused before the bot joins', async () => {
   const { play, calls } = station(() => {}, MAX_QUEUE_SIZE)
 
-  expect(await rejection(async () => play(request('cumbia')))).toBe(MESSAGES.queueFull(MAX_QUEUE_SIZE))
+  expect(await rejection(async () => play(request('cumbia')))).toBe(
+    MESSAGES.queueFull(MAX_QUEUE_SIZE),
+  )
   expect(calls).toEqual([])
 })
 
@@ -92,7 +112,11 @@ test('a failed disconnect after a failed play is logged instead of left unhandle
   }
 
   expect(await rejection(async () => play(request('cumbia', me)))).toBe(MESSAGES.playbackError)
-  await new Promise(resolve => setImmediate(resolve))
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve)
+  })
 
-  expect(captured.entries('music.disconnect_failed')).toEqual([expect.objectContaining({ level: 'warn', error: 'gateway closed' })])
+  expect(captured.entries('music.disconnect_failed')).toEqual([
+    expect.objectContaining({ level: 'warn', error: 'gateway closed' }),
+  ])
 })

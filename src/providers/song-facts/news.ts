@@ -8,8 +8,6 @@ const PUB_DATE = /<pubDate>([\s\S]*?)<\/pubDate>/
 const SOURCE = /<source[^>]*>([\s\S]*?)<\/source>/
 const MAX_ITEMS = 3
 
-// Google News answers a one-word name in its everyday sense ("Queen" a monarch, "Air" a gas),
-// so such a name needs one of these words in the headline.
 const MUSIC_WORDS = new Set([
   'album',
   'albums',
@@ -67,24 +65,25 @@ const MUSIC_WORDS = new Set([
 ])
 
 function escapePattern(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
-// Feeds carry broken entities (&#99999999;) that String.fromCodePoint throws on.
-function fromCodePoint(code: number): string {
-  return Number.isInteger(code) && code > 0 && code <= 0x10FFFF ? String.fromCodePoint(code) : ''
+function fromCodePointOrEmpty(code: number): string {
+  return Number.isInteger(code) && code > 0 && code <= 0x10_ff_ff ? String.fromCodePoint(code) : ''
 }
 
 function decodeEntities(raw: string): string {
   return raw
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/&#(\d+);/g, (_, code: string) => fromCodePoint(Number(code)))
-    .replace(/&#x([\da-f]+);/gi, (_, code: string) => fromCodePoint(Number.parseInt(code, 16)))
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, '\'')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
+    .replaceAll(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replaceAll(/&#(\d+);/g, (_, code: string) => fromCodePointOrEmpty(Number(code)))
+    .replaceAll(/&#x([\da-f]+);/gi, (_, code: string) =>
+      fromCodePointOrEmpty(Number.parseInt(code, 16)),
+    )
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&')
 }
 
 function textOf(block: string, pattern: RegExp): string | null {
@@ -94,70 +93,82 @@ function textOf(block: string, pattern: RegExp): string | null {
   return value === undefined ? null : decodeEntities(value).trim()
 }
 
-// Google News appends " - <outlet>" to every title.
-function withoutSource(title: string, source: string | null): string {
+function withoutOutletSuffix(title: string, source: string | null): string {
   const suffix = source === null ? '' : ` - ${source}`
 
   return suffix !== '' && title.endsWith(suffix) ? title.slice(0, -suffix.length).trim() : title
 }
 
 function hasMusicWord(title: string): boolean {
-  return normalizeName(title).split(' ').some(word => MUSIC_WORDS.has(word))
+  return normalizeName(title)
+    .split(' ')
+    .some((word) => MUSIC_WORDS.has(word))
 }
 
 function namesAnother(title: string, name: string): boolean {
-  const pattern = new RegExp(`(?:^|[^\\p{L}\\p{N}])(${escapePattern(name)})(['’]s)?\\s+(\\p{L})`, 'iu')
-  const match = pattern.exec(title.normalize('NFD').replace(/\p{M}/gu, ''))
+  const pattern = new RegExp(
+    `(?:^|[^\\p{L}\\p{N}])(${escapePattern(name)})(['’]s)?\\s+(\\p{L})`,
+    'iu',
+  )
+  const match = pattern.exec(title.normalize('NFD').replaceAll(/\p{M}/gu, ''))
   const first = match?.[3] ?? ''
 
   return match?.[2] === undefined && first !== '' && first !== first.toLowerCase()
 }
 
 function isAboutArtist(title: string, name: string): boolean {
-  if (!containsWords(title, name))
+  if (!containsWords(title, name)) {
     return false
+  }
 
-  if (name.includes(' '))
+  if (name.includes(' ')) {
     return true
+  }
 
   return !namesAnother(title, name) && hasMusicWord(title)
 }
 
-export function parseNews(xml: string, artist: string, now: number): SongNews[] {
+export function parseNews(xml: string, artist: string, now: number): Array<SongNews> {
   const name = normalizeName(artist)
 
-  if (!name)
+  if (!name) {
     return []
+  }
 
-  const items: SongNews[] = []
+  const items: Array<SongNews> = []
 
   for (const match of xml.matchAll(ITEM)) {
     const block = match[1]
 
-    if (block === undefined)
+    if (block === undefined) {
       continue
+    }
 
     const rawTitle = textOf(block, TITLE)
     const published = textOf(block, PUB_DATE)
 
-    if (rawTitle === null || published === null)
+    if (rawTitle === null || published === null) {
       continue
+    }
 
     const publishedAt = Date.parse(published)
 
-    if (!Number.isFinite(publishedAt) || now - publishedAt > NEWS_MAX_AGE_MS)
+    if (!Number.isFinite(publishedAt) || now - publishedAt > NEWS_MAX_AGE_MS) {
       continue
+    }
 
     const source = textOf(block, SOURCE)
-    const title = withoutSource(rawTitle, source)
+    const title = withoutOutletSuffix(rawTitle, source)
 
-    if (!isAboutArtist(title, name))
+    if (!isAboutArtist(title, name)) {
       continue
+    }
 
     items.push({ title, source, publishedAt })
 
-    if (items.length >= MAX_ITEMS)
+    if (items.length >= MAX_ITEMS) {
       break
+    }
   }
 
   return items

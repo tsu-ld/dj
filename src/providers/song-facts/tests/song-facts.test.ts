@@ -9,21 +9,21 @@ import { parseNews } from '../news.ts'
 
 const TITLE = 'Daft Punk - One More Time (Official Video)'
 const NOW = Date.parse('2026-11-18T12:00:00Z')
-const DEADLINE_MS = 8_000
+const DEADLINE_MS = 8000
 
 const SEARCH_RESULT = {
   data: [
     {
-      id: 3135556,
+      id: 3_135_556,
       title: 'One More Time',
       artist: { id: 27, name: 'Daft Punk' },
-      album: { id: 302127, title: 'Discovery' },
+      album: { id: 302_127, title: 'Discovery' },
     },
   ],
 }
 
 const ALBUM = {
-  id: 302127,
+  id: 302_127,
   title: 'Discovery',
   release_date: '2001-03-07',
   label: 'Parlophone',
@@ -33,19 +33,26 @@ const ALBUM = {
 const ARTIST_PAGE = {
   type: 'standard',
   description: 'French electronic music duo',
-  extract: 'Daft Punk were a French electronic music duo formed in Paris in 1993. They are known for their helmets.',
+  extract:
+    'Daft Punk were a French electronic music duo formed in Paris in 1993. They are known for their helmets.',
 }
 
 const SONG_SEARCH = {
   pages: [
-    { id: 1, key: 'One_More_Time_(Daft_Punk_song)', title: 'One More Time (Daft Punk song)', description: 'song' },
+    {
+      id: 1,
+      key: 'One_More_Time_(Daft_Punk_song)',
+      title: 'One More Time (Daft Punk song)',
+      description: 'song',
+    },
   ],
 }
 
 const SONG_PAGE = {
   type: 'standard',
   description: '2000 single by Daft Punk',
-  extract: 'One More Time is a song by the French electronic duo Daft Punk. It was released in 2000. It became a hit.',
+  extract:
+    'One More Time is a song by the French electronic duo Daft Punk. It was released in 2000. It became a hit.',
 }
 
 const NEWS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -87,23 +94,29 @@ function network(routes: Routes = {}): FetchCalls {
   return stubFetch(async (input): Promise<Response> => {
     const url = String(input)
 
-    if (url.startsWith('https://api.deezer.com/search'))
+    if (url.startsWith('https://api.deezer.com/search')) {
       return (routes.search ?? (() => json(SEARCH_RESULT)))(url)
+    }
 
-    if (url.startsWith('https://api.deezer.com/album/'))
+    if (url.startsWith('https://api.deezer.com/album/')) {
       return json(ALBUM)
+    }
 
-    if (url.startsWith('https://en.wikipedia.org/w/rest.php/v1/search/page'))
+    if (url.startsWith('https://en.wikipedia.org/w/rest.php/v1/search/page')) {
       return (routes.songSearch ?? (() => json(SONG_SEARCH)))(url)
+    }
 
-    if (url.startsWith('https://en.wikipedia.org/api/rest_v1/page/summary/Daft_Punk'))
+    if (url.startsWith('https://en.wikipedia.org/api/rest_v1/page/summary/Daft_Punk')) {
       return (routes.artist ?? (() => json(ARTIST_PAGE)))(url)
+    }
 
-    if (url.startsWith('https://en.wikipedia.org/api/rest_v1/page/summary/'))
+    if (url.startsWith('https://en.wikipedia.org/api/rest_v1/page/summary/')) {
       return (routes.song ?? (() => json(SONG_PAGE)))(url)
+    }
 
-    if (url.startsWith('https://news.google.com/'))
+    if (url.startsWith('https://news.google.com/')) {
       return (routes.news ?? (() => xml(NEWS)))(url)
+    }
 
     return new Response('', { status: 404 })
   })
@@ -117,12 +130,14 @@ const silent: Logger = {
   child: () => silent,
 }
 
-function requestedUrls(calls: FetchCalls): string[] {
+function requestedUrls(calls: FetchCalls): Array<string> {
   return Array.from({ length: calls.count() }, (_, index) => calls.at(index).url)
 }
 
-function userAgents(calls: FetchCalls): (string | null)[] {
-  return Array.from({ length: calls.count() }, (_, index) => new Headers(calls.at(index).init?.headers).get('User-Agent'))
+function userAgents(calls: FetchCalls): Array<string | null> {
+  return Array.from({ length: calls.count() }, (_, index) =>
+    new Headers(calls.at(index).init?.headers).get('User-Agent'),
+  )
 }
 
 function factsPort(): ReturnType<typeof songFacts> {
@@ -134,7 +149,11 @@ afterEach(() => {
   restoreFetch()
 })
 
-const FRESH_NEWS = { title: 'Daft Punk announce a new album', source: 'BBC', publishedAt: Date.parse('Tue, 17 Nov 2026 08:00:00 GMT') }
+const FRESH_NEWS = {
+  title: 'Daft Punk announce a new album',
+  source: 'BBC',
+  publishedAt: Date.parse('Tue, 17 Nov 2026 08:00:00 GMT'),
+}
 
 const EXPECTED: SongFacts = {
   artist: 'Daft Punk',
@@ -144,7 +163,8 @@ const EXPECTED: SongFacts = {
   releaseDate: '2001-03-07',
   genre: 'Electro',
   artistSummary: 'Daft Punk were a French electronic music duo formed in Paris in 1993.',
-  songSummary: 'One More Time is a song by the French electronic duo Daft Punk. It was released in 2000.',
+  songSummary:
+    'One More Time is a song by the French electronic duo Daft Punk. It was released in 2000.',
   news: [FRESH_NEWS],
 }
 
@@ -169,11 +189,16 @@ describe('songFacts.lookup', () => {
       'https://en.wikipedia.org/api/rest_v1/page/summary/One_More_Time_(Daft_Punk_song)',
       'https://news.google.com/rss/search?q=%22Daft%20Punk%22%20(banda%20OR%20band%20OR%20music%20OR%20m%C3%BAsica%20OR%20song%20OR%20canci%C3%B3n%20OR%20album%20OR%20disco%20OR%20concert%20OR%20show%20OR%20tour%20OR%20gira)&hl=es-419&gl=AR&ceid=AR:es-419',
     ])
-    expect(userAgents(net)).toEqual(Array.from({ length: 6 }, () => 'dj-discord-bot/1.0 (self-hosted Discord radio)'))
+    expect(userAgents(net)).toEqual(
+      Array.from({ length: 6 }, () => 'dj-discord-bot/1.0 (self-hosted Discord radio)'),
+    )
   })
 
   test('an artist mismatch from a bare track is refused', async () => {
-    const net = network({ search: () => json({ data: [{ id: 1, title: 'One More Time', artist: { name: 'Dua Lipa' } }] }) })
+    const net = network({
+      search: () =>
+        json({ data: [{ id: 1, title: 'One More Time', artist: { name: 'Dua Lipa' } }] }),
+    })
     const facts = await factsPort().lookup({ title: 'One More Time', artist: 'Daft Punk' })
 
     expect(facts).toBeNull()
@@ -181,7 +206,10 @@ describe('songFacts.lookup', () => {
   })
 
   test('a mismatch with an explicit split still gathers the song summary and news', async () => {
-    const net = network({ search: () => json({ data: [{ id: 1, title: 'One More Time', artist: { name: 'Dua Lipa' } }] }) })
+    const net = network({
+      search: () =>
+        json({ data: [{ id: 1, title: 'One More Time', artist: { name: 'Dua Lipa' } }] }),
+    })
     const facts = await factsPort().lookup({ title: TITLE, artist: null })
 
     expect(facts?.artist).toBe('Daft Punk')
@@ -194,7 +222,8 @@ describe('songFacts.lookup', () => {
 
   test('a Deezer error payload on HTTP 200 is a miss', async () => {
     network({
-      search: () => json({ error: { type: 'Exception', message: 'Quota limit exceeded', code: 4 } }),
+      search: () =>
+        json({ error: { type: 'Exception', message: 'Quota limit exceeded', code: 4 } }),
       songSearch: () => json({ pages: [] }),
       news: () => xml(EMPTY_FEED),
     })
@@ -212,7 +241,12 @@ describe('songFacts.lookup', () => {
 
   test('an artist page that never mentions music is not a summary', async () => {
     network({
-      artist: () => json({ type: 'standard', description: 'A town in France', extract: 'Discovery is a town in the Loire valley.' }),
+      artist: () =>
+        json({
+          type: 'standard',
+          description: 'A town in France',
+          extract: 'Discovery is a town in the Loire valley.',
+        }),
     })
     const facts = await factsPort().lookup({ title: TITLE, artist: null })
 
@@ -224,9 +258,11 @@ describe('songFacts.lookup', () => {
     jest.useFakeTimers()
 
     let settled = false
-    const lookup = factsPort().lookup({ title: TITLE, artist: null }).finally(() => {
-      settled = true
-    })
+    const lookup = factsPort()
+      .lookup({ title: TITLE, artist: null })
+      .finally(() => {
+        settled = true
+      })
 
     jest.advanceTimersByTime(DEADLINE_MS - 1)
     await settle()
@@ -268,7 +304,11 @@ describe('songFacts.lookup', () => {
   })
 
   test('a miss is cached too, so a wrong title is only searched once', async () => {
-    const net = network({ search: () => json({ data: [] }), songSearch: () => json({ pages: [] }), news: () => xml(EMPTY_FEED) })
+    const net = network({
+      search: () => json({ data: [] }),
+      songSearch: () => json({ pages: [] }),
+      news: () => xml(EMPTY_FEED),
+    })
     const port = factsPort()
 
     await port.lookup({ title: TITLE, artist: null })
@@ -293,21 +333,29 @@ describe('songFacts.cached', () => {
   })
 })
 
-describe('live API regressions', () => {
-  test('a plain Deezer query finds a remastered track and reports title_short', async () => {
-    const search = (url: string): Response => url.includes('q=artist%3A')
-      ? json({ data: [], total: 0 })
-      : json({
-          data: [{
+function plainQuerySearch(url: string): Response {
+  return url.includes('q=artist%3A')
+    ? json({ data: [], total: 0 })
+    : json({
+        data: [
+          {
             id: 7,
             title: 'The Chain (2004 Remaster)',
             title_short: 'The Chain',
             artist: { name: 'Daft Punk' },
             album: { id: 99, title: 'Rumours' },
-          }],
-        })
-    const net = network({ search })
-    const facts = await factsPort().lookup({ title: 'Daft Punk - The Chain (2004 Remaster)', artist: null })
+          },
+        ],
+      })
+}
+
+describe('live API regressions', () => {
+  test('a plain Deezer query finds a remastered track and reports title_short', async () => {
+    const net = network({ search: plainQuerySearch })
+    const facts = await factsPort().lookup({
+      title: 'Daft Punk - The Chain (2004 Remaster)',
+      artist: null,
+    })
 
     expect(facts?.title).toBe('The Chain')
     expect(facts?.album).toBe('Discovery')
@@ -319,17 +367,20 @@ describe('live API regressions', () => {
 
   test('the artist article is not used as the song summary', async () => {
     network({
-      songSearch: () => json({
-        pages: [
-          { key: 'Daft_Punk', title: 'Daft Punk' },
-          { key: 'One_More_Time_(song)', title: 'One More Time (song)' },
-        ],
-      }),
-      song: url => url.endsWith('/Daft_Punk') ? json(ARTIST_PAGE) : json(SONG_PAGE),
+      songSearch: () =>
+        json({
+          pages: [
+            { key: 'Daft_Punk', title: 'Daft Punk' },
+            { key: 'One_More_Time_(song)', title: 'One More Time (song)' },
+          ],
+        }),
+      song: (url) => (url.endsWith('/Daft_Punk') ? json(ARTIST_PAGE) : json(SONG_PAGE)),
     })
     const facts = await factsPort().lookup({ title: TITLE, artist: null })
 
-    expect(facts?.songSummary).toBe('One More Time is a song by the French electronic duo Daft Punk. It was released in 2000.')
+    expect(facts?.songSummary).toBe(
+      'One More Time is a song by the French electronic duo Daft Punk. It was released in 2000.',
+    )
   })
 
   test('a page that never names the track is not a song summary', async () => {
@@ -347,9 +398,18 @@ describe('live API regressions', () => {
 describe('strict matching, shared lookups and cache lifetimes', () => {
   test('a result for another song by the same artist is not a hit', async () => {
     const net = network({
-      search: () => json({
-        data: [{ id: 1, title: 'Dreams', title_short: 'Dreams', artist: { name: 'Daft Punk' }, album: { id: 9, title: 'Rumours' } }],
-      }),
+      search: () =>
+        json({
+          data: [
+            {
+              id: 1,
+              title: 'Dreams',
+              title_short: 'Dreams',
+              artist: { name: 'Daft Punk' },
+              album: { id: 9, title: 'Rumours' },
+            },
+          ],
+        }),
       songSearch: () => json({ pages: [] }),
       news: () => xml(EMPTY_FEED),
     })
@@ -361,9 +421,17 @@ describe('strict matching, shared lookups and cache lifetimes', () => {
 
   test('an artist that only starts with the wanted name is not a match', async () => {
     network({
-      search: () => json({
-        data: [{ id: 1, title: 'One More Time', title_short: 'One More Time', artist: { name: 'Airbourne' } }],
-      }),
+      search: () =>
+        json({
+          data: [
+            {
+              id: 1,
+              title: 'One More Time',
+              title_short: 'One More Time',
+              artist: { name: 'Airbourne' },
+            },
+          ],
+        }),
       songSearch: () => json({ pages: [] }),
       news: () => xml(EMPTY_FEED),
     })
@@ -373,7 +441,8 @@ describe('strict matching, shared lookups and cache lifetimes', () => {
   })
 
   test('news drops a headline that only starts with the artist name', () => {
-    const feed = '<rss><channel><item><title>Airbourne announce a tour - Site</title><pubDate>Tue, 17 Nov 2026 08:00:00 GMT</pubDate></item></channel></rss>'
+    const feed =
+      '<rss><channel><item><title>Airbourne announce a tour - Site</title><pubDate>Tue, 17 Nov 2026 08:00:00 GMT</pubDate></item></channel></rss>'
 
     expect(parseNews(feed, 'Air', NOW)).toEqual([])
   })
@@ -447,7 +516,8 @@ describe('strict matching, shared lookups and cache lifetimes', () => {
   })
 
   test('a malformed numeric entity does not throw out of the feed', () => {
-    const feed = '<rss><channel><item><title>Daft Punk &#99999999; return - BBC</title><pubDate>Tue, 17 Nov 2026 08:00:00 GMT</pubDate><source>BBC</source></item></channel></rss>'
+    const feed =
+      '<rss><channel><item><title>Daft Punk &#99999999; return - BBC</title><pubDate>Tue, 17 Nov 2026 08:00:00 GMT</pubDate><source>BBC</source></item></channel></rss>'
     const items = parseNews(feed, 'Daft Punk', NOW)
 
     expect(items).toHaveLength(1)
@@ -468,26 +538,55 @@ describe('common-word artists', () => {
   })
 
   test('a one-word name inside another proper noun is dropped, music word or not', () => {
-    expect(parseNews(headline('Cada visita de Chicago Fire ya es parte del tour Lewandowski', 'MLS Español'), 'Chicago', NOW)).toEqual([])
-    expect(parseNews(headline('El Fort Lauderdale Air Show 2026 recibe 350.000 visitantes', 'Univision'), 'Air', NOW)).toEqual([])
+    expect(
+      parseNews(
+        headline('Cada visita de Chicago Fire ya es parte del tour Lewandowski', 'MLS Español'),
+        'Chicago',
+        NOW,
+      ),
+    ).toEqual([])
+    expect(
+      parseNews(
+        headline('El Fort Lauderdale Air Show 2026 recibe 350.000 visitantes', 'Univision'),
+        'Air',
+        NOW,
+      ),
+    ).toEqual([])
   })
 
   test('an accented one-word name is matched against the accented headline', () => {
-    expect(parseNews(headline('Björk Reykjavik Airport opens a music hall'), 'Björk', NOW)).toEqual([])
+    expect(parseNews(headline('Björk Reykjavik Airport opens a music hall'), 'Björk', NOW)).toEqual(
+      [],
+    )
     expect(parseNews(headline('Björk anuncia un nuevo disco'), 'Björk', NOW)).toHaveLength(1)
   })
 
   test('a headline that names the artist only in the outlet is dropped', () => {
-    expect(parseNews(headline('Garbage sella 30 años de historia con México', 'Chicago Tribune'), 'Chicago', NOW)).toEqual([])
+    expect(
+      parseNews(
+        headline('Garbage sella 30 años de historia con México', 'Chicago Tribune'),
+        'Chicago',
+        NOW,
+      ),
+    ).toEqual([])
   })
 
   test('a music headline for the same act is kept', () => {
-    expect(parseNews(headline('Queen\'s Brian May announces new album'), 'Queen', NOW).map(item => item.title))
-      .toEqual(['Queen\'s Brian May announces new album'])
-    expect(parseNews(headline('Kiss farewell concert film'), 'Kiss', NOW).map(item => item.title))
-      .toEqual(['Kiss farewell concert film'])
-    expect(parseNews(headline('Kiss estrenará un documental sobre su último concierto'), 'Kiss', NOW).map(item => item.title))
-      .toEqual(['Kiss estrenará un documental sobre su último concierto'])
+    expect(
+      parseNews(headline("Queen's Brian May announces new album"), 'Queen', NOW).map(
+        (item) => item.title,
+      ),
+    ).toEqual(["Queen's Brian May announces new album"])
+    expect(
+      parseNews(headline('Kiss farewell concert film'), 'Kiss', NOW).map((item) => item.title),
+    ).toEqual(['Kiss farewell concert film'])
+    expect(
+      parseNews(
+        headline('Kiss estrenará un documental sobre su último concierto'),
+        'Kiss',
+        NOW,
+      ).map((item) => item.title),
+    ).toEqual(['Kiss estrenará un documental sobre su último concierto'])
   })
 
   test('a word with an everyday sense does not make a headline about music', () => {
@@ -505,7 +604,11 @@ describe('news age', () => {
   test('a headline older than the two weeks the host airs is not kept', () => {
     const day = 24 * 60 * 60 * 1000
 
-    expect(parseNews(headline('Daft Punk spotted in Paris'), 'Daft Punk', NOW + 12 * day)).toHaveLength(1)
-    expect(parseNews(headline('Daft Punk spotted in Paris'), 'Daft Punk', NOW + 20 * day)).toEqual([])
+    expect(
+      parseNews(headline('Daft Punk spotted in Paris'), 'Daft Punk', NOW + 12 * day),
+    ).toHaveLength(1)
+    expect(parseNews(headline('Daft Punk spotted in Paris'), 'Daft Punk', NOW + 20 * day)).toEqual(
+      [],
+    )
   })
 })

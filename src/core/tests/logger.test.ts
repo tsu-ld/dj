@@ -1,13 +1,18 @@
 import type { LogLevel } from '../logger.ts'
 import { describe, expect, test } from 'bun:test'
 import { testClock } from '../../tests/fixtures.ts'
+import { parseJson } from '../json.ts'
 import { logger } from '../logger.ts'
 
 function capture(level: LogLevel = 'debug') {
-  const lines: string[] = []
-  const log = logger({ level, clock: testClock(0), out: { write: text => lines.push(text) } })
+  const lines: Array<string> = []
+  const log = logger({ level, clock: testClock(0), out: { write: (text) => lines.push(text) } })
 
-  return { log, lines, parsed: () => lines.map(line => JSON.parse(line) as Record<string, unknown>) }
+  return {
+    log,
+    lines,
+    parsed: () => lines.map(parseJson),
+  }
 }
 
 describe('logger', () => {
@@ -56,6 +61,6 @@ describe('logger', () => {
     log.error('provider.failed', new Error('boom'))
 
     expect(parsed()[0]).toMatchObject({ error: { name: 'Error', message: 'boom' } })
-    expect(String((parsed()[0]?.error as Record<string, unknown>).stack)).toContain('boom')
+    expect(parsed()[0]).toMatchObject({ error: { stack: expect.stringContaining('boom') } })
   })
 })

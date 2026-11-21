@@ -3,7 +3,8 @@ import type { GuildSettings } from '../ports/settings.ts'
 import { dataBlock, oneLine } from '../core/text.ts'
 import { UPCOMING_PREVIEW } from '../limits.ts'
 
-const DEFAULT_PERSONA = 'You are the DJ of a Discord server. You are warm, brief and a little cheeky.'
+const DEFAULT_PERSONA =
+  'You are the DJ of a Discord server. You are warm, brief and a little cheeky.'
 
 const CONVERSATION_RULES = [
   'Always answer in the same language the person wrote in.',
@@ -16,7 +17,8 @@ const CONVERSATION_RULES = [
   'Use set_persona or set_channel only when someone explicitly asks you to change how you talk or where you listen.',
 ].join('\n')
 
-const ANNOUNCEMENT_RULES = 'Below is something the bot needs to tell someone. Say the same thing in your own voice and your own language, in one short line. Reply with that line and nothing else.'
+const ANNOUNCEMENT_RULES =
+  'Below is something the bot needs to tell someone. Say the same thing in your own voice and your own language, in one short line. Reply with that line and nothing else.'
 
 export function personaFor(settings: GuildSettings): string {
   const persona = settings.persona?.trim()
@@ -25,51 +27,71 @@ export function personaFor(settings: GuildSettings): string {
 }
 
 function songOrigin(track: Track): string {
-  if (track.fromRadio)
+  if (track.fromRadio) {
     return 'your own pick'
+  }
 
-  const requester = oneLine(track.requestedBy?.trim() ?? '').replace(/["\\()]/g, '').trim()
+  const requester = oneLine(track.requestedBy?.trim() ?? '')
+    .replaceAll(/["\\()]/g, '')
+    .trim()
 
-  if (requester !== '')
+  if (requester !== '') {
     return `requested by "${requester}"`
+  }
 
   return 'no requester'
 }
 
 function quotedTitle(track: Track): string {
-  return `"${oneLine(track.title).replace(/["\\]/g, '')}"`
+  return `"${oneLine(track.title).replaceAll(/["\\]/g, '')}"`
 }
 
-function queueLines(view: QueueView | null): readonly string[] {
-  const lines: string[] = []
+function queueLines(view: QueueView | null): ReadonlyArray<string> {
+  const lines: Array<string> = []
 
   if (!view?.current) {
     lines.push('Nothing is playing right now.')
-  }
-  else {
+  } else {
     const upcoming = view.upcoming.slice(0, UPCOMING_PREVIEW)
 
-    lines.push(`Playing now, at position 1: ${quotedTitle(view.current)} (${songOrigin(view.current)})`)
+    lines.push(
+      `Playing now, at position 1: ${quotedTitle(view.current)} (${songOrigin(view.current)})`,
+    )
 
-    if (upcoming.length > 0)
-      lines.push('Up next:', ...upcoming.map((track, index) => `${index + 2}. ${quotedTitle(track)} (${songOrigin(track)})`))
+    if (upcoming.length > 0) {
+      lines.push(
+        'Up next:',
+        ...upcoming.map(
+          (track, index) => `${index + 2}. ${quotedTitle(track)} (${songOrigin(track)})`,
+        ),
+      )
+    }
 
-    if (view.upcoming.length > UPCOMING_PREVIEW)
+    if (view.upcoming.length > UPCOMING_PREVIEW) {
       lines.push(`...and ${view.upcoming.length - UPCOMING_PREVIEW} more.`)
+    }
 
-    if (view.paused)
+    if (view.paused) {
       lines.push('The music is paused right now.')
+    }
   }
 
-  lines.push(view?.radio
-    ? 'Radio: on. When the queue runs dry, you keep picking the songs yourself and nobody requested them.'
-    : 'Radio: off.')
+  lines.push(
+    view?.radio
+      ? 'Radio: on. When the queue runs dry, you keep picking the songs yourself and nobody requested them.'
+      : 'Radio: off.',
+  )
 
   return lines
 }
 
-export function buildConversationInstructions(settings: GuildSettings, view: QueueView | null): string {
-  return [personaFor(settings), CONVERSATION_RULES, dataBlock('queue', queueLines(view))].join('\n\n')
+export function buildConversationInstructions(
+  settings: GuildSettings,
+  view: QueueView | null,
+): string {
+  return [personaFor(settings), CONVERSATION_RULES, dataBlock('queue', queueLines(view))].join(
+    '\n\n',
+  )
 }
 
 export function buildAnnouncementInstructions(persona: string): string {

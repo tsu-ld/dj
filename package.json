@@ -1,19 +1,14 @@
 {
   "name": "discord-bot",
-  "type": "module",
   "private": true,
   "author": ".tsu",
-  "engines": {
-    "bun": ">=1.4.0"
-  },
+  "type": "module",
   "scripts": {
     "start": "bun src/index.ts",
     "dev": "bun --watch src/index.ts",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:e2e": "bun e2e-test.ts",
-    "check": "bun run lint && bun run typecheck && bun run test"
+    "check": "bun fmt && oxlint --fix --format=agent && bun check"
   },
   "dependencies": {
     "@discordjs/opus": "npm:mediaplex@1.0.0",
@@ -23,9 +18,12 @@
     "distube": "^5.2.3"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^6.7.3",
-    "@types/bun": "^1.4.4",
-    "eslint": "^9.39.5",
-    "typescript": "6.0.3"
+    "@cloudflare/oxlint-config": "0.1.0",
+    "@types/bun": "1.4.5",
+    "oxlint": "1.94.0",
+    "tsrs": "0.25.0-ts7.1.0-beta"
+  },
+  "engines": {
+    "bun": ">=1.4.5"
   }
 }

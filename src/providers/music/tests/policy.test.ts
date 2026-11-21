@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test'
 import { isRecord } from '../../../core/json.ts'
 import { MESSAGES } from '../../../messages.ts'
-import { assertYoutubeUrl, isSupportedMusicUrl, isUrlLike, isYoutubeUrl, liveError } from '../policy.ts'
+import {
+  assertYoutubeUrl,
+  isSupportedMusicUrl,
+  isUrlLike,
+  isYoutubeUrl,
+  liveError,
+} from '../policy.ts'
 
 const SUPPORTED_URLS = [
   'https://youtube.com/watch?v=dQw4w9WgXcQ',
@@ -32,8 +38,7 @@ const REJECTED_URLS = [
 function thrownCode(run: () => void): string | null {
   try {
     run()
-  }
-  catch (error) {
+  } catch (error) {
     return isRecord(error) && typeof error.code === 'string' ? error.code : null
   }
 
@@ -54,14 +59,20 @@ test('private hosts, other sites and file urls are rejected', () => {
 })
 
 test('plain search text is not a url and passes through', () => {
-  for (const text of ['never gonna give you up', 'cumbia 2020', 'youtube.com/watch?v=dQw4w9WgXcQ']) {
+  for (const text of [
+    'never gonna give you up',
+    'cumbia 2020',
+    'youtube.com/watch?v=dQw4w9WgXcQ',
+  ]) {
     expect(isUrlLike(text)).toBe(false)
   }
 })
 
 test('the extractor only accepts youtube urls', () => {
   expect(() => assertYoutubeUrl('https://youtu.be/dQw4w9WgXcQ')).not.toThrow()
-  expect(() => assertYoutubeUrl('https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT')).toThrow(MESSAGES.unsupportedUrl)
+  expect(() => assertYoutubeUrl('https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT')).toThrow(
+    MESSAGES.unsupportedUrl,
+  )
   expect(() => assertYoutubeUrl('file:///etc/passwd')).toThrow(MESSAGES.unsupportedUrl)
   expect(thrownCode(() => assertYoutubeUrl('https://example.com'))).toBe('UNSUPPORTED_URL')
 })

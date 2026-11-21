@@ -1,9 +1,12 @@
+import type { PreparedClips } from '../clips.ts'
 import { describe, expect, test } from 'bun:test'
 import { PREPARED_CLIP_TTL_MS } from '../../limits.ts'
 import { testClock } from '../../tests/fixtures.ts'
 import { preparedClips } from '../clips.ts'
 
-function clip(songId: string, key = 'k'): { songId: string, key: string, file: string, angle: 'run', text: string } {
+type Clip = Parameters<PreparedClips['setPrepared']>[1]
+
+function clip(songId: string, key = 'k'): Clip {
   return { songId, key, file: `/tmp/${songId}.mp3`, angle: 'run', text: `line ${songId}` }
 }
 
@@ -93,7 +96,7 @@ describe('prepared clips', () => {
     clips.setPrepared('g1', clip('a'))
     clips.setPrepared('g2', clip('b'))
 
-    const files = clips.clear().map(cleared => cleared.file)
+    const files = clips.clear().map((cleared) => cleared.file)
 
     expect(files.toSorted()).toEqual(['/tmp/a.mp3', '/tmp/b.mp3'])
     expect(clips.preparedFor('g1', 'a', 'k')).toBe(false)

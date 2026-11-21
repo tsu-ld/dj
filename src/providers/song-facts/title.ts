@@ -4,7 +4,8 @@ export interface ParsedTitle {
   readonly explicit: boolean
 }
 
-const DECORATION = /\s*[([][^)\]]*\b(?:official\s*(?:music\s*)?video|official\s*audio|audio|lyrics?|remaster(?:ed)?(?:\s+\d{4})?|hd|4k|visuali[sz]er)\b[^)\]]*[)\]]/gi
+const DECORATION =
+  /\s*[([][^)\]]*\b(?:official\s*(?:music\s*)?video|official\s*audio|audio|lyrics?|remaster(?:ed)?(?:\s+\d{4})?|hd|4k|visuali[sz]er)\b[^)\]]*[)\]]/gi
 const CREDIT_BRACKET = /\s*[([][^)\]]*\b(?:ft|feat)\.?\s[^)\]]*[)\]]/gi
 const CREDIT_TAIL = /\s(?:ft|feat)\.?\s.*$/i
 const SEPARATOR = /\s[-–—]\s/
@@ -12,9 +13,9 @@ const SEPARATOR = /\s[-–—]\s/
 export function normalizeName(value: string): string {
   return value
     .normalize('NFD')
-    .replace(/[\u0300-\u036F]/g, '')
+    .replaceAll(/[\u0300-\u036F]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replaceAll(/[^a-z0-9]+/g, ' ')
     .trim()
 }
 
@@ -22,8 +23,9 @@ export function containsWords(text: string, phrase: string): boolean {
   const folded = normalizeName(text)
   const needle = normalizeName(phrase)
 
-  if (folded === '' || needle === '')
+  if (folded === '' || needle === '') {
     return false
+  }
 
   return ` ${folded} `.includes(` ${needle} `)
 }
@@ -36,10 +38,10 @@ function stripDecorations(raw: string): string {
   const [head = ''] = raw.split('|')
 
   return head
-    .replace(DECORATION, ' ')
-    .replace(CREDIT_BRACKET, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/^[\s\-–—]+|[\s\-–—]+$/g, '')
+    .replaceAll(DECORATION, ' ')
+    .replaceAll(CREDIT_BRACKET, ' ')
+    .replaceAll(/\s+/g, ' ')
+    .replaceAll(/^[\s\-–—]+|[\s\-–—]+$/g, '')
     .trim()
 }
 
@@ -49,15 +51,17 @@ export function parseTitle(title: string, artist: string | null): ParsedTitle {
   const trimmedArtist = artist?.trim() ?? ''
   const fallbackArtist = trimmedArtist === '' ? null : trimmedArtist
 
-  if (!separator)
+  if (!separator) {
     return { artist: fallbackArtist, title: cleaned, explicit: false }
+  }
 
   const left = cleaned.slice(0, separator.index).trim()
   const right = cleaned.slice(separator.index + separator[0].length).trim()
   const track = stripDecorations(right).replace(CREDIT_TAIL, '').trim()
 
-  if (left === '' || track === '')
+  if (left === '' || track === '') {
     return { artist: fallbackArtist, title: cleaned, explicit: false }
+  }
 
   return { artist: left, title: track, explicit: true }
 }

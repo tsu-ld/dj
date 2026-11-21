@@ -1,26 +1,45 @@
 import type { GuildMember } from 'discord.js'
+import type { Song } from 'distube'
 import type { Extractor } from '../extraction.ts'
 import type { StreamResolver } from '../stream.ts'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { expect } from 'bun:test'
+import { Playlist } from 'distube'
 import { errorMessage } from '../../../core/errors.ts'
 
-// Bun types the rejection matcher as a plain assertion, but a test that does not
-// await it can pass before the promise settles. This keeps the await real.
-export async function rejection(run: () => Promise<unknown>): Promise<string> {
+// WORKAROUND(https://github.com/oven-sh/bun/issues/47556): bun-types 1.4.5 types the rejects matchers as returning void, so an un-awaited one can pass before the promise settles; rejection keeps the await real. Goes when a release types them as promises.
+export async function rejection<Result>(run: () => Promise<Result>): Promise<string> {
   try {
     await run()
-  }
-  catch (error) {
+  } catch (error) {
     return errorMessage(error)
   }
 
   throw new Error('Expected the operation to reject.')
 }
 
-// the SDK only keeps a member whose ids look like snowflakes
-export function memberOf(id: string, displayName: string): GuildMember {
-  return { id, displayName, user: { id }, guild: { id: '100000000000000001' } } as unknown as GuildMember
+const SNOWFLAKE_GUILD_ID = '100000000000000001'
+
+export function expectPlaylist<Metadata>(
+  resolved: Song<Metadata> | Playlist<Metadata>,
+): Playlist<Metadata> {
+  expect(resolved).toBeInstanceOf(Playlist)
+
+  if (!('songs' in resolved)) {
+    throw new Error('expected a playlist')
+  }
+
+  return resolved
+}
+
+export function memberOf(snowflakeId: string, displayName: string): GuildMember {
+  return {
+    id: snowflakeId,
+    displayName,
+    user: { id: snowflakeId },
+    guild: { id: SNOWFLAKE_GUILD_ID },
+  } as unknown as GuildMember
 }
 
 export async function shellScript(dir: string, name: string, body: string): Promise<string> {

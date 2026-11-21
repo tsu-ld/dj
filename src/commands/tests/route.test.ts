@@ -1,6 +1,14 @@
+import type { JsonRecord } from '../../core/json.ts'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
-import { fakeContext, fakeMusic, fakeUi, silentLog as log, testTrack as track, testView as view } from '../../tests/fixtures.ts'
+import {
+  fakeContext,
+  fakeMusic,
+  fakeUi,
+  silentLog as log,
+  testTrack as track,
+  testView as view,
+} from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
 import { chooseRoute } from '../route.ts'
@@ -14,6 +22,10 @@ const queue = view({
 const withQueue = fakeContext({ services: { music: fakeMusic({ view: () => queue }) } })
 const bus = commandBus({ specs: commands, logger: log })
 
+function argsOf(text: string): JsonRecord | null {
+  return chooseRoute(bus, text, 'remove', withQueue)?.args ?? null
+}
+
 describe('chooseRoute', () => {
   test('a route command with no arguments runs', () => {
     const route = chooseRoute(bus, 'pausá', 'pause', withQueue)
@@ -23,27 +35,25 @@ describe('chooseRoute', () => {
   })
 
   test('a queue command without a queue routes so the bus refuses it once', async () => {
-    for (const [text, name] of [['pausá', 'pause'], ['remove 1', 'remove']] as const) {
+    for (const [text, name] of [
+      ['pausá', 'pause'],
+      ['remove 1', 'remove'],
+    ] as const) {
       const ui = fakeUi()
       const context = fakeContext({ ui })
       const route = chooseRoute(bus, text, name, context)
 
       expect(route?.spec.name).toBe(name)
 
-      if (route)
+      if (route) {
         await bus.run(route.spec.name, route.args, context)
+      }
 
       expect(ui.errors).toEqual([MESSAGES.nothingPlaying])
     }
   })
 
   test('remove needs a valid position or the dj infers it', () => {
-    const argsOf = (text: string): unknown => {
-      const route = chooseRoute(bus, text, 'remove', withQueue)
-
-      return route?.args ?? null
-    }
-
     expect(argsOf('remove 2')).toEqual({ position: 2 })
     expect(argsOf('remove 2.5')).toBeNull()
     expect(argsOf('remove 9')).toBeNull()

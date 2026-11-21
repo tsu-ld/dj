@@ -10,28 +10,39 @@ interface JsonMapFile<T> {
   settled: () => Promise<void>
 }
 
-export function normalizeMap<T>(value: unknown, entry: (value: unknown) => T | null): Record<string, T> | null {
-  if (!isRecord(value))
+export function normalizeMap<T>(
+  value: unknown,
+  entry: (value: unknown) => T | null,
+): Record<string, T> | null {
+  if (!isRecord(value)) {
     return null
+  }
 
   const entries = Object.entries(value)
 
-  if (entries.length > 0 && !entries.some(([, item]) => isRecord(item)))
+  if (entries.length > 0 && !entries.some(([, item]) => isRecord(item))) {
     return null
+  }
 
   const map: Record<string, T> = {}
 
   for (const [key, item] of entries) {
     const normalized = entry(item)
 
-    if (normalized !== null)
+    if (normalized !== null) {
       map[key] = normalized
+    }
   }
 
   return map
 }
 
-export function jsonMapFile<T>(options: { path: string, name: string, logger: Logger, entry: (value: unknown) => T | null }): JsonMapFile<T> {
+export function jsonMapFile<T>(options: {
+  path: string
+  name: string
+  logger: Logger
+  entry: (value: unknown) => T | null
+}): JsonMapFile<T> {
   const { path, name, logger } = options
   let writes: Promise<void> = Promise.resolve()
 
@@ -40,26 +51,26 @@ export function jsonMapFile<T>(options: { path: string, name: string, logger: Lo
 
     try {
       text = await readFile(path, 'utf8')
-    }
-    catch (error) {
-      if (isRecord(error) && error.code === 'ENOENT')
+    } catch (error) {
+      if (isRecord(error) && error.code === 'ENOENT') {
         return {}
+      }
 
       throw error
     }
 
     const parsed = normalizeMap(parseJson(text), options.entry)
 
-    if (parsed)
+    if (parsed) {
       return parsed
+    }
 
     const backup = `${path}.corrupt-${Date.now()}`
 
     try {
       await rename(path, backup)
       logger.warn(`${name}.quarantined`, { path, backup })
-    }
-    catch (error) {
+    } catch (error) {
       logger.warn(`${name}.quarantine_failed`, { path, error: errorMessage(error) })
     }
 
@@ -67,13 +78,15 @@ export function jsonMapFile<T>(options: { path: string, name: string, logger: Lo
   }
 
   async function write(value: unknown): Promise<void> {
-    writes = writes.catch(() => {}).then(async () => {
-      await mkdir(dirname(path), { recursive: true })
-      const temporary = `${path}.tmp`
+    writes = writes
+      .catch(() => {})
+      .then(async () => {
+        await mkdir(dirname(path), { recursive: true })
+        const temporary = `${path}.tmp`
 
-      await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`)
-      await rename(temporary, path)
-    })
+        await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`)
+        await rename(temporary, path)
+      })
 
     return writes
   }

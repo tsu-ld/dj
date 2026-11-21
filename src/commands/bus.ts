@@ -1,36 +1,60 @@
+import type { JsonRecord } from '../core/json.ts'
 import type { Logger } from '../core/logger.ts'
 import type { ToolSpec } from '../ports/conversation.ts'
 import type { DecisionOption } from '../ports/decision.ts'
-import type { CommandBus, CommandContext, CommandData, CommandOutcome, CommandSpec, QueueContext, VoiceContext } from './spec.ts'
+import type {
+  CommandBus,
+  CommandContext,
+  CommandData,
+  CommandOutcome,
+  CommandSpec,
+  QueueContext,
+  VoiceContext,
+} from './spec.ts'
 import { errorMessage, UserError } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
 
-const EMPTY_PARAMETERS: Record<string, unknown> = {
+const EMPTY_PARAMETERS: JsonRecord = {
   type: 'object',
   properties: {},
   additionalProperties: false,
 }
 
 function toTool(spec: CommandSpec): ToolSpec {
-  return { name: spec.name, description: spec.description, parameters: spec.parameters ?? EMPTY_PARAMETERS }
+  return {
+    name: spec.name,
+    description: spec.description,
+    parameters: spec.parameters ?? EMPTY_PARAMETERS,
+  }
 }
 
 function toRoute(spec: CommandSpec): DecisionOption {
   return { name: spec.name, description: spec.description }
 }
 
-export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger }): CommandBus {
-  const byName = new Map(deps.specs.map(spec => [spec.name, spec]))
-  const tools = deps.specs.filter(spec => spec.modelTool !== false).map(toTool)
-  const routes = deps.specs.filter(spec => spec.fastRoute !== false).map(toRoute)
+export function commandBus(deps: {
+  specs: ReadonlyArray<CommandSpec>
+  logger: Logger
+}): CommandBus {
+  const byName = new Map(deps.specs.map((spec) => [spec.name, spec]))
+  const tools = deps.specs.filter((spec) => spec.modelTool !== false).map(toTool)
+  const routes = deps.specs.filter((spec) => spec.fastRoute !== false).map(toRoute)
 
-  async function run(name: string, args: Record<string, unknown>, context: CommandContext): Promise<CommandOutcome> {
+  async function run(
+    name: string,
+    args: JsonRecord,
+    context: CommandContext,
+  ): Promise<CommandOutcome> {
     const spec = byName.get(name)
 
     if (!spec) {
       deps.logger.warn('command.unknown', { name })
 
-      return { kind: 'failed', error: new Error(`Unknown command: ${name}`), message: `there is no tool called ${name}` }
+      return {
+        kind: 'failed',
+        error: new Error(`Unknown command: ${name}`),
+        message: `there is no tool called ${name}`,
+      }
     }
 
     const prepared = prepare(spec, context)
@@ -51,18 +75,17 @@ export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger
       try {
         const confirmation = spec.confirm?.(data, scoped) ?? null
 
-        if (confirmation !== null)
+        if (confirmation !== null) {
           await scoped.ui.reply(confirmation)
-        else if (spec.ack !== false)
+        } else if (spec.ack !== false) {
           await scoped.ui.ack()
-      }
-      catch (error) {
+        }
+      } catch (error) {
         deps.logger.warn('command.feedback_failed', { name, error: errorMessage(error) })
       }
 
       return { kind: 'ok', data }
-    }
-    catch (error) {
+    } catch (error) {
       if (error instanceof UserError) {
         await scoped.ui.error(error.message)
 
@@ -99,32 +122,37 @@ export function commandBus(deps: { specs: readonly CommandSpec[], logger: Logger
   }
 }
 
-type Prepared
-  = | { readonly refusal: string }
-    | { readonly scoped: CommandContext, readonly execute: (args: Record<string, unknown>) => Promise<CommandData> }
+type Prepared =
+  | { readonly refusal: string }
+  | {
+      readonly scoped: CommandContext
+      readonly execute: (args: JsonRecord) => Promise<CommandData>
+    }
 
 function prepare(spec: CommandSpec, context: CommandContext): Prepared {
   if (spec.requiresQueue === true) {
     const queue = context.services.music.view(context.guildId)
 
-    if (!queue)
+    if (!queue) {
       return { refusal: MESSAGES.nothingPlaying }
+    }
 
     const scoped: QueueContext = { ...context, queue }
 
-    return { scoped, execute: async args => spec.run(args, scoped) }
+    return { scoped, execute: async (args) => spec.run(args, scoped) }
   }
 
   if (spec.requiresVoice === true) {
     const voiceChannel = context.voiceChannel
 
-    if (!voiceChannel)
+    if (!voiceChannel) {
       return { refusal: MESSAGES.joinVoiceChannel }
+    }
 
     const scoped: VoiceContext = { ...context, voiceChannel }
 
-    return { scoped, execute: async args => spec.run(args, scoped) }
+    return { scoped, execute: async (args) => spec.run(args, scoped) }
   }
 
-  return { scoped: context, execute: async args => spec.run(args, context) }
+  return { scoped: context, execute: async (args) => spec.run(args, context) }
 }

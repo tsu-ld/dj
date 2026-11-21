@@ -3,14 +3,19 @@ import type { QueueView } from '../ports/music.ts'
 const PROGRESS_REPAINT_MS = 15_000
 
 const UNKNOWN_MESSAGE = 10_008
-// Discord caps edits to a message older than an hour (error 30046).
-const EDITABLE_FOR_MS = 55 * 60_000
+const DISCORD_CAPS_EDITS_AFTER_MS = 60 * 60_000
+const EDITABLE_FOR_MS = DISCORD_CAPS_EDITS_AFTER_MS - 5 * 60_000
 
 export function isDeletedMessage(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === UNKNOWN_MESSAGE
+  return (
+    typeof error === 'object' && error !== null && 'code' in error && error.code === UNKNOWN_MESSAGE
+  )
 }
 
-export function isPastEditWindow(message: { readonly createdTimestamp: number } | undefined, now: number): boolean {
+export function isPastEditWindow(
+  message: { readonly createdTimestamp: number } | undefined,
+  now: number,
+): boolean {
   return message !== undefined && now - message.createdTimestamp > EDITABLE_FOR_MS
 }
 
@@ -39,8 +44,8 @@ export function progressTimers(deps: {
   return {
     sync(guildId, view) {
       const track = view.current
-      const ticking = !disposed && !view.paused
-        && track !== null && !track.isLive && track.durationSeconds > 0
+      const ticking =
+        !disposed && !view.paused && track !== null && !track.isLive && track.durationSeconds > 0
 
       if (!ticking) {
         stop(guildId)
@@ -48,20 +53,26 @@ export function progressTimers(deps: {
         return
       }
 
-      if (timers.has(guildId))
+      if (timers.has(guildId)) {
         return
+      }
 
-      timers.set(guildId, setInterval(() => {
-        if (deps.playing(guildId))
-          deps.repaint(guildId)
-      }, PROGRESS_REPAINT_MS))
+      timers.set(
+        guildId,
+        setInterval(() => {
+          if (deps.playing(guildId)) {
+            deps.repaint(guildId)
+          }
+        }, PROGRESS_REPAINT_MS),
+      )
     },
     stop,
     dispose() {
       disposed = true
 
-      for (const timer of timers.values())
+      for (const timer of timers.values()) {
         clearInterval(timer)
+      }
 
       timers.clear()
     },
