@@ -1,66 +1,40 @@
 import type { MusicEventMap } from '../../ports/music.ts'
-import type { MusicEmitter } from './types.ts'
 
-interface Channel<T> {
-  on: (listener: (payload: T) => void) => () => void
-  emit: (payload: T) => void
-  clear: () => void
-}
+type Event = keyof MusicEventMap
+type EventListener<K extends Event> = (payload: MusicEventMap[K]) => void
 
-function channel<T>(): Channel<T> {
-  const listeners = new Set<(payload: T) => void>()
-
-  return {
-    on(listener) {
-      listeners.add(listener)
-
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-    emit(payload) {
-      for (const listener of listeners) listener(payload)
-    },
-    clear() {
-      listeners.clear()
-    },
-  }
+export interface MusicEmitter {
+  readonly on: <K extends Event>(event: K, listener: EventListener<K>) => () => void
+  readonly emit: <K extends Event>(event: K, payload: MusicEventMap[K]) => void
 }
 
 export function createEmitter(): { emitter: MusicEmitter, clear: () => void } {
-  const channels: { readonly [K in keyof MusicEventMap]: Channel<MusicEventMap[K]> } = {
-    trackQueued: channel<MusicEventMap['trackQueued']>(),
-    playlistQueued: channel<MusicEventMap['playlistQueued']>(),
-    trackStarted: channel<MusicEventMap['trackStarted']>(),
-    stateChanged: channel<MusicEventMap['stateChanged']>(),
-    trackSkipped: channel<MusicEventMap['trackSkipped']>(),
-    queueEnded: channel<MusicEventMap['queueEnded']>(),
-    queueCleared: channel<MusicEventMap['queueCleared']>(),
-    playbackError: channel<MusicEventMap['playbackError']>(),
-    disconnected: channel<MusicEventMap['disconnected']>(),
-  }
+  const listeners: { [K in Event]?: Set<EventListener<K>> } = {}
 
-  function on<K extends keyof MusicEventMap>(event: K, listener: (payload: MusicEventMap[K]) => void): () => void {
-    return channels[event].on(listener)
-  }
+  function listenersOf<K extends Event>(event: K): Set<EventListener<K>> {
+    const ofEvent: { [P in K]?: Set<EventListener<P>> } = listeners
+    const subscribed = ofEvent[event] ?? new Set<EventListener<K>>()
 
-  const emitter: MusicEmitter = {
-    on,
-    trackQueued: payload => channels.trackQueued.emit(payload),
-    playlistQueued: payload => channels.playlistQueued.emit(payload),
-    trackStarted: payload => channels.trackStarted.emit(payload),
-    stateChanged: payload => channels.stateChanged.emit(payload),
-    trackSkipped: payload => channels.trackSkipped.emit(payload),
-    queueEnded: payload => channels.queueEnded.emit(payload),
-    queueCleared: payload => channels.queueCleared.emit(payload),
-    playbackError: payload => channels.playbackError.emit(payload),
-    disconnected: payload => channels.disconnected.emit(payload),
+    ofEvent[event] = subscribed
+
+    return subscribed
   }
 
   return {
-    emitter,
+    emitter: {
+      on(event, listener) {
+        const subscribed = listenersOf(event).add(listener)
+
+        return () => {
+          subscribed.delete(listener)
+        }
+      },
+      emit(event, payload) {
+        for (const listener of listenersOf(event)) listener(payload)
+      },
+    },
     clear() {
-      for (const event of Object.values(channels)) event.clear()
+      for (const subscribed of Object.values(listeners)) subscribed.clear()
     },
   }
 }

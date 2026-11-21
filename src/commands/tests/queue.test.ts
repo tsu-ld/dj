@@ -1,9 +1,9 @@
 import type { Message } from 'discord.js'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
+import { fakeContext, fakeMusic, fakeUi, silentLog as log, testTrack as track, testView as view } from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
-import { fakeContext, fakeMusic, fakeUi, log, track, view } from './fakes.ts'
 
 describe('queue commands', () => {
   test('queue shows the live queue and never reacts', async () => {
@@ -66,7 +66,8 @@ describe('queue commands', () => {
 
     expect(outcome).toEqual({ kind: 'ok', data: { cleared: true } })
     expect(calls).toEqual([['g1', { resetStation: true }]])
-    expect(ui.acks()).toBe(1)
+    expect(ui.replies).toEqual([MESSAGES.cleared])
+    expect(ui.acks()).toBe(0)
   })
 
   test('a text clear confirms with a message instead of a bare reaction', async () => {

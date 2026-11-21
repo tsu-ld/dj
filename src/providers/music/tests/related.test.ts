@@ -2,8 +2,9 @@ import type { GuildMember } from 'discord.js'
 import type { DisTube } from 'distube'
 import { expect, test } from 'bun:test'
 import { Song } from 'distube'
+import { silentLog as log } from '../../../tests/fixtures.ts'
 import { MusicCatalog } from '../catalog.ts'
-import { extractionStub, log, memberOf, streamStub } from './fakes.ts'
+import { extractionStub, memberOf, streamStub } from './fakes.ts'
 
 const MIX = [
   { id: 'remaster', title: 'The Chain (2004 Remaster)', channel: 'Fleetwood Mac - Topic' },

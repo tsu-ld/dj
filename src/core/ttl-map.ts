@@ -1,4 +1,6 @@
-export interface TtlMap<K, V> {
+import type { Clock } from './clock.ts'
+
+interface TtlMap<K, V> {
   get: (key: K) => V | undefined
   set: (key: K, value: V) => void
   delete: (key: K) => void
@@ -9,8 +11,7 @@ interface Entry<V> {
   expiresAt: number
 }
 
-export function ttlMap<K, V>(options: { ttlMs: number, max: number, now?: () => number }): TtlMap<K, V> {
-  const now = options.now ?? (() => Date.now())
+export function ttlMap<K, V>(options: { ttlMs: number, max: number, clock: Clock }): TtlMap<K, V> {
   const entries = new Map<K, Entry<V>>()
 
   function prune(at: number): void {
@@ -36,7 +37,7 @@ export function ttlMap<K, V>(options: { ttlMs: number, max: number, now?: () => 
       if (!entry)
         return undefined
 
-      if (entry.expiresAt <= now()) {
+      if (entry.expiresAt <= options.clock.now()) {
         entries.delete(key)
 
         return undefined
@@ -45,7 +46,7 @@ export function ttlMap<K, V>(options: { ttlMs: number, max: number, now?: () => 
       return entry.value
     },
     set(key, value) {
-      const at = now()
+      const at = options.clock.now()
 
       entries.delete(key)
       entries.set(key, { value, expiresAt: at + options.ttlMs })

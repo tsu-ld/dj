@@ -6,14 +6,15 @@ const BRACKETED = /\([^)]*\)|\[[^\]]*\]/g
 
 // Slicing can split a surrogate pair at the cut; a trailing lone high surrogate
 // is dropped.
-function wholeChars(text: string): string {
-  const last = text.charCodeAt(text.length - 1)
+export function cutAt(text: string, maxLength: number): string {
+  const cut = text.slice(0, maxLength)
+  const last = cut.charCodeAt(cut.length - 1)
 
-  return last >= 0xD800 && last <= 0xDBFF ? text.slice(0, -1) : text
+  return last >= 0xD800 && last <= 0xDBFF ? cut.slice(0, -1) : cut
 }
 
 export function oneLine(value: unknown, maxLength = DEFAULT_LINE_LENGTH): string {
-  return wholeChars(String(value ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, maxLength))
+  return cutAt(String(value ?? '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim(), maxLength)
 }
 
 // Discord rejects messages over 2000 UTF-16 units.
@@ -21,7 +22,7 @@ export function clampMessage(text: string | null | undefined): string | null {
   if (text === null || text === undefined || text === '')
     return null
 
-  return wholeChars(text.trim().slice(0, DISCORD_MESSAGE_LIMIT)) || null
+  return cutAt(text.trim(), DISCORD_MESSAGE_LIMIT) || null
 }
 
 export function normalizeTitle(title: string): string {

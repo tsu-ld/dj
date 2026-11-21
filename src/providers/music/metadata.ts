@@ -8,7 +8,7 @@ import { MESSAGES } from '../../messages.ts'
 
 // @distube/spotify ships CommonJS only and builds from distube's CommonJS copy,
 // so the ESM engine's `instanceof Playlist` fails: rebuild in the engine's classes.
-export interface MetadataSource {
+interface MetadataSource {
   validate: (url: string) => boolean | Promise<boolean>
   resolve: (url: string, options: object) => Promise<unknown>
 }

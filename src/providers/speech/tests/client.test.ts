@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { json, restoreFetch, stubFetch } from '../../tests/http.ts'
-import { failureFor, fetchSpeechUsage, isAuthFailure, SpeechRequestError, synthesizeSpeech } from '../client.ts'
+import { fetchSpeechUsage, SpeechRequestError, synthesizeSpeech } from '../client.ts'
 
 const config = { apiKey: 'secret', voiceId: 'voice-1', model: 'eleven_v4', timeoutMs: 12_000 }
 
@@ -67,19 +67,31 @@ describe('speech client', () => {
   })
 })
 
-describe('failure classification', () => {
-  test('only a rejected key is fatal, not an empty quota', () => {
-    expect(isAuthFailure(401, { code: 'unauthorized', status: 'invalid_api_key' })).toBe(true)
-    expect(isAuthFailure(403, null)).toBe(true)
-    expect(isAuthFailure(401, { code: 'quota_exceeded', status: 'max_character_limit_exceeded' })).toBe(false)
-    expect(isAuthFailure(401, { code: 'unusual_activity' })).toBe(false)
-    expect(isAuthFailure(429, null)).toBe(false)
+async function failureOf(status: number, detail: unknown): Promise<unknown[]> {
+  const failures: unknown[] = []
 
-    expect(failureFor(401, { code: 'quota_exceeded', status: 'max_character_limit_exceeded' })).toBe('quota')
-    expect(failureFor(401, null)).toBe('quota')
-    expect(failureFor(402, null)).toBe('quota')
-    expect(failureFor(403, null)).toBe('fatal')
-    expect(failureFor(429, null)).toBe('retryable')
-    expect(failureFor(500, null)).toBe('retryable')
+  for (const call of [async () => synthesizeSpeech(config, 'Hola'), async () => fetchSpeechUsage(config)]) {
+    stubFetch(async () => new Response(JSON.stringify({ detail }), { status }))
+
+    const caught = await call().then(() => null, (error: unknown) => error)
+
+    restoreFetch()
+    failures.push(caught instanceof SpeechRequestError ? caught.failure : caught)
+  }
+
+  return failures
+}
+
+describe('failure classification', () => {
+  test('only a rejected key is fatal, not an empty quota', async () => {
+    expect(await failureOf(401, { code: 'unauthorized', status: 'invalid_api_key' })).toEqual(['fatal', 'fatal'])
+    expect(await failureOf(403, null)).toEqual(['fatal', 'fatal'])
+    expect(await failureOf(401, { code: 'quota_exceeded', status: 'max_character_limit_exceeded' })).toEqual(['quota', 'quota'])
+    expect(await failureOf(401, { code: 'unusual_activity' })).toEqual(['quota', 'quota'])
+    expect(await failureOf(429, null)).toEqual(['retryable', 'retryable'])
+
+    expect(await failureOf(401, null)).toEqual(['quota', 'quota'])
+    expect(await failureOf(402, null)).toEqual(['quota', 'quota'])
+    expect(await failureOf(500, null)).toEqual(['retryable', 'retryable'])
   })
 })

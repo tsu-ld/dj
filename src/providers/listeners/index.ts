@@ -17,45 +17,38 @@ interface StoredMember {
 
 type StoredGuild = Record<string, StoredMember>
 
-function normalizeSongs(value: unknown): Record<string, SongStat> {
+function normalizeCounts<T>(
+  value: unknown,
+  stat: (key: string, entry: Record<string, unknown>, count: number) => T,
+): Record<string, T> {
   if (!isRecord(value))
     return {}
 
-  const songs: Record<string, SongStat> = {}
+  const stats: Record<string, T> = {}
 
-  for (const [key, song] of Object.entries(value)) {
-    if (!key || !isRecord(song))
+  for (const [key, entry] of Object.entries(value)) {
+    if (!key || !isRecord(entry))
       continue
 
-    const count = countOf(song.count)
+    const count = countOf(entry.count)
 
-    if (count === 0)
-      continue
-
-    songs[key] = {
-      title: typeof song.title === 'string' ? song.title : key,
-      count,
-      lastRequested: timestampOf(song.lastRequested),
-    }
+    if (count > 0)
+      stats[key] = stat(key, entry, count)
   }
 
-  return songs
+  return stats
+}
+
+function normalizeSongs(value: unknown): Record<string, SongStat> {
+  return normalizeCounts(value, (key, song, count) => ({
+    title: typeof song.title === 'string' ? song.title : key,
+    count,
+    lastRequested: timestampOf(song.lastRequested),
+  }))
 }
 
 function normalizeArtists(value: unknown): Record<string, ArtistStat> {
-  if (!isRecord(value))
-    return {}
-
-  const artists: Record<string, ArtistStat> = {}
-
-  for (const [name, entry] of Object.entries(value)) {
-    if (!name || !isRecord(entry) || countOf(entry.count) === 0)
-      continue
-
-    artists[name] = { count: countOf(entry.count), lastRequested: timestampOf(entry.lastRequested) }
-  }
-
-  return artists
+  return normalizeCounts(value, (_, artist, count) => ({ count, lastRequested: timestampOf(artist.lastRequested) }))
 }
 
 function normalizeMember(value: unknown): StoredMember | null {

@@ -1,3 +1,4 @@
+import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { SongFacts, SongFactsPort, SongNews } from '../../ports/song-facts.ts'
 import type { AlbumFacts, SearchHit } from './catalog.ts'
@@ -16,7 +17,7 @@ const NEWS_URL = 'https://news.google.com/rss/search'
 const USER_AGENT = 'dj-discord-bot/1.0 (self-hosted Discord radio)'
 const JSON_ACCEPT = 'application/json'
 const XML_ACCEPT = 'application/rss+xml, application/xml;q=0.9, */*;q=0.8'
-const DEFAULT_DEADLINE_MS = 8000
+const DEADLINE_MS = 8000
 const COMPLETE_TTL_MS = 24 * 60 * 60 * 1000
 const PARTIAL_TTL_MS = 60 * 60 * 1000
 const MAX_CACHED = 500
@@ -67,22 +68,17 @@ function factsOf(state: Collection): SongFacts | null {
 
 export function songFacts(deps: {
   logger: Logger
-  fetch?: typeof fetch
-  now?: () => number
-  deadlineMs?: number
+  clock: Clock
 }): SongFactsPort {
-  const { logger } = deps
-  const get = deps.fetch ?? globalThis.fetch
-  const now = deps.now ?? (() => Date.now())
-  const deadlineMs = deps.deadlineMs ?? DEFAULT_DEADLINE_MS
+  const { logger, clock } = deps
 
-  const complete = ttlMap<string, SongFacts>({ ttlMs: COMPLETE_TTL_MS, max: MAX_CACHED, now })
-  const partial = ttlMap<string, SongFacts>({ ttlMs: PARTIAL_TTL_MS, max: MAX_CACHED, now })
-  const misses = ttlMap<string, null>({ ttlMs: PARTIAL_TTL_MS, max: MAX_CACHED, now })
+  const complete = ttlMap<string, SongFacts>({ ttlMs: COMPLETE_TTL_MS, max: MAX_CACHED, clock })
+  const partial = ttlMap<string, SongFacts>({ ttlMs: PARTIAL_TTL_MS, max: MAX_CACHED, clock })
+  const misses = ttlMap<string, null>({ ttlMs: PARTIAL_TTL_MS, max: MAX_CACHED, clock })
   const pending = new Map<string, Promise<Result>>()
 
   async function getText(url: string, accept: string, signal: AbortSignal): Promise<string> {
-    const response = await get(url, {
+    const response = await fetch(url, {
       headers: { 'User-Agent': USER_AGENT, 'Accept': accept },
       signal,
     })
@@ -157,7 +153,7 @@ export function songFacts(deps: {
     state.news = await attempt(
       state,
       'news',
-      async () => parseNews(await getText(newsUrl(name), XML_ACCEPT, signal), name, now()),
+      async () => parseNews(await getText(newsUrl(name), XML_ACCEPT, signal), name, clock.now()),
       [],
     )
   }
@@ -168,7 +164,7 @@ export function songFacts(deps: {
     let timedOut = false
 
     try {
-      await withTimeout(lookupFacts(parsed, artist, controller.signal, state), deadlineMs, 'Song facts deadline passed.')
+      await withTimeout(lookupFacts(parsed, artist, controller.signal, state), DEADLINE_MS, 'Song facts deadline passed.')
     }
     catch (error) {
       if (!(error instanceof TimeoutError))

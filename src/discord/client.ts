@@ -14,7 +14,7 @@ const GATEWAY_URL = 'https://discord.com/api/v10/gateway'
 const GATEWAY_PROBE_TIMEOUT_MS = 5_000
 const GATEWAY_RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000, 30_000, 30_000]
 
-export interface GatewayProbe {
+interface GatewayProbe {
   readonly fetch: (url: string, init: { signal: AbortSignal }) => Promise<{ ok: boolean }>
   readonly sleep: (milliseconds: number) => Promise<void>
   readonly logger: Logger

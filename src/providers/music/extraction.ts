@@ -20,13 +20,13 @@ const AUDIO_FORMAT = 'ba/ba*'
 const MUXED_FORMAT = 'b[acodec!=none][vcodec!=none]'
 const DOWNLOAD_ARGS = ['--max-filesize', '200M', '-f', AUDIO_FORMAT]
 
-export interface ExtractorOutput {
+interface ExtractorOutput {
   readonly code: number | null
   readonly stdout: string
   readonly stderr: string
 }
 
-export interface ExtractorProcess {
+interface ExtractorProcess {
   run: (args: readonly string[], timeoutMs: number) => Promise<ExtractorOutput>
   dispose: () => Promise<void>
 }

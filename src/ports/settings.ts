@@ -3,11 +3,6 @@ export interface GuildSettings {
   readonly persona: string | null
 }
 
-export const DEFAULT_SETTINGS: GuildSettings = {
-  textChannelId: null,
-  persona: null,
-}
-
 export interface SettingsPort {
   get: (guildId: string) => GuildSettings
   update: (guildId: string, patch: Partial<GuildSettings>) => Promise<void>

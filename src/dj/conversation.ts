@@ -1,8 +1,9 @@
 import type { CommandBus, CommandContext, CommandOutcome } from '../commands/spec.ts'
 import type { Clock } from '../core/clock.ts'
 import type { Logger } from '../core/logger.ts'
-import type { ChatMessage, ConversationPort, ToolCall } from '../ports/conversation.ts'
+import type { ChatMessage, ConversationPort, ToolCall, ToolSpec } from '../ports/conversation.ts'
 import type { SettingsPort } from '../ports/settings.ts'
+import { errorMessage } from '../core/errors.ts'
 import { isRecord, parseJson } from '../core/json.ts'
 import { clampMessage } from '../core/text.ts'
 import { MESSAGES } from '../messages.ts'
@@ -26,7 +27,7 @@ const SILENT_UI: Omit<CommandContext['ui'], 'showQueue'> = {
   ack: async () => {},
 }
 
-export interface AskInput {
+interface AskInput {
   request: string
   context: CommandContext
   onRefused?: () => void
@@ -61,7 +62,7 @@ async function resolveToolCall(
     const outcome: CommandOutcome = await bus.runTool(call.name, args, context)
 
     if (outcome.kind === 'ok')
-      return { message: toolResult(call, outcome.data ?? { done: call.name }), acted: true, refused: false }
+      return { message: toolResult(call, outcome.data), acted: true, refused: false }
 
     if (outcome.kind === 'refused')
       return { message: toolResult(call, { error: outcome.message }), acted: false, refused: true }
@@ -107,12 +108,23 @@ export function djAgent(deps: {
 
         return remaining > 0 ? Math.min(DJ_TIMEOUT_MS, remaining) : null
       }
-      const typing = () => {
-        void context.textChannel.sendTyping().catch(() => {})
+      const complete = async (timeoutMs: number, tools?: readonly ToolSpec[]) => {
+        void context.textChannel.sendTyping()
+          .catch(error => deps.logger.debug('dj.typing_failed', { error: errorMessage(error) }))
+
+        return deps.model.complete({
+          instructions: instructions(),
+          messages: [...exchange],
+          ...(tools ? { tools } : {}),
+          timeoutMs,
+          sessionId: channelId,
+        })
       }
 
       let acted = false
       let toolCalls = 0
+
+      const answer = (text: string | null) => clampMessage(text) ?? (acted ? MESSAGES.djActed : null)
 
       try {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -121,15 +133,7 @@ export function djAgent(deps: {
           if (timeoutMs === null)
             break
 
-          typing()
-
-          const reply = await deps.model.complete({
-            instructions: instructions(),
-            messages: [...exchange],
-            tools: deps.bus.tools,
-            timeoutMs,
-            sessionId: channelId,
-          })
+          const reply = await complete(timeoutMs, deps.bus.tools)
 
           exchange.push({
             role: 'assistant',
@@ -140,7 +144,7 @@ export function djAgent(deps: {
           if (reply.toolCalls.length === 0) {
             history.remember(channelId, userId, exchange)
 
-            return clampMessage(reply.text) ?? (acted ? MESSAGES.djActed : null)
+            return answer(reply.text)
           }
 
           let callsThisRound = 0
@@ -188,18 +192,11 @@ export function djAgent(deps: {
 
         // Endpoints that emit tool calls even when none were offered get
         // sanitized away here.
-        typing()
-
-        const reply = await deps.model.complete({
-          instructions: instructions(),
-          messages: [...exchange],
-          timeoutMs,
-          sessionId: channelId,
-        })
+        const reply = await complete(timeoutMs)
 
         history.remember(channelId, userId, [...exchange, { role: 'assistant', content: reply.text ?? '' }])
 
-        return clampMessage(reply.text) ?? (acted ? MESSAGES.djActed : null)
+        return answer(reply.text)
       }
       catch (error) {
         if (!acted)

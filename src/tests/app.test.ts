@@ -19,6 +19,7 @@ async function config(): Promise<AppConfig> {
       cacheMaxBytes: 1024,
       cacheMaxAgeMs: 1_000,
       extractorCommand: 'false',
+      welcomeFile: join(directory, 'welcome.mp3'),
       metadata: { enabled: false },
     },
     language: { enabled: false },

@@ -28,7 +28,7 @@ export interface CommandContext {
   readonly ui: CommandUi
 }
 
-export type CommandData = Record<string, unknown> | undefined
+export type CommandData = Record<string, unknown>
 
 export interface QueueContext extends CommandContext {
   readonly queue: QueueView
@@ -41,7 +41,7 @@ export interface VoiceContext extends CommandContext {
 interface SpecBase<Context extends CommandContext> {
   readonly name: string
   readonly description: string
-  readonly parameters: Record<string, unknown>
+  readonly parameters?: Record<string, unknown>
   readonly modelTool?: boolean
   readonly fastRoute?: boolean
   readonly ack?: boolean
@@ -51,7 +51,7 @@ interface SpecBase<Context extends CommandContext> {
   readonly confirm?: (data: CommandData, context: CommandContext) => string | null
 }
 
-export interface PlainSpec extends SpecBase<CommandContext> {
+interface PlainSpec extends SpecBase<CommandContext> {
   readonly requiresQueue?: false
   readonly requiresVoice?: false
 }

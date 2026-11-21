@@ -16,6 +16,7 @@ export const RADIO_LONG_EVERY = 2
 export const RADIO_SILENT_EVERY = 3
 export const RADIO_SPEAK_EVERY = 3
 export const PREPARED_CLIP_TTL_MS = 20 * 60_000
+export const NEWS_MAX_AGE_MS = 14 * 86_400_000
 
 export function queueRoom(occupied: number): number {
   return Math.max(MAX_QUEUE_SIZE - occupied, 0)

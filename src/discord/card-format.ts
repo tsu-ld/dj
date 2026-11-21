@@ -47,20 +47,20 @@ export function clock(totalSeconds: number): string {
   return hours > 0 ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds}` : `${minutes}:${seconds}`
 }
 
-function formatDuration(track: Track): string {
+function shownDuration(track: Track): string | null {
   if (track.isLive)
     return 'Live'
 
   if (!Number.isFinite(track.durationSeconds) || track.durationSeconds <= 0)
-    return 'Unknown'
+    return null
 
   return clock(Math.floor(track.durationSeconds))
 }
 
 function durationSuffix(track: Track): string {
-  const duration = formatDuration(track)
+  const duration = shownDuration(track)
 
-  return duration === 'Unknown' ? '' : ` · ${duration}`
+  return duration === null ? '' : ` · ${duration}`
 }
 
 export function linkedTitle(track: Track): string {
@@ -81,9 +81,9 @@ function requesterLabel(track: Track): string | null {
 
 export function statusLine(track: Track, view: QueueView): string {
   const parts = [view.paused ? '**Paused**' : '**Playing**']
-  const duration = formatDuration(track)
+  const duration = shownDuration(track)
 
-  if (duration !== 'Unknown')
+  if (duration !== null)
     parts.push(duration)
 
   const requester = requesterLabel(track)

@@ -1,21 +1,23 @@
 import type { GuildTextBasedChannel } from 'discord.js'
+import type { Logger } from '../core/logger.ts'
 import type { CommandData, VoiceSpec } from './spec.ts'
-import { UserError } from '../core/errors.ts'
+import { errorMessage, UserError } from '../core/errors.ts'
 import { MAX_QUEUE_SIZE, MAX_SONGS_PER_REQUEST, queueRoom } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
-import { EMPTY_PARAMETERS } from './parameters.ts'
 
 const NO_SONGS = 'no songs were given'
 const TYPING_REFRESH_MS = 8_000
 const TYPING_MAX_MS = 60_000
 
 // Discord drops a typing indicator after ten seconds.
-function keepTyping(channel: GuildTextBasedChannel): () => void {
+function keepTyping(channel: GuildTextBasedChannel, logger: Logger): () => void {
   let refresh: ReturnType<typeof setInterval> | null = null
   let deadline: ReturnType<typeof setTimeout> | null = null
 
   const send = (): void => {
-    void channel.sendTyping().catch(() => {})
+    void channel.sendTyping().catch((error: unknown) => {
+      logger.debug('command.typing_failed', { error: errorMessage(error) })
+    })
   }
 
   const stop = (): void => {
@@ -85,18 +87,20 @@ export const addSongs: VoiceSpec = {
 export const query: VoiceSpec = {
   name: 'query',
   description: 'Play a song or playlist from a link or search text.',
-  parameters: EMPTY_PARAMETERS,
   modelTool: false,
   fastRoute: false,
   requiresVoice: true,
   confirm: cappedPlaylist,
   async run(args, context) {
-    const text = typeof args.query === 'string' ? args.query : ''
+    const text = args.query
+
+    if (typeof text !== 'string')
+      throw new Error('query needs the search text')
 
     if (queueRoom(context.services.music.view(context.guildId)?.size ?? 0) === 0)
       throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
 
-    const stopTyping = keepTyping(context.textChannel)
+    const stopTyping = keepTyping(context.textChannel, context.services.logger)
 
     try {
       const result = await context.services.music.play({
@@ -116,8 +120,8 @@ export const query: VoiceSpec = {
 }
 
 function cappedPlaylist(data: CommandData): string | null {
-  const added = data?.added
-  const dropped = data?.dropped
+  const added = data.added
+  const dropped = data.dropped
 
   if (typeof added !== 'number' || typeof dropped !== 'number' || dropped <= 0)
     return null

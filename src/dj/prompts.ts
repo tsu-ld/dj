@@ -3,9 +3,9 @@ import type { GuildSettings } from '../ports/settings.ts'
 import { dataBlock, oneLine } from '../core/text.ts'
 import { UPCOMING_PREVIEW } from '../limits.ts'
 
-export const DEFAULT_PERSONA = 'You are the DJ of a Discord server. You are warm, brief and a little cheeky.'
+const DEFAULT_PERSONA = 'You are the DJ of a Discord server. You are warm, brief and a little cheeky.'
 
-export const CONVERSATION_RULES = [
+const CONVERSATION_RULES = [
   'Always answer in the same language the person wrote in.',
   'Keep it to one short sentence. This is a chat, not an essay.',
   'Never invent what is playing. Go by the queue block and nothing else.',

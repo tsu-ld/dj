@@ -32,7 +32,7 @@ export function eitherContains(left: string, right: string): boolean {
   return containsWords(left, right) || containsWords(right, left)
 }
 
-export function stripDecorations(raw: string): string {
+function stripDecorations(raw: string): string {
   const [head = ''] = raw.split('|')
 
   return head

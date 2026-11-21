@@ -1,13 +1,11 @@
 import type { QueueSpec } from './spec.ts'
 import { UserError } from '../core/errors.ts'
 import { MESSAGES } from '../messages.ts'
-import { EMPTY_PARAMETERS } from './parameters.ts'
 import { requireSameVoiceChannel } from './voice.ts'
 
 export const pause: QueueSpec = {
   name: 'pause',
   description: 'Pause the music that is playing. Users say: pausá, pará, pausa, hold on.',
-  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   authorize: requireSameVoiceChannel,
   async run(_args, context) {
@@ -21,7 +19,6 @@ export const pause: QueueSpec = {
 export const resume: QueueSpec = {
   name: 'resume',
   description: 'Resume the music that is paused. Users say: seguí, continuá, reanudá, dale, play.',
-  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   authorize: requireSameVoiceChannel,
   async run(_args, context) {
@@ -35,7 +32,6 @@ export const resume: QueueSpec = {
 export const toggle: QueueSpec = {
   name: 'toggle',
   description: 'Pause or resume whatever is playing.',
-  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   modelTool: false,
   fastRoute: false,
@@ -51,7 +47,6 @@ export const toggle: QueueSpec = {
 export const seek: QueueSpec = {
   name: 'seek',
   description: 'Jump to a point of the song that is playing.',
-  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   modelTool: false,
   fastRoute: false,
@@ -72,7 +67,6 @@ export const seek: QueueSpec = {
 export const skip: QueueSpec = {
   name: 'skip',
   description: 'Skip the song that is playing now and play the next one. Users say: saltéala, pasá a la siguiente, poné otra, pasá otra, skipeá, skipeate, skipeá esto, che skipeate esto, skipealo, skipeala, next, skip.',
-  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   authorize: requireSameVoiceChannel,
   async run(_args, context) {
@@ -87,7 +81,6 @@ export const skip: QueueSpec = {
 export const shuffle: QueueSpec = {
   name: 'shuffle',
   description: 'Shuffle the songs that are waiting in the queue. Users say: mezclá, shuffle, random.',
-  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   authorize: requireSameVoiceChannel,
   async run(_args, context) {
@@ -100,10 +93,9 @@ export const shuffle: QueueSpec = {
 export const radio: QueueSpec = {
   name: 'radio',
   description: 'Turn the radio on or off: when it is on, related songs keep playing after the queue runs dry. Users say: prendé la radio, apagá la radio, modo radio.',
-  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   authorize: requireSameVoiceChannel,
-  confirm: data => typeof data?.radio === 'boolean'
+  confirm: data => typeof data.radio === 'boolean'
     ? (data.radio ? MESSAGES.radioEnabled : MESSAGES.radioDisabled)
     : null,
   async run(_args, context) {

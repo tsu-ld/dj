@@ -1,6 +1,6 @@
 import type { Channel, Message } from 'discord.js'
 
-export interface Mention {
+interface Mention {
   readonly botMentioned: boolean
   readonly channelMentions: readonly Channel[]
   readonly text: string

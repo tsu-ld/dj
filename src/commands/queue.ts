@@ -2,7 +2,6 @@ import type { QueueSpec } from './spec.ts'
 import { UserError } from '../core/errors.ts'
 import { isPositionInQueue } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
-import { EMPTY_PARAMETERS } from './parameters.ts'
 import { requireSameVoiceChannel } from './voice.ts'
 
 const POSITION = /(?:^|\s)(\d{1,3})(?=\s|$)/
@@ -10,7 +9,6 @@ const POSITION = /(?:^|\s)(\d{1,3})(?=\s|$)/
 export const queue: QueueSpec = {
   name: 'queue',
   description: 'Show the full queue of songs. Users say: mostrame la cola, qué suena, qué está sonando, cuántos temas quedan, lista, queue.',
-  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   ack: false,
   async run(_args, context) {
@@ -59,10 +57,9 @@ export const remove: QueueSpec = {
 export const clear: QueueSpec = {
   name: 'clear',
   description: 'Stop the music, clear the queue and leave the voice channel. Users say: cortala, limpiá la cola, cortá todo, pará todo, clear, stop the music, stop everything, leave, chau.',
-  parameters: EMPTY_PARAMETERS,
   requiresQueue: true,
   authorize: requireSameVoiceChannel,
-  confirm: (_data, context) => context.message === null ? null : MESSAGES.cleared,
+  confirm: () => MESSAGES.cleared,
   async run(_args, context) {
     await context.services.music.stop(context.guildId, { resetStation: true })
 

@@ -2,10 +2,11 @@ import type { ListenerProfile } from '../ports/listeners.ts'
 import type { Track } from '../ports/music.ts'
 import type { SongFacts, SongNews } from '../ports/song-facts.ts'
 import { normalizeTitle } from '../core/text.ts'
+import { NEWS_MAX_AGE_MS } from '../limits.ts'
 
 export type Angle = 'welcome' | 'listener' | 'anniversary' | 'story' | 'news' | 'fact' | 'run'
 
-export interface AngleInput {
+interface AngleInput {
   readonly long: boolean
   readonly first: boolean
   readonly track: Track
@@ -17,13 +18,12 @@ export interface AngleInput {
 
 export const DAY_MS = 86_400_000
 const ANNIVERSARY_WINDOW_DAYS = 3
-const NEWS_MAX_AGE_DAYS = 14
 const REQUEST_MILESTONES = new Set([1, 5, 10, 25, 50, 100])
 const RELEASE_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
 
-const ORDER: readonly Exclude<Angle, 'welcome'>[] = ['listener', 'anniversary', 'story', 'news', 'fact', 'run']
+const ORDER: readonly Exclude<Angle, 'welcome' | 'run'>[] = ['listener', 'anniversary', 'story', 'news', 'fact']
 
-export interface Anniversary {
+interface Anniversary {
   readonly years: number
   readonly days: number
 }
@@ -50,7 +50,7 @@ export function anniversaryOf(facts: SongFacts | null, now: number): Anniversary
 }
 
 export function freshNews(facts: SongFacts | null, now: number): readonly SongNews[] {
-  return (facts?.news ?? []).filter(item => now - item.publishedAt <= NEWS_MAX_AGE_DAYS * DAY_MS)
+  return (facts?.news ?? []).filter(item => now - item.publishedAt <= NEWS_MAX_AGE_MS)
 }
 
 function isListenerMilestone(track: Track, listener: ListenerProfile | null): boolean {
@@ -68,7 +68,7 @@ function isListenerMilestone(track: Track, listener: ListenerProfile | null): bo
   return artist !== '' && listener.topArtists.some(top => top.trim().toLowerCase() === artist)
 }
 
-function fits(angle: Exclude<Angle, 'welcome'>, input: AngleInput): boolean {
+function fits(angle: Exclude<Angle, 'welcome' | 'run'>, input: AngleInput): boolean {
   const { facts } = input
 
   switch (angle) {
@@ -82,8 +82,6 @@ function fits(angle: Exclude<Angle, 'welcome'>, input: AngleInput): boolean {
       return freshNews(facts, input.now).length > 0
     case 'fact':
       return facts !== null && (Boolean(facts.album) || facts.year !== null || Boolean(facts.genre))
-    case 'run':
-      return true
   }
 }
 

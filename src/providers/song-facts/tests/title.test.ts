@@ -1,27 +1,31 @@
 import { describe, expect, test } from 'bun:test'
-import { cacheKey, containsWords, eitherContains, parseTitle, stripDecorations } from '../title.ts'
+import { cacheKey, containsWords, eitherContains, parseTitle } from '../title.ts'
 
-describe('stripDecorations', () => {
+function bareTrack(title: string): { artist: null, title: string, explicit: false } {
+  return { artist: null, title, explicit: false }
+}
+
+describe('parseTitle decorations', () => {
   test('production notes in brackets are dropped', () => {
-    expect(stripDecorations('One More Time (Official Video)')).toBe('One More Time')
-    expect(stripDecorations('One More Time (Official Music Video)')).toBe('One More Time')
-    expect(stripDecorations('One More Time [Audio]')).toBe('One More Time')
-    expect(stripDecorations('One More Time (Lyrics)')).toBe('One More Time')
-    expect(stripDecorations('One More Time (Remastered 2009)')).toBe('One More Time')
-    expect(stripDecorations('One More Time (HD)')).toBe('One More Time')
+    expect(parseTitle('One More Time (Official Video)', null)).toEqual(bareTrack('One More Time'))
+    expect(parseTitle('One More Time (Official Music Video)', null)).toEqual(bareTrack('One More Time'))
+    expect(parseTitle('One More Time [Audio]', null)).toEqual(bareTrack('One More Time'))
+    expect(parseTitle('One More Time (Lyrics)', null)).toEqual(bareTrack('One More Time'))
+    expect(parseTitle('One More Time (Remastered 2009)', null)).toEqual(bareTrack('One More Time'))
+    expect(parseTitle('One More Time (HD)', null)).toEqual(bareTrack('One More Time'))
   })
 
   test('a channel name after a pipe is dropped', () => {
-    expect(stripDecorations('One More Time (Official Video) | Daft Punk VEVO')).toBe('One More Time')
+    expect(parseTitle('One More Time (Official Video) | Daft Punk VEVO', null)).toEqual(bareTrack('One More Time'))
   })
 
   test('a song named after a decoration word survives', () => {
-    expect(stripDecorations('Lana Del Rey - Video Games')).toBe('Lana Del Rey - Video Games')
+    expect(parseTitle('Lana Del Rey - Video Games', null)).toEqual({ artist: 'Lana Del Rey', title: 'Video Games', explicit: true })
   })
 
   test('a featured credit is dropped', () => {
-    expect(stripDecorations('Get Lucky (feat. Pharrell Williams)')).toBe('Get Lucky')
-    expect(stripDecorations('Get Lucky [ft. Pharrell Williams]')).toBe('Get Lucky')
+    expect(parseTitle('Get Lucky (feat. Pharrell Williams)', null)).toEqual(bareTrack('Get Lucky'))
+    expect(parseTitle('Get Lucky [ft. Pharrell Williams]', null)).toEqual(bareTrack('Get Lucky'))
   })
 })
 

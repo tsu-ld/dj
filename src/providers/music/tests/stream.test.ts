@@ -1,9 +1,11 @@
+import type { Clock } from '../../../core/clock.ts'
 import type { AudioCache } from '../cache.ts'
+import type { StreamResolver } from '../stream.ts'
 import { expect, test } from 'bun:test'
 import { Song } from 'distube'
-import { testClock } from '../../../tests/fixtures.ts'
-import { directStreamUrl, isUrlFresh, streamResolver, streamWithDjLine, urlExpiresAt } from '../stream.ts'
-import { extractionStub, log, rejection } from './fakes.ts'
+import { silentLog as log, testClock } from '../../../tests/fixtures.ts'
+import { streamResolver } from '../stream.ts'
+import { extractionStub, rejection } from './fakes.ts'
 
 function song(overrides: { id?: string, url?: string, isLive?: boolean } = {}): Song {
   return new Song({
@@ -26,41 +28,91 @@ function cacheStub(overrides: Partial<AudioCache> = {}): AudioCache {
   }
 }
 
-test('only the progressive muxed format can be streamed', () => {
+const DOWNLOADED = 'file:///tmp/audio/song.m4a'
+
+async function playedFrom(formats: unknown): Promise<string> {
+  const resolver = streamResolver({
+    cache: cacheStub({ download: async () => '/tmp/audio/song.m4a' }),
+    extraction: extractionStub({ streamUrl: async () => null }),
+    clock: testClock(),
+    logger: log,
+    beforeStream: async () => {},
+  })
+
+  resolver.remember('song-1', formats)
+
+  return resolver.playableUrl(song())
+}
+
+test('only the progressive muxed format can be streamed', async () => {
   const formats = [
     { format_id: '18', protocol: 'https', acodec: 'mp4a.40.2', vcodec: 'avc1', url: 'https://video' },
     { format_id: '251', protocol: 'https', acodec: 'opus', vcodec: 'none', url: 'https://audio' },
   ]
 
-  expect(directStreamUrl(formats)).toBe('https://video')
+  expect(await playedFrom(formats)).toBe('https://video')
 })
 
-test('an audio-only video has no direct url, so it downloads instead', () => {
-  expect(directStreamUrl([{ protocol: 'https', acodec: 'opus', vcodec: 'none', url: 'https://audio' }])).toBeUndefined()
+test('an audio-only video has no direct url, so it downloads instead', async () => {
+  expect(await playedFrom([{ protocol: 'https', acodec: 'opus', vcodec: 'none', url: 'https://audio' }])).toBe(DOWNLOADED)
 })
 
-test('storyboards and video-only formats are not streamable', () => {
-  expect(directStreamUrl([
+test('storyboards and video-only formats are not streamable', async () => {
+  expect(await playedFrom([
     { protocol: 'mhtml', acodec: 'none', vcodec: 'none', url: 'https://i.ytimg.com/sb' },
     { protocol: 'https', acodec: 'none', vcodec: 'avc1', url: 'https://video-only' },
-  ])).toBeUndefined()
+  ])).toBe(DOWNLOADED)
 })
 
-test('a stream url is reused only until it is close to expiring', () => {
-  const now = Date.now()
+const URL_MARGIN_MS = 5 * 60_000
 
-  expect(isUrlFresh({ url: 'https://x', expiresAt: now + 60 * 60_000 }, now)).toBe(true)
-  expect(isUrlFresh({ url: 'https://x', expiresAt: now + 60_000 }, now)).toBe(false)
-  expect(isUrlFresh(undefined, now)).toBe(false)
+function progressive(url: string): unknown {
+  return [{ protocol: 'https', acodec: 'mp4a', vcodec: 'avc1', url }]
+}
+
+function resolverAt(clock: Clock): StreamResolver {
+  return streamResolver({
+    cache: cacheStub(),
+    extraction: extractionStub({ streamUrl: async () => 'https://cdn.test/resolved-again' }),
+    clock,
+    logger: log,
+    beforeStream: async () => {},
+  })
+}
+
+test('a stream url is reused only until it is close to expiring', async () => {
+  const clock = testClock(1_700_000_000_000)
+  const nowSeconds = clock.now() / 1000
+  const resolver = resolverAt(clock)
+  const hourLeft = `https://cdn.test/hour?expire=${nowSeconds + 3600}`
+
+  resolver.remember('song-1', progressive(hourLeft))
+  expect(await resolver.playableUrl(song())).toBe(hourLeft)
+
+  resolver.remember('song-1', progressive(`https://cdn.test/minute?expire=${nowSeconds + 60}`))
+  expect(await resolver.playableUrl(song())).toBe('https://cdn.test/resolved-again')
+
+  expect(await resolver.playableUrl(song({ id: 'song-never-remembered' }))).toBe('https://cdn.test/resolved-again')
 })
 
-test('the expiry is read from the url in seconds and kept in milliseconds', () => {
-  const now = Math.floor(Date.now() / 1000)
+test('the expiry is read from the url in seconds and kept in milliseconds', async () => {
+  const clock = testClock(1_700_000_000_000)
+  const nowSeconds = clock.now() / 1000
+  const resolver = resolverAt(clock)
+  const expiring = `https://cdn.test/videoplayback?expire=${nowSeconds + 3600}`
 
-  expect(urlExpiresAt(`https://x/videoplayback?expire=${now + 3600}`)).toBe((now + 3600) * 1000)
-  expect(isUrlFresh({ url: 'https://x', expiresAt: urlExpiresAt(`https://x?expire=${now + 3600}`) }, Date.now())).toBe(true)
-  expect(isUrlFresh({ url: 'https://x', expiresAt: urlExpiresAt(`https://x?expire=${now - 3600}`) }, Date.now())).toBe(false)
-  expect(urlExpiresAt('https://x/videoplayback')).toBe(Number.POSITIVE_INFINITY)
+  resolver.remember('song-1', progressive(expiring))
+  clock.advance(3_600_000 - URL_MARGIN_MS - 1)
+  expect(await resolver.playableUrl(song())).toBe(expiring)
+  clock.advance(1)
+  expect(await resolver.playableUrl(song())).toBe('https://cdn.test/resolved-again')
+
+  resolver.remember('song-2', progressive(`https://cdn.test/videoplayback?expire=${clock.now() / 1000 - 3600}`))
+  expect(await resolver.playableUrl(song({ id: 'song-2' }))).toBe('https://cdn.test/resolved-again')
+
+  resolver.remember('song-3', progressive('https://cdn.test/videoplayback'))
+  clock.advance(100 * 365 * 24 * 60 * 60_000)
+  expect(await resolver.playableUrl(song({ id: 'song-3' }))).toBe('https://cdn.test/videoplayback')
 })
 
 test('a file already on disk wins over the network', async () => {
@@ -178,25 +230,37 @@ test('a slow line delays the stream, and a failed fetch still lets it finish', a
     await new Promise(resolve => setTimeout(resolve, 10))
     seen.push('line')
   }
+  const resolving = streamResolver({
+    cache: cacheStub(),
+    extraction: extractionStub({
+      streamUrl: async () => {
+        seen.push('url')
 
-  const url = await streamWithDjLine({}, {
-    fetchUrl: async () => {
-      seen.push('url')
-
-      return 'https://cdn.test/a'
-    },
-    line,
+        return 'https://cdn.test/a'
+      },
+    }),
+    clock: testClock(Date.now()),
+    logger: log,
+    beforeStream: line,
   })
+  const failing = streamResolver({
+    cache: cacheStub({
+      download: async () => {
+        throw new Error('boom')
+      },
+    }),
+    extraction: extractionStub(),
+    clock: testClock(Date.now()),
+    logger: log,
+    beforeStream: line,
+  })
+
+  const url = await resolving.playableUrl(song())
 
   expect(url).toBe('https://cdn.test/a')
   expect(seen).toEqual(['url', 'line'])
 
-  expect(await rejection(async () => streamWithDjLine({}, {
-    fetchUrl: async () => {
-      throw new Error('boom')
-    },
-    line,
-  }))).toBe('boom')
+  expect(await rejection(async () => failing.playableUrl(song()))).toBe('boom')
 
   expect(seen).toEqual(['url', 'line', 'line'])
 })

@@ -4,7 +4,7 @@ import type { DecisionInput, DecisionPort } from '../../ports/decision.ts'
 import { circuitBreaker } from '../../core/async.ts'
 import { ProviderError } from '../../core/errors.ts'
 import { isRecord, parseJson } from '../../core/json.ts'
-import { isRetryableStatus, mapFailure } from '../http-failure.ts'
+import { endpointHeaders, failedResponse, mapFailure } from '../endpoint.ts'
 
 type DecisionConfig = Extract<AppConfig['decision'], { enabled: true }>
 
@@ -15,11 +15,7 @@ async function decide(config: DecisionConfig, input: DecisionInput): Promise<str
 
   const response = await fetch(config.baseUrl, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
-      'x-opencode-session': input.sessionId,
-    },
+    headers: endpointHeaders(config.apiKey, input.sessionId),
     body: JSON.stringify({
       model: config.model,
       state: { ...input.state, message: input.text },
@@ -30,14 +26,8 @@ async function decide(config: DecisionConfig, input: DecisionInput): Promise<str
     signal: AbortSignal.timeout(config.timeoutMs),
   })
 
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '')
-
-    throw new ProviderError(
-      `Decision endpoint responded ${response.status}: ${detail}`,
-      { failure: isRetryableStatus(response.status) ? 'retryable' : 'fatal', status: response.status },
-    )
-  }
+  if (!response.ok)
+    throw await failedResponse('Decision endpoint', response)
 
   const payload = parseJson(await response.text())
 
@@ -74,7 +64,7 @@ export function intentClassifier(deps: {
 
   const breaker = circuitBreaker({
     cooldownMs: config.retryAfterMs,
-    now: () => clock.now(),
+    clock,
   })
 
   return {

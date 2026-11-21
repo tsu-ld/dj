@@ -1,6 +1,5 @@
 import type { ListenerProfile } from '../../ports/listeners.ts'
 import type { SongFacts } from '../../ports/song-facts.ts'
-import type { AngleInput } from '../angle.ts'
 import { describe, expect, test } from 'bun:test'
 import { testTrack as track } from '../../tests/fixtures.ts'
 import { anniversaryOf, pickAngle } from '../angle.ts'
@@ -39,7 +38,7 @@ const ALL_FACTS = facts({
   news: [{ title: 'News', source: 'Paper', publishedAt: NOW - DAY }],
 })
 
-function pick(extra: Partial<AngleInput> = {}) {
+function pick(extra: Partial<Parameters<typeof pickAngle>[0]> = {}) {
   return pickAngle({
     long: true,
     first: false,

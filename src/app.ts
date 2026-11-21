@@ -2,6 +2,7 @@ import type { Client, Interaction, Message } from 'discord.js'
 import type { AppConfig } from './config.ts'
 import type { Logger } from './core/logger.ts'
 import type { OnAirHost } from './on-air/host.ts'
+import process from 'node:process'
 import { Events } from 'discord.js'
 import { commandBus } from './commands/bus.ts'
 import { commands } from './commands/index.ts'
@@ -13,7 +14,6 @@ import { discordClient, waitForGateway } from './discord/client.ts'
 import { interactionHandler } from './discord/interactions.ts'
 import { messageHandler } from './discord/messages.ts'
 import { messageSlot } from './discord/slot.ts'
-import { djAnnouncements } from './dj/announcements.ts'
 import { djAgent } from './dj/conversation.ts'
 import { djReplies } from './dj/replies.ts'
 import { onAirHost } from './on-air/host.ts'
@@ -25,7 +25,7 @@ import { settingsStore } from './providers/settings/index.ts'
 import { songFacts } from './providers/song-facts/index.ts'
 import { speechSynthesizer } from './providers/speech/index.ts'
 
-export interface App {
+interface App {
   readonly logger: Logger
   start: () => Promise<void>
   stop: () => Promise<void>
@@ -34,15 +34,15 @@ export interface App {
 const SHUTDOWN_TIMEOUT_MS = 5_000
 
 export async function createApp(config: AppConfig): Promise<App> {
-  const log = createLogger({ level: config.logLevel }).child({ app: 'dj' })
+  const log = createLogger({ level: config.logLevel, clock: systemClock, out: process.stdout }).child({ app: 'dj' })
   const settings = await settingsStore({ path: config.settingsPath, logger: log })
   const client: Client = discordClient(config, log)
   const model = config.language.enabled
-    ? conversationModel({ config: config.language, logger: log })
+    ? conversationModel({ config: config.language, logger: log, clock: systemClock })
     : null
   const decision = intentClassifier({ config: config.decision, clock: systemClock })
   const speech = speechSynthesizer({ config: config.speech, logger: log, clock: systemClock })
-  const replies = djReplies({ model, logger: log })
+  const replies = djReplies({ model, logger: log, settings, clock: systemClock })
 
   const hostRef: { current: OnAirHost | null } = { current: null }
 
@@ -56,9 +56,8 @@ export async function createApp(config: AppConfig): Promise<App> {
     },
   })
 
-  const announcements = djAnnouncements({ replies, settings, clock: systemClock })
   const slot = messageSlot({ logger: log, playback: guildId => music.status(guildId) })
-  const facts = songFacts({ logger: log })
+  const facts = songFacts({ logger: log, clock: systemClock })
   const listeners = await listenersStore({ path: config.listenersPath, logger: log, clock: systemClock })
   const host = onAirHost({ music, speech, model, settings, facts, listeners, logger: log, clock: systemClock })
 
@@ -76,6 +75,7 @@ export async function createApp(config: AppConfig): Promise<App> {
     decision,
     agent,
     logger: log,
+    clock: systemClock,
     cooldowns: config.cooldowns,
   })
   const onInteraction = interactionHandler({ bus, music, settings, slot, logger: log })
@@ -110,7 +110,7 @@ export async function createApp(config: AppConfig): Promise<App> {
         host.disconnected(payload.guildId)
     }),
     music.on('playbackError', (payload) => {
-      announcements.playbackError(payload)
+      replies.playbackError(payload)
       host.playbackError(payload)
 
       if (payload.cleanupAfterError)
@@ -168,14 +168,7 @@ export async function createApp(config: AppConfig): Promise<App> {
       stopping.abort()
       log.info('app.stopping')
 
-      for (const off of detach) {
-        try {
-          off()
-        }
-        catch (error) {
-          log.warn('app.detach_failed', { error: errorMessage(error) })
-        }
-      }
+      for (const off of detach) off()
 
       client.off(Events.MessageCreate, onMessageEvent)
       client.off(Events.InteractionCreate, onInteractionEvent)
@@ -204,7 +197,7 @@ export async function createApp(config: AppConfig): Promise<App> {
       }
       catch (error) {
         log.error('app.stop_failed', error)
-        await client.destroy().catch(() => {})
+        await client.destroy().catch((destroyError: unknown) => log.warn('app.destroy_failed', { error: errorMessage(destroyError) }))
       }
 
       log.info('app.stopped')

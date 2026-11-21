@@ -19,7 +19,7 @@ export function sameSong(title: string, heard: ReadonlySet<string>): boolean {
   return titleKeys(title).some(key => heard.has(key))
 }
 
-export function recentTitles(limit = RECENT_TITLES): {
+export function recentTitles(): {
   add: (guildId: string, title: string) => void
   of: (guildId: string) => readonly string[]
 } {
@@ -27,7 +27,7 @@ export function recentTitles(limit = RECENT_TITLES): {
 
   return {
     add(guildId, title) {
-      byGuild.set(guildId, [...byGuild.get(guildId) ?? [], title].slice(-limit))
+      byGuild.set(guildId, [...byGuild.get(guildId) ?? [], title].slice(-RECENT_TITLES))
     },
     of(guildId) {
       return byGuild.get(guildId) ?? []

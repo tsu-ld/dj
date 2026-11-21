@@ -2,7 +2,7 @@ import type { Clock } from '../core/clock.ts'
 import type { Angle } from './angle.ts'
 import { RADIO_LONG_EVERY, RADIO_MEMORY_MS, RADIO_MEMORY_SIZE, RADIO_SILENT_EVERY, RADIO_SPEAK_EVERY } from '../limits.ts'
 
-export interface StationSong {
+interface StationSong {
   readonly id: string
   readonly title: string
   readonly artist: string | null
@@ -30,7 +30,7 @@ export interface StationRun {
 
 const MAX_EARLIER = 3
 
-export interface Station {
+interface Station {
   recordSong: (guildId: string, song: StationSong) => number
   nextSongIndex: (guildId: string) => number
   songOnAir: (guildId: string) => string | null
@@ -64,9 +64,13 @@ export function onAirStation(deps: { clock: Clock }): Station {
     return (history.get(guildId) ?? []).filter(song => now - song.at <= RADIO_MEMORY_MS)
   }
 
+  function nextSongIndex(guildId: string): number {
+    return (songs.get(guildId)?.count ?? 0) + 1
+  }
+
   return {
     recordSong(guildId, song) {
-      const count = (songs.get(guildId)?.count ?? 0) + 1
+      const count = nextSongIndex(guildId)
 
       songs.set(guildId, { count, songId: song.id })
       failed.delete(guildId)
@@ -86,9 +90,7 @@ export function onAirStation(deps: { clock: Clock }): Station {
 
       return count
     },
-    nextSongIndex(guildId) {
-      return (songs.get(guildId)?.count ?? 0) + 1
-    },
+    nextSongIndex,
     songOnAir(guildId) {
       return songs.get(guildId)?.songId ?? null
     },

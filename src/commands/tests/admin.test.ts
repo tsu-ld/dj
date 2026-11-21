@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
+import { captureLog, fakeContext, fakeMember, fakeSettings, fakeUi, silentLog as log } from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
-import { fakeContext, fakeMember, fakeMessage, fakeSettings, fakeUi, log } from './fakes.ts'
+import { fakeMessage } from './fakes.ts'
 
 const textChannel = {
   id: '456',
@@ -194,6 +195,26 @@ describe('set_channel', () => {
     }))
 
     expect(outcome).toEqual({ kind: 'refused', message: MESSAGES.textChannelInvalid })
+  })
+
+  test('a channel fetch Discord rejects is logged and the channel is rejected', async () => {
+    const logs = captureLog()
+
+    const outcome = await bus.run('set_channel', { channelId: '456' }, fakeContext({
+      guildId: 'g1',
+      member: fakeMember(),
+      message: fakeMessage({
+        content: '<@999> escuchá en <#456>',
+        channels: [{ id: '456' }],
+        fetchChannel: () => {
+          throw new Error('Missing Access')
+        },
+      }),
+      services: { logger: logs.logger },
+    }))
+
+    expect(outcome).toEqual({ kind: 'refused', message: MESSAGES.textChannelInvalid })
+    expect(logs.entries('command.channel_fetch_failed')).toMatchObject([{ level: 'warn', error: 'Missing Access' }])
   })
 
   test('an archived or locked thread is rejected', async () => {

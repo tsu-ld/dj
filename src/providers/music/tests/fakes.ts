@@ -1,12 +1,9 @@
 import type { GuildMember } from 'discord.js'
 import type { Extractor } from '../extraction.ts'
 import type { StreamResolver } from '../stream.ts'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { errorMessage } from '../../../core/errors.ts'
-
-export { silentLog as log, testTrack as track } from '../../../tests/fixtures.ts'
 
 // Bun types the rejection matcher as a plain assertion, but a test that does not
 // await it can pass before the promise settles. This keeps the await real.
@@ -24,12 +21,6 @@ export async function rejection(run: () => Promise<unknown>): Promise<string> {
 // the SDK only keeps a member whose ids look like snowflakes
 export function memberOf(id: string, displayName: string): GuildMember {
   return { id, displayName, user: { id }, guild: { id: '100000000000000001' } } as unknown as GuildMember
-}
-
-export async function tempDir(): Promise<{ dir: string, cleanup: () => Promise<void> }> {
-  const dir = await mkdtemp(join(tmpdir(), 'dj-music-'))
-
-  return { dir, cleanup: async () => rm(dir, { recursive: true, force: true }) }
 }
 
 export async function shellScript(dir: string, name: string, body: string): Promise<string> {

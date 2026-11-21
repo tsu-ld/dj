@@ -12,7 +12,7 @@ import { clearConfirmation, noticeMessage, queueMessage } from './views.ts'
 
 const NOW_PLAYING_ACTIONS = new Set(['toggle', 'skip', 'radio', 'shuffle', 'queue', 'seek'])
 
-export interface InteractionHandlerDeps {
+interface InteractionHandlerDeps {
   readonly bus: CommandBus
   readonly music: MusicPort
   readonly settings: SettingsPort
@@ -43,7 +43,7 @@ export function interactionHandler(deps: InteractionHandlerDeps): (interaction: 
     }
     catch (error) {
       deps.logger.error('discord.interaction_failed', error)
-      await reportFailure(interaction)
+      await reportFailure(interaction, deps.logger)
     }
   }
 }
@@ -77,17 +77,17 @@ async function handleNowPlaying(deps: InteractionHandlerDeps, interaction: Butto
     return
 
   const channel = textChannelOf(interaction)
-  const member = await resolveMember(interaction)
+  const member = await resolveMember(interaction, deps.logger)
 
   if (!channel || !member) {
-    await reportFailure(interaction)
+    await reportFailure(interaction, deps.logger)
 
     return
   }
 
   const args = name === 'seek' ? { seconds: Number.parseInt(rawSeconds, 10), songId: songId.join(':') } : {}
 
-  await deps.bus.run(name, args, interactionContext(deps, interaction, guildId, member, channel))
+  await deps.bus.run(name, args, interactionContext(deps, guildId, member, channel, buttonUi(deps, interaction, guildId, channel)))
 }
 
 async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction: ButtonInteraction): Promise<void> {
@@ -118,7 +118,7 @@ async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction
   }
 
   const channel = textChannelOf(interaction)
-  const member = await resolveMember(interaction)
+  const member = await resolveMember(interaction, deps.logger)
 
   if (!channel || !member) {
     await interaction.editReply({ content: MESSAGES.genericError, components: [] })
@@ -126,20 +126,21 @@ async function handleClearConfirmation(deps: InteractionHandlerDeps, interaction
     return
   }
 
-  const outcome = await deps.bus.run('clear', {}, interactionContext(deps, interaction, guildId, member, channel))
+  const ui: CommandUi = {
+    ...buttonUi(deps, interaction, guildId, channel),
+    reply: async (text) => {
+      try {
+        await interaction.editReply({ content: text, components: [] })
+      }
+      catch (error) {
+        deps.logger.warn('discord.clear_feedback_failed', { error: errorMessage(error) })
+      }
+    },
+  }
+  const outcome = await deps.bus.run('clear', {}, interactionContext(deps, guildId, member, channel, ui))
 
-  if (outcome.kind !== 'ok') {
+  if (outcome.kind !== 'ok')
     await interaction.editReply({ components: [] })
-
-    return
-  }
-
-  try {
-    await interaction.editReply({ content: MESSAGES.cleared, components: [] })
-  }
-  catch (error) {
-    deps.logger.warn('discord.clear_feedback_failed', { error: errorMessage(error) })
-  }
 }
 
 async function editCard(message: Message, payload: ViewMessage): Promise<void> {
@@ -173,14 +174,8 @@ async function handleQueuePage(deps: InteractionHandlerDeps, interaction: Button
   await editCard(interaction.message, queueMessage(view, targetPage))
 }
 
-function interactionContext(
-  deps: InteractionHandlerDeps,
-  interaction: ButtonInteraction,
-  guildId: string,
-  member: GuildMember,
-  channel: GuildTextBasedChannel,
-): CommandContext {
-  const ui: CommandUi = {
+function buttonUi(deps: InteractionHandlerDeps, interaction: ButtonInteraction, guildId: string, channel: GuildTextBasedChannel): CommandUi {
+  return {
     reply: async (text) => {
       if (deps.music.status(guildId) === null)
         await interaction.followUp({ content: text, flags: MessageFlags.Ephemeral })
@@ -193,7 +188,15 @@ function interactionContext(
       await deps.slot.showQueue(queueView, channel)
     },
   }
+}
 
+function interactionContext(
+  deps: InteractionHandlerDeps,
+  guildId: string,
+  member: GuildMember,
+  channel: GuildTextBasedChannel,
+  ui: CommandUi,
+): CommandContext {
   return {
     guildId,
     member,
@@ -214,7 +217,7 @@ function textChannelOf(interaction: ButtonInteraction): GuildTextBasedChannel | 
   return channel
 }
 
-async function resolveMember(interaction: ButtonInteraction): Promise<GuildMember | null> {
+async function resolveMember(interaction: ButtonInteraction, logger: Logger): Promise<GuildMember | null> {
   const member = interaction.member
 
   if (member && 'voice' in member)
@@ -228,18 +231,22 @@ async function resolveMember(interaction: ButtonInteraction): Promise<GuildMembe
   try {
     return await guild.members.fetch(interaction.user.id)
   }
-  catch {
+  catch (error) {
+    logger.warn('discord.member_fetch_failed', { error: errorMessage(error) })
+
     return null
   }
 }
 
-async function reportFailure(interaction: ButtonInteraction): Promise<void> {
+async function reportFailure(interaction: ButtonInteraction, logger: Logger): Promise<void> {
   const payload: InteractionReplyOptions = { content: MESSAGES.genericError, flags: MessageFlags.Ephemeral }
 
   try {
     await interaction.followUp(payload)
   }
   catch {
-    await interaction.reply(payload).catch(() => {})
+    await interaction.reply(payload).catch((error: unknown) => {
+      logger.warn('discord.failure_report_failed', { error: errorMessage(error) })
+    })
   }
 }

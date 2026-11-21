@@ -6,6 +6,7 @@ import type { BeforeStreamInput, MusicEventMap, MusicPort, QueueView, Track } fr
 import type { SettingsPort } from '../ports/settings.ts'
 import type { SongFactsPort } from '../ports/song-facts.ts'
 import type { SpeechPort } from '../ports/speech.ts'
+import { errorMessage } from '../core/errors.ts'
 import { clipRemover, preparedClips } from './clips.ts'
 import { clipKey, lineWriter, requesterOf } from './line.ts'
 import { onAirStation, shouldSpeak } from './station.ts'
@@ -217,11 +218,6 @@ export function onAirHost(deps: {
     }
   }
 
-  function drop(clip: { file: string } | null): void {
-    if (clip)
-      void remove(clip.file)
-  }
-
   return {
     beforeStream,
     trackQueued({ guildId, track, view }) {
@@ -231,12 +227,12 @@ export function onAirHost(deps: {
     playlistQueued({ guildId, view }) {
       prepareNext(guildId, view)
     },
-    trackStarted({ view }) {
+    trackStarted({ guildId, view }) {
       if (disposed)
         return
 
       for (const track of view.upcoming.slice(0, PREFETCH))
-        void facts.lookup(track).catch(() => {})
+        void facts.lookup(track).catch(error => logger.warn('on-air.facts_failed', { guildId, track: track.title, error: errorMessage(error) }))
     },
     stateChanged({ guildId, view }) {
       prepareNext(guildId, view)
@@ -249,11 +245,11 @@ export function onAirHost(deps: {
     },
     disconnected(guildId) {
       station.endSession(guildId)
-      drop(prepared.drop(guildId))
+      void remove(prepared.drop(guildId)?.file ?? null)
     },
     reset(guildId) {
       station.reset(guildId)
-      drop(prepared.drop(guildId))
+      void remove(prepared.drop(guildId)?.file ?? null)
     },
     async dispose() {
       disposed = true

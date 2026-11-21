@@ -6,7 +6,7 @@ import { rm } from 'node:fs/promises'
 import { errorMessage } from '../core/errors.ts'
 import { PREPARED_CLIP_TTL_MS } from '../limits.ts'
 
-export interface PreparedClip {
+interface PreparedClip {
   readonly songId: string
   readonly key: string
   readonly file: string
@@ -15,12 +15,12 @@ export interface PreparedClip {
   readonly at: number
 }
 
-export interface TakenClip {
+interface TakenClip {
   readonly clip: PreparedClip | null
   readonly discarded: PreparedClip | null
 }
 
-export interface PreparedClips {
+interface PreparedClips {
   preparedFor: (guildId: string, songId: string, key: string) => boolean
   setPrepared: (guildId: string, clip: Omit<PreparedClip, 'at'>) => PreparedClip | null
   takePrepared: (guildId: string, songId: string, key: string) => TakenClip
@@ -30,6 +30,10 @@ export interface PreparedClips {
 
 export function preparedClips(clock: Clock): PreparedClips {
   const prepared = new Map<string, PreparedClip>()
+
+  function holds(clip: PreparedClip | undefined, songId: string, key: string): boolean {
+    return clip?.songId === songId && clip.key === key
+  }
 
   function drop(guildId: string): PreparedClip | null {
     const clip = prepared.get(guildId) ?? null
@@ -41,9 +45,7 @@ export function preparedClips(clock: Clock): PreparedClips {
 
   return {
     preparedFor(guildId, songId, key) {
-      const stored = prepared.get(guildId)
-
-      return stored?.songId === songId && stored.key === key
+      return holds(prepared.get(guildId), songId, key)
     },
     setPrepared(guildId, clip) {
       const previous = prepared.get(guildId) ?? null
@@ -60,7 +62,7 @@ export function preparedClips(clock: Clock): PreparedClips {
 
       const fresh = clock.now() - stored.at <= PREPARED_CLIP_TTL_MS
 
-      if (stored.songId !== songId || stored.key !== key || !fresh)
+      if (!holds(stored, songId, key) || !fresh)
         return { clip: null, discarded: stored }
 
       return { clip: stored, discarded: null }

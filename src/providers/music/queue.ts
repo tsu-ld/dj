@@ -1,7 +1,29 @@
+import type { GuildTextBasedChannel } from 'discord.js'
 import type { QueueView, Track } from '../../ports/music.ts'
-import type { MutableTrackQueue, QueueState, SkippableQueue, TrackQueue } from './types.ts'
 import { isRecord } from '../../core/json.ts'
 import { MAX_QUEUE_SIZE } from '../../limits.ts'
+
+interface TrackQueue {
+  readonly songs: readonly unknown[]
+}
+
+interface MutableTrackQueue {
+  songs: unknown[]
+}
+
+interface QueueState extends TrackQueue {
+  readonly paused: boolean
+  readonly autoplay: boolean
+}
+
+interface SkippableQueue extends TrackQueue {
+  readonly autoplay: boolean
+  skip: () => Promise<unknown>
+}
+
+export function addressOf(queue: { readonly id: string, readonly textChannel?: GuildTextBasedChannel }): { guildId: string, textChannel: GuildTextBasedChannel | null } {
+  return { guildId: queue.id, textChannel: queue.textChannel ?? null }
+}
 
 export function errorCodeOf(error: unknown): string | null {
   if (!isRecord(error))

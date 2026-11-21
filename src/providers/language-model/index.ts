@@ -1,9 +1,10 @@
 import type { AppConfig } from '../../config.ts'
+import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
 import type { ChatMessage, CompletionReply, CompletionRequest, ConversationPort, ToolCall, ToolSpec } from '../../ports/conversation.ts'
-import { ProviderError } from '../../core/errors.ts'
+import { errorMessage, ProviderError } from '../../core/errors.ts'
 import { isRecord, parseJson } from '../../core/json.ts'
-import { isRetryableStatus, mapFailure, MAX_ERROR_BODY } from '../http-failure.ts'
+import { endpointHeaders, failedResponse, isRetryableStatus, mapFailure } from '../endpoint.ts'
 
 type LanguageConfig = Extract<AppConfig['language'], { enabled: true }>
 
@@ -68,25 +69,32 @@ function buildBody(config: LanguageConfig, request: CompletionRequest): Record<s
 async function sendWithRetry(
   send: () => Promise<Response>,
   deadline: number,
+  clock: Clock,
   logger: Logger,
 ): Promise<Response> {
+  let failed: { status: number } | { error: string }
+
   try {
     const response = await send()
 
     if (!isRetryableStatus(response.status))
       return response
+
+    failed = { status: response.status }
   }
   catch (error) {
     if (isAbortError(error))
       throw error
+
+    failed = { error: errorMessage(error) }
   }
 
-  const remaining = deadline - Date.now()
+  const remaining = deadline - clock.now()
 
   if (remaining <= 0)
     throw new Error('LLM request ran out of time')
 
-  logger.warn('language.retry', { remaining })
+  logger.warn('language.retry', { ...failed, remaining })
 
   await new Promise(resolve => setTimeout(
     resolve,
@@ -127,42 +135,33 @@ function toReply(output: readonly unknown[]): CompletionReply {
 export function conversationModel(deps: {
   config: LanguageConfig
   logger: Logger
+  clock: Clock
 }): ConversationPort {
-  const { config, logger } = deps
+  const { config, logger, clock } = deps
 
   return {
     async complete(request) {
       const timeoutMs = Math.min(request.timeoutMs, config.timeoutMs)
-      const deadline = Date.now() + timeoutMs
+      const deadline = clock.now() + timeoutMs
       const body = JSON.stringify(buildBody(config, request))
       const send = async () => fetch(config.baseUrl, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
-          'x-opencode-session': request.sessionId,
-        },
+        headers: endpointHeaders(config.apiKey, request.sessionId),
         body,
-        signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 1)),
+        signal: AbortSignal.timeout(Math.max(deadline - clock.now(), 1)),
       })
 
       let response: Response
 
       try {
-        response = await sendWithRetry(send, deadline, logger)
+        response = await sendWithRetry(send, deadline, clock, logger)
       }
       catch (error) {
         throw mapFailure(error)
       }
 
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '')
-
-        throw new ProviderError(
-          `LLM endpoint responded ${response.status}: ${detail.slice(0, MAX_ERROR_BODY)}`,
-          { failure: isRetryableStatus(response.status) ? 'retryable' : 'fatal', status: response.status },
-        )
-      }
+      if (!response.ok)
+        throw await failedResponse('LLM endpoint', response)
 
       let raw: string
 

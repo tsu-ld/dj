@@ -11,15 +11,15 @@ import type { RepliesPort } from '../../ports/replies.ts'
 import type { MessageSlot, SlotPayload } from '../slot.ts'
 import type { ViewMessage } from '../views.ts'
 import { ComponentType } from 'discord.js'
-import { fakeMember, track, view } from '../../commands/tests/fakes.ts'
+import { fakeMember } from '../../tests/fixtures.ts'
 
-export interface FakeSentMessage {
+interface FakeSentMessage {
   readonly edits: ViewMessage[]
   readonly deletions: () => number
   readonly message: Message
 }
 
-export function fakeSentMessage(id: string): FakeSentMessage {
+function fakeSentMessage(id: string): FakeSentMessage {
   const edits: ViewMessage[] = []
   let deletions = 0
   const state = {
@@ -43,11 +43,11 @@ export function fakeSentMessage(id: string): FakeSentMessage {
   return { edits, deletions: () => deletions, message: state.message }
 }
 
-export interface SentRecord extends FakeSentMessage {
+interface SentRecord extends FakeSentMessage {
   readonly payload: ViewMessage
 }
 
-export interface FakeChannel {
+interface FakeChannel {
   readonly sent: SentRecord[]
   readonly channel: GuildTextBasedChannel
 }
@@ -70,7 +70,7 @@ export function fakeChannel(id = '2', guildId = '123456789012345678'): FakeChann
   return { sent, channel: channel as unknown as GuildTextBasedChannel }
 }
 
-export interface IncomingOptions {
+interface IncomingOptions {
   content?: string
   guildId?: string | null
   channelId?: string
@@ -82,9 +82,10 @@ export interface IncomingOptions {
   channels?: Map<string, unknown>
   fetchChannel?: (id: string) => unknown
   failReact?: boolean
+  failReply?: boolean
 }
 
-export interface IncomingMessage {
+interface IncomingMessage {
   readonly replies: string[]
   readonly reactions: string[]
   readonly message: Message
@@ -116,6 +117,9 @@ export function fakeIncomingMessage(options: IncomingOptions = {}): IncomingMess
     },
     inGuild: () => guildId !== null,
     async reply(payload: string | { content?: string }) {
+      if (options.failReply)
+        throw new Error('Missing Permissions')
+
       replies.push(typeof payload === 'string' ? payload : payload.content ?? '')
 
       return value
@@ -133,7 +137,7 @@ export function fakeIncomingMessage(options: IncomingOptions = {}): IncomingMess
   return { replies, reactions, message: value as unknown as Message }
 }
 
-export interface InteractionOptions {
+interface InteractionOptions {
   customId: string
   guildId?: string | null
   channel?: GuildTextBasedChannel | null
@@ -141,12 +145,12 @@ export interface InteractionOptions {
   failEditReply?: boolean
 }
 
-export interface CardEdit extends ViewMessage {
+interface CardEdit extends ViewMessage {
   readonly content?: string | null
   readonly embeds?: readonly unknown[]
 }
 
-export interface InteractionRecorder {
+interface InteractionRecorder {
   readonly replies: (string | InteractionReplyOptions)[]
   readonly followUps: InteractionReplyOptions[]
   readonly editReplies: (string | InteractionEditReplyOptions)[]
@@ -228,7 +232,7 @@ export function cardText(message: ViewMessage | undefined): string {
   return textsOf(message).join('\n')
 }
 
-export interface ButtonInfo {
+interface ButtonInfo {
   readonly customId: string
   readonly label: string
   readonly disabled: boolean
@@ -256,17 +260,6 @@ export function buttonsOf(message: ViewMessage): ButtonInfo[] {
   }))
 }
 
-export function queueOf(count: number): QueueView {
-  if (count === 0)
-    return view({ current: null, upcoming: [], size: 0 })
-
-  return view({
-    current: track({ title: 'Song 1' }),
-    upcoming: Array.from({ length: count - 1 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` })),
-    size: count,
-  })
-}
-
 export interface RepliesRecorder extends RepliesPort {
   readonly said: string[]
 }
@@ -279,7 +272,6 @@ export function fakeReplies(): RepliesRecorder {
     async say(_message, _settings, text) {
       said.push(text)
     },
-    async announce() {},
   }
 }
 

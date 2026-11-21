@@ -1,10 +1,9 @@
 import type { Logger } from '../../core/logger.ts'
 import type { GuildSettings, SettingsPort } from '../../ports/settings.ts'
 import { isRecord } from '../../core/json.ts'
-import { DEFAULT_SETTINGS } from '../../ports/settings.ts'
 import { jsonMapFile } from '../json-file.ts'
 
-type StoredSettings = Record<string, GuildSettings>
+const DEFAULT_SETTINGS: GuildSettings = { textChannelId: null, persona: null }
 
 function normalizeSettings(value: unknown): GuildSettings | null {
   if (!isRecord(value))
@@ -26,7 +25,7 @@ function normalizeSettings(value: unknown): GuildSettings | null {
 
 export async function settingsStore(options: { path: string, logger: Logger }): Promise<SettingsPort> {
   const store = jsonMapFile({ path: options.path, name: 'settings', logger: options.logger, entry: normalizeSettings })
-  let file: StoredSettings = await store.read()
+  let file = await store.read()
 
   return {
     get(guildId) {

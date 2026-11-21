@@ -3,9 +3,9 @@ import type { QueueView } from '../../ports/music.ts'
 import type { ViewMessage } from '../views.ts'
 import { describe, expect, test } from 'bun:test'
 import { ButtonStyle, ComponentType, MessageFlags } from 'discord.js'
-import { track, view } from '../../commands/tests/fakes.ts'
+import { queueOf, testTrack as track, testView as view } from '../../tests/fixtures.ts'
 import { clearConfirmation, noticeMessage, nowPlayingMessage, queueMessage } from '../views.ts'
-import { buttonsOf, queueOf, textsOf } from './fakes.ts'
+import { buttonsOf, textsOf } from './fakes.ts'
 
 function containerOf(message: ViewMessage): ReturnType<ContainerBuilder['toJSON']> {
   const container = message.components[0]
@@ -106,7 +106,7 @@ describe('queueMessage', () => {
 })
 
 function card(input: QueueView): ViewMessage {
-  const message = nowPlayingMessage(input)
+  const message = nowPlayingMessage(input, null)
 
   if (!message)
     throw new Error('missing now-playing card')
@@ -247,7 +247,7 @@ describe('nowPlayingMessage', () => {
   })
 
   test('a card without a current song is not rendered', () => {
-    expect(nowPlayingMessage(view({ current: null, size: 0 }))).toBeNull()
+    expect(nowPlayingMessage(view({ current: null, size: 0 }), null)).toBeNull()
   })
 
   test('the elapsed time and a progress bar follow the status line', () => {
