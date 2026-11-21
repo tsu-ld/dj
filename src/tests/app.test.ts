@@ -17,7 +17,7 @@ async function config(): Promise<AppConfig> {
     music: {
       cacheDir: join(directory, 'audio'),
       cacheMaxBytes: 1024,
-      cacheMaxAgeMs: 1_000,
+      cacheMaxAgeMs: 1000,
       extractorCommand: 'false',
       welcomeFile: join(directory, 'welcome.mp3'),
       metadata: { enabled: false },
@@ -25,7 +25,7 @@ async function config(): Promise<AppConfig> {
     language: { enabled: false },
     decision: { enabled: false },
     speech: { enabled: false },
-    cooldowns: { plainRequestMs: 2_000, djRequestMs: 15_000 },
+    cooldowns: { plainRequestMs: 2000, djRequestMs: 15_000 },
   }
 }
 

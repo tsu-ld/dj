@@ -12,7 +12,7 @@ import { ERROR_ANNOUNCE_MS } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
 import { buildAnnouncementInstructions, personaFor } from './prompts.ts'
 
-const REWRITE_TIMEOUT_MS = 5_000
+const REWRITE_TIMEOUT_MS = 5000
 const REWRITE_MAX_OUTPUT_TOKENS = 200
 
 interface DjReplies extends RepliesPort {
@@ -26,10 +26,13 @@ async function speakInCharacter(
   settings: GuildSettings,
   text: string,
 ): Promise<string | null> {
-  if (model === null)
+  if (model === null) {
     return null
+  }
 
-  void channel.sendTyping().catch(error => logger.debug('dj.typing_failed', { error: errorMessage(error) }))
+  void channel
+    .sendTyping()
+    .catch((error: unknown) => logger.debug('dj.typing_failed', { error: errorMessage(error) }))
 
   try {
     const reply = await model.complete({
@@ -42,8 +45,7 @@ async function speakInCharacter(
     })
 
     return clampMessage(reply.text)
-  }
-  catch (error) {
+  } catch (error) {
     logger.warn('dj.rewrite_failed', { error: errorMessage(error) })
 
     return null
@@ -58,10 +60,16 @@ export function djReplies(deps: {
 }): DjReplies {
   const errorWindow = cooldown(ERROR_ANNOUNCE_MS, deps.clock)
 
-  async function announce(channel: SendableChannels, settings: GuildSettings, text: string): Promise<void> {
+  async function announce(
+    channel: SendableChannels,
+    settings: GuildSettings,
+    text: string,
+  ): Promise<void> {
     const spoken = await speakInCharacter(deps.model, deps.logger, channel, settings, text)
 
-    await channel.send(spoken ?? text).catch(error => deps.logger.error('dj.announce_failed', error))
+    await channel
+      .send(spoken ?? text)
+      .catch((error: unknown) => deps.logger.error('dj.announce_failed', error))
   }
 
   return {
@@ -79,8 +87,9 @@ export function djReplies(deps: {
       await message.reply(spoken ?? text)
     },
     playbackError(payload) {
-      if (!errorWindow.take(payload.guildId) || !payload.textChannel)
+      if (!errorWindow.take(payload.guildId) || !payload.textChannel) {
         return
+      }
 
       void announce(payload.textChannel, deps.settings.get(payload.guildId), MESSAGES.playbackError)
     },

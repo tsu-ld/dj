@@ -1,5 +1,5 @@
 import type { Client, VoiceState } from 'discord.js'
-import type { Playlist, Queue, Song } from 'distube'
+import type { DisTube, Playlist, Queue, Song } from 'distube'
 import type { Logger } from '../../core/logger.ts'
 import type { QueueView } from '../../ports/music.ts'
 import type { AudioEndReason, AudioHealth } from './audio-health.ts'
@@ -14,8 +14,13 @@ import { addressOf, leavesEmptyChannel, shouldCleanupAfterError } from './queue.
 type VoiceOf = Queue['voice']
 type StreamOf = NonNullable<VoiceOf['stream']>
 
+interface MusicEvents {
+  readonly detach: Array<() => void>
+  readonly watchStream: (queue: Queue) => void
+}
+
 export function musicEvents(deps: {
-  player: import('distube').DisTube
+  player: DisTube
   client: Client
   catalog: MusicCatalog
   cache: AudioCache
@@ -25,42 +30,45 @@ export function musicEvents(deps: {
   viewOf: (queue: Queue) => QueueView
   health: AudioHealth
   logger: Logger
-}): { detach: Array<() => void>, watchStream: (queue: Queue) => void } {
-  const { player, client, catalog, cache, emitter, forgetStream, leave, viewOf, health, logger } = deps
+}): MusicEvents {
+  const { player, client, catalog, cache, emitter, forgetStream, leave, viewOf, health, logger } =
+    deps
   const lastSong = new Map<string, string>()
   const detach: Array<() => void> = []
   const noted = new WeakSet<StreamOf>()
   const watched = new Map<string, Array<StreamOf>>()
   const guardedVoices = new WeakSet<VoiceOf>()
 
-  // The SDK's voice re-emits stream errors but loses its listener when the queue
-  // is removed; an emitter with no "error" listener throws.
+  // WORKAROUND(https://github.com/skick1234/DisTube/blob/5.2.3/src/core/DisTubeVoice.ts#L178-L183): distube's voice re-emits stream errors, the engine drops its voice listeners with the queue, and an emitter with no error listener throws; the bot keeps one.
   function guardVoice(queue: Queue): void {
-    if (guardedVoices.has(queue.voice))
+    if (guardedVoices.has(queue.voice)) {
       return
+    }
 
     guardedVoices.add(queue.voice)
-    queue.voice.on('error', (error: Error) => logger.warn('music.voice_error', { guildId: queue.id, error: errorMessage(error) }))
+    queue.voice.on('error', (error: Error) =>
+      logger.warn('music.voice_error', { guildId: queue.id, error: errorMessage(error) }),
+    )
   }
 
   function orphanedStreamFailed(guildId: string, stream: StreamOf, error: Error): void {
     const queue = player.getQueue(guildId) ?? null
 
-    if (watched.has(guildId) && queue !== null && queue.voice.stream === stream)
+    if (watched.has(guildId) && queue !== null && queue.voice.stream === stream) {
       return
+    }
 
     logger.warn('music.orphan_stream_failed', { guildId, error: errorMessage(error) })
     stream.kill()
   }
 
-  // The SDK moves its only "error" listener to the next song's stream and leaves
-  // the previous ffmpeg running; an EventEmitter with no "error" listener throws,
-  // so that orphan's late exit would be uncaught. Ours stays on every stream.
+  // WORKAROUND(https://github.com/skick1234/DisTube/blob/5.2.3/src/core/DisTubeVoice.ts#L175-L176): distube moves its only error listener to the next stream, and a paused previous ffmpeg is kept alive with no listener for its late error; every stream keeps one.
   function watchStream(queue: Queue): void {
     const stream = queue.voice.stream
 
-    if (stream === undefined)
+    if (stream === undefined) {
       return
+    }
 
     if (!noted.has(stream)) {
       noted.add(stream)
@@ -69,13 +77,15 @@ export function musicEvents(deps: {
 
     const seen = watched.get(queue.id) ?? []
 
-    if (seen.includes(stream))
+    if (seen.includes(stream)) {
       return
+    }
 
     seen.push(stream)
 
-    while (seen.length > 2)
+    while (seen.length > 2) {
       seen.shift()
+    }
 
     watched.set(queue.id, seen)
   }
@@ -138,20 +148,21 @@ export function musicEvents(deps: {
   function onError(error: Error, queue: Queue | undefined, song: Song | undefined): void {
     logger.error('music.playback_error', error, { guildId: queue?.id })
 
-    if (!queue)
+    if (!queue) {
       return
+    }
 
     health.end(queue.id, 'error')
 
-    // A remembered googlevideo url can start answering 403 after a few plays.
-    const failed = lastSong.get(queue.id)
+    const lastPlayedSongId = lastSong.get(queue.id)
 
-    if (failed !== undefined)
-      forgetStream(failed)
+    if (lastPlayedSongId !== undefined) {
+      forgetStream(lastPlayedSongId)
+    }
 
     const cleanup = shouldCleanupAfterError(queue, player.getQueue(queue.id))
 
-    const songId = song?.id ?? failed ?? null
+    const songId = song?.id ?? lastPlayedSongId ?? null
 
     emitter.emit('playbackError', { ...addressOf(queue), songId, cleanupAfterError: cleanup })
 
@@ -164,20 +175,28 @@ export function musicEvents(deps: {
   function onVoiceStateUpdate(oldState: VoiceState): void {
     const voice = player.voices.get(oldState.guild.id)
 
-    if (!leavesEmptyChannel(voice?.channelId ?? null, oldState.channelId, isVoiceChannelEmpty(oldState)))
+    if (
+      !leavesEmptyChannel(
+        voice?.channelId ?? null,
+        oldState.channelId,
+        isVoiceChannelEmpty(oldState),
+      )
+    ) {
       return
+    }
 
     logger.info('music.channel_empty', { guildId: oldState.guild.id })
     emitter.emit('queueCleared', { guildId: oldState.guild.id, resetStation: false })
     voice?.leave()
   }
 
-  // queue.stop() emits neither FINISH_SONG nor DISCONNECT, so a stop or clear
-  // must end the session through the emitter.
-  detach.push(emitter.on('trackSkipped', ({ guildId }) => ended(guildId, 'skipped')))
-  detach.push(emitter.on('queueCleared', ({ guildId }) => ended(guildId, 'stopped')))
-  detach.push(emitter.on('queueEnded', ({ guildId }) => ended(guildId, 'finished')))
-  detach.push(emitter.on('disconnected', ({ guildId }) => ended(guildId, 'finished')))
+  // WORKAROUND(https://github.com/skick1234/DisTube/blob/5.2.3/src/struct/Queue.ts#L433): queue.stop() emits neither FINISH nor DISCONNECT and does not leave voice, so a stop or clear ends the session through the emitter.
+  detach.push(
+    emitter.on('trackSkipped', ({ guildId }) => ended(guildId, 'skipped')),
+    emitter.on('queueCleared', ({ guildId }) => ended(guildId, 'stopped')),
+    emitter.on('queueEnded', ({ guildId }) => ended(guildId, 'finished')),
+    emitter.on('disconnected', ({ guildId }) => ended(guildId, 'finished')),
+  )
 
   player.on(Events.ADD_SONG, onAddSong)
   detach.push(() => player.off(Events.ADD_SONG, onAddSong))
@@ -197,8 +216,10 @@ export function musicEvents(deps: {
   detach.push(() => player.off(Events.ERROR, onError))
 
   client.on(DiscordEvents.VoiceStateUpdate, onVoiceStateUpdate)
-  detach.push(() => client.off(DiscordEvents.VoiceStateUpdate, onVoiceStateUpdate))
-  detach.push(() => watched.clear())
+  detach.push(
+    () => client.off(DiscordEvents.VoiceStateUpdate, onVoiceStateUpdate),
+    () => watched.clear(),
+  )
 
   return { detach, watchStream }
 }

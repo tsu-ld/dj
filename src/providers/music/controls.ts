@@ -10,7 +10,28 @@ import { UserError } from '../../core/errors.ts'
 import { MESSAGES } from '../../messages.ts'
 import { addressOf, removeSongAt, skipSong } from './queue.ts'
 
-type Controls = Pick<MusicPort, 'pause' | 'resume' | 'toggle' | 'skip' | 'stop' | 'shuffle' | 'remove' | 'radio' | 'seek' | 'view' | 'status'>
+type Controls = Pick<
+  MusicPort,
+  | 'pause'
+  | 'resume'
+  | 'toggle'
+  | 'skip'
+  | 'stop'
+  | 'shuffle'
+  | 'remove'
+  | 'radio'
+  | 'seek'
+  | 'view'
+  | 'status'
+>
+
+function reopenable(url: string | undefined): boolean {
+  if (url === undefined) {
+    return false
+  }
+
+  return !url.startsWith('file://') || existsSync(fileURLToPath(url))
+}
 
 export function musicControls(deps: {
   player: DisTube
@@ -26,8 +47,9 @@ export function musicControls(deps: {
   function requireQueue(guildId: string): Queue {
     const queue = player.getQueue(guildId)
 
-    if (!queue)
+    if (!queue) {
       throw new UserError(MESSAGES.nothingPlaying)
+    }
 
     return queue
   }
@@ -39,14 +61,14 @@ export function musicControls(deps: {
   function status(guildId: string): PlaybackStatus | null {
     const voice = player.voices.get(guildId)
 
-    if (!voice)
+    if (!voice) {
       return null
+    }
 
     const status = voice.audioPlayer.state.status
     const playing = status === AudioPlayerStatus.Playing
     const paused = status === AudioPlayerStatus.Paused || status === AudioPlayerStatus.AutoPaused
-    // the SDK's playbackTime includes the seek offset while buffering, and an
-    // idle player still reports the last song's stream
+    // WORKAROUND(https://github.com/skick1234/DisTube/blob/5.2.3/src/core/DisTubeVoice.ts#L219): playbackTime adds the stream's seek offset before any audio played, and stop() keeps the last stream, so an idle player still reports it; only an on-air player is read.
     const onAir = playing || paused || status === AudioPlayerStatus.Buffering
 
     return {
@@ -55,43 +77,37 @@ export function musicControls(deps: {
     }
   }
 
-  // A seek on a buffering song makes the SDK resolve its stream again, and on a
-  // paused one it stages the new stream past a skip and plays the skipped song on resume.
+  // WORKAROUND(https://github.com/skick1234/DisTube/blob/5.2.3/src/core/DisTubeVoice.ts#L188-L189): a seek while paused leaves the new stream unplayed until resume and keeps the previous one as pausingStream, and one while buffering rebuilds the stream; a seek needs a playing player.
   function seekableLength(guildId: string, queue: Queue, songId: string): number {
     const song = queue.songs[0]
 
-    if (!song || song.id !== songId)
+    if (!song || song.id !== songId) {
       throw new UserError(MESSAGES.seekStale)
+    }
 
     const played = song.stream.playFromSource ? song : song.stream.song
     const length = Math.min(song.duration, played?.duration ?? 0)
     const url = played?.stream.playFromSource ? played.stream.url : undefined
 
-    if (song.isLive || !(length > 0) || status(guildId)?.state !== 'playing' || !reopenable(url))
+    if (song.isLive || !(length > 0) || status(guildId)?.state !== 'playing' || !reopenable(url)) {
       throw new UserError(MESSAGES.seekUnavailable)
+    }
 
     return length
-  }
-
-  // ffmpeg keeps reading an evicted file it has open, but a seek reopens the source.
-  function reopenable(url: string | undefined): boolean {
-    if (url === undefined)
-      return false
-
-    return !url.startsWith('file://') || existsSync(fileURLToPath(url))
   }
 
   async function skipCurrent(queue: Queue, by: Listener): Promise<void> {
     const current = queue.songs[0]
 
-    if (current)
+    if (current) {
       emitter.emit('trackSkipped', { guildId: queue.id, track: catalog.trackOf(current), by })
+    }
 
     await skipSong(queue, async () => clear(queue, false))
   }
 
   async function clear(queue: Queue, resetStation: boolean): Promise<void> {
-    // the SDK's queue.stop() neither disconnects nor emits FINISH
+    // WORKAROUND(https://github.com/skick1234/DisTube/blob/5.2.3/src/struct/Queue.ts#L433): queue.stop() emits neither FINISH nor DISCONNECT and does not leave voice; the bot leaves and tells the emitter.
     await queue.stop()
     leave(queue.id)
     emitter.emit('queueCleared', { guildId: queue.id, resetStation })
@@ -102,8 +118,9 @@ export function musicControls(deps: {
       await mutations.run(guildId, async () => {
         const queue = requireQueue(guildId)
 
-        if (!queue.paused)
+        if (!queue.paused) {
           await queue.pause()
+        }
 
         emitState(queue)
       })
@@ -112,8 +129,9 @@ export function musicControls(deps: {
       await mutations.run(guildId, async () => {
         const queue = requireQueue(guildId)
 
-        if (queue.paused)
+        if (queue.paused) {
           await queue.resume()
+        }
 
         emitState(queue)
       })
@@ -156,15 +174,17 @@ export function musicControls(deps: {
 
         const song = queue.songs[position - 1]
 
-        if (!song)
+        if (!song) {
           throw new UserError(MESSAGES.removeOutOfRange)
+        }
 
         const removed = catalog.trackOf(song).title
 
         await removeSongAt(queue, position, async () => skipCurrent(queue, by))
 
-        if (player.getQueue(guildId) === queue)
+        if (player.getQueue(guildId) === queue) {
           emitState(queue)
+        }
 
         return removed
       })

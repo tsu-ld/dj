@@ -1,12 +1,19 @@
-export function isRecord(value: unknown): value is Record<string, unknown> {
+export type Json = null | boolean | number | string | ReadonlyArray<Json> | JsonRecord
+
+export interface JsonRecord {
+  readonly [key: string]: Json | undefined
+}
+
+export function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export function parseJson(text: string): unknown {
+const parseJsonText: (text: string) => Json = JSON.parse
+
+export function parseJson(text: string): Json {
   try {
-    return JSON.parse(text)
-  }
-  catch {
+    return parseJsonText(text)
+  } catch {
     return null
   }
 }

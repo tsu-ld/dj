@@ -8,7 +8,8 @@ const POSITION = /(?:^|\s)(\d{1,3})(?=\s|$)/
 
 export const queue: QueueSpec = {
   name: 'queue',
-  description: 'Show the full queue of songs. Users say: mostrame la cola, qué suena, qué está sonando, cuántos temas quedan, lista, queue.',
+  description:
+    'Show the full queue of songs. Users say: mostrame la cola, qué suena, qué está sonando, cuántos temas quedan, lista, queue.',
   requiresQueue: true,
   ack: false,
   async run(_args, context) {
@@ -20,7 +21,8 @@ export const queue: QueueSpec = {
 
 export const remove: QueueSpec = {
   name: 'remove',
-  description: 'Remove one song from the queue by its position, where 1 is the song playing right now. Users say: sacá la 3, eliminá la canción 2, remove 4.',
+  description:
+    'Remove one song from the queue by its position, where 1 is the song playing right now. Users say: sacá la 3, eliminá la canción 2, remove 4.',
   parameters: {
     type: 'object',
     properties: {
@@ -34,21 +36,28 @@ export const remove: QueueSpec = {
     const match = POSITION.exec(text)
     const raw = match?.[1]
 
-    if (raw === undefined)
+    if (raw === undefined) {
       return null
+    }
 
     const position = Number.parseInt(raw, 10)
 
-    return isPositionInQueue(context.services.music.view(context.guildId)?.size ?? 0, position) ? { position } : null
+    return isPositionInQueue(context.services.music.view(context.guildId)?.size ?? 0, position)
+      ? { position }
+      : null
   },
   async run(args, context) {
     const raw = args.position
     const position = typeof raw === 'number' ? raw : Number(raw)
 
-    if (!Number.isInteger(position) || !isPositionInQueue(context.queue.size, position))
+    if (!Number.isInteger(position) || !isPositionInQueue(context.queue.size, position)) {
       throw new UserError(MESSAGES.removeOutOfRange)
+    }
 
-    const removed = await context.services.music.remove(context.guildId, position, { id: context.member.id, name: context.member.displayName })
+    const removed = await context.services.music.remove(context.guildId, position, {
+      id: context.member.id,
+      name: context.member.displayName,
+    })
 
     return { removed }
   },
@@ -56,7 +65,8 @@ export const remove: QueueSpec = {
 
 export const clear: QueueSpec = {
   name: 'clear',
-  description: 'Stop the music, clear the queue and leave the voice channel. Users say: cortala, limpiá la cola, cortá todo, pará todo, clear, stop the music, stop everything, leave, chau.',
+  description:
+    'Stop the music, clear the queue and leave the voice channel. Users say: cortala, limpiá la cola, cortá todo, pará todo, clear, stop the music, stop everything, leave, chau.',
   requiresQueue: true,
   authorize: requireSameVoiceChannel,
   confirm: () => MESSAGES.cleared,

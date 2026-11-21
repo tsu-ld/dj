@@ -1,26 +1,23 @@
 import type { VoiceBasedChannel } from 'discord.js'
 import type { AudioOverMusic } from '../../ports/music.ts'
 
-// @discordjs/voice declares these as methods; function properties would be contravariant and reject the real objects
-/* eslint-disable ts/method-signature-style */
-export interface AudioPlayerLike {
+export interface AudioPlayerLike<Resource = never> {
   readonly state: { readonly status: string }
-  on(event: string, listener: (...args: unknown[]) => void): unknown
-  once(event: string, listener: (...args: unknown[]) => void): unknown
-  off(event: string, listener: (...args: unknown[]) => void): unknown
-  play(resource: unknown): unknown
-  stop(force?: boolean): unknown
-  pause(): unknown
+  on(event: string, listener: (...args: Array<unknown>) => void): void
+  once(event: string, listener: (...args: Array<unknown>) => void): void
+  off(event: string, listener: (...args: Array<unknown>) => void): void
+  play(resource: Resource): void
+  stop(force?: boolean): void
+  pause(): void
 }
 
 export interface VoiceConnectionLike {
   readonly state: { readonly status: string }
-  on(event: string, listener: (...args: unknown[]) => void): unknown
-  once(event: string, listener: (...args: unknown[]) => void): unknown
-  off(event: string, listener: (...args: unknown[]) => void): unknown
-  subscribe(player: AudioPlayerLike): unknown
+  on(event: string, listener: (...args: Array<unknown>) => void): void
+  once(event: string, listener: (...args: Array<unknown>) => void): void
+  off(event: string, listener: (...args: Array<unknown>) => void): void
+  subscribe(player: AudioPlayerLike<never>): void
 }
-/* eslint-enable ts/method-signature-style */
 
 export interface VoiceSession {
   readonly connection: VoiceConnectionLike
@@ -29,7 +26,9 @@ export interface VoiceSession {
 
 export interface VoiceAccess {
   readonly voice: (guildId: string) => VoiceSession | null
-  readonly queue: (guildId: string) => { readonly songs: readonly unknown[], readonly paused: boolean } | null
+  readonly queue: (
+    guildId: string,
+  ) => { readonly songs: ReadonlyArray<unknown>; readonly paused: boolean } | null
   readonly join: (channel: VoiceBasedChannel) => Promise<VoiceSession>
 }
 

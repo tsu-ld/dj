@@ -1,7 +1,6 @@
+import { isURL } from 'distube'
 import { MESSAGES } from '../../messages.ts'
 
-// mirrors distube's isURL, which picks between resolve() and search
-const URL_PROTOCOLS = new Set(['http:', 'https:', 'file:'])
 const MUSIC_PROTOCOLS = new Set(['http:', 'https:'])
 const YOUTUBE_HOSTS = new Set([
   'youtube.com',
@@ -28,20 +27,13 @@ export class PolicyError extends Error {
 }
 
 export function isUrlLike(input: string): boolean {
-  if (input.includes(' '))
-    return false
-
-  try {
-    return URL_PROTOCOLS.has(new URL(input).protocol)
-  }
-  catch {
-    return false
-  }
+  return isURL(input)
 }
 
 function isHostAllowed(input: string, hosts: ReadonlySet<string>): boolean {
-  if (!isUrlLike(input))
+  if (!isUrlLike(input)) {
     return false
+  }
 
   const { protocol, hostname } = new URL(input)
 
@@ -57,8 +49,9 @@ export function isYoutubeUrl(input: string): boolean {
 }
 
 export function assertYoutubeUrl(input: string): void {
-  if (isUrlLike(input) && !isYoutubeUrl(input))
+  if (isUrlLike(input) && !isYoutubeUrl(input)) {
     throw new PolicyError('UNSUPPORTED_URL', MESSAGES.unsupportedUrl)
+  }
 }
 
 export function liveError(): PolicyError {

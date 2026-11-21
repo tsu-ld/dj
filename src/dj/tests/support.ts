@@ -1,14 +1,15 @@
 import type { GuildTextBasedChannel, Message } from 'discord.js'
 import type { CommandBus, CommandContext, CommandOutcome } from '../../commands/spec.ts'
+import type { JsonRecord } from '../../core/json.ts'
 import type { CompletionReply, ToolCall } from '../../ports/conversation.ts'
 
 interface TestMessage {
   message: Message
-  replies: string[]
+  replies: Array<string>
 }
 
 export function testMessage(channel: GuildTextBasedChannel): TestMessage {
-  const replies: string[] = []
+  const replies: Array<string> = []
   const message = {
     channelId: channel.id,
     channel,
@@ -24,17 +25,23 @@ export function testMessage(channel: GuildTextBasedChannel): TestMessage {
 }
 
 interface TestBus extends CommandBus {
-  calls: { name: string, args: Record<string, unknown> }[]
+  calls: Array<{ name: string; args: JsonRecord }>
 }
 
 export function testBus(
-  run?: (name: string, args: Record<string, unknown>, context: CommandContext) => CommandOutcome | Promise<CommandOutcome>,
+  run?: (
+    name: string,
+    args: JsonRecord,
+    context: CommandContext,
+  ) => CommandOutcome | Promise<CommandOutcome>,
 ): TestBus {
-  const calls: { name: string, args: Record<string, unknown> }[] = []
+  const calls: Array<{ name: string; args: JsonRecord }> = []
 
   const bus: TestBus = {
     specs: [],
-    tools: [{ name: 'skip', description: 'Skip the current song.', parameters: { type: 'object' } }],
+    tools: [
+      { name: 'skip', description: 'Skip the current song.', parameters: { type: 'object' } },
+    ],
     routes: [],
     calls,
     async run(name, args, context) {
@@ -50,7 +57,7 @@ export function testBus(
   return bus
 }
 
-export function ok(data: Record<string, unknown> = {}): CommandOutcome {
+export function ok(data: JsonRecord = {}): CommandOutcome {
   return { kind: 'ok', data }
 }
 
@@ -62,7 +69,7 @@ export function failed(error: unknown): CommandOutcome {
   return { kind: 'failed', error }
 }
 
-export function toolReply(...calls: readonly ToolCall[]): CompletionReply {
+export function toolReply(...calls: ReadonlyArray<ToolCall>): CompletionReply {
   return { text: null, toolCalls: calls }
 }
 

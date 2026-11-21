@@ -10,18 +10,19 @@ import { buttonsOf, textsOf } from './fakes.ts'
 function containerOf(message: ViewMessage): ReturnType<ContainerBuilder['toJSON']> {
   const container = message.components[0]
 
-  if (!container)
+  if (!container) {
     throw new Error('missing container')
+  }
 
   return container.toJSON()
 }
 
 function textMatching(message: ViewMessage, pattern: RegExp): string | undefined {
-  return textsOf(message).find(value => pattern.test(value))
+  return textsOf(message).find((value) => pattern.test(value))
 }
 
-function queueLines(message: ViewMessage): string[] {
-  const list = textsOf(message).find(value => /^\d/.test(value) || value.startsWith('▶'))
+function queueLines(message: ViewMessage): Array<string> {
+  const list = textsOf(message).find((value) => /^\d/.test(value) || value.startsWith('▶'))
 
   return list?.split('\n') ?? []
 }
@@ -56,17 +57,23 @@ describe('queueMessage', () => {
   })
 
   test('out-of-range pages are clamped to the real pages', () => {
-    expect(textMatching(queueMessage(queueOf(15), 0), /Page 1 of 2/)).toBe('## Queue\n-# 15 songs · 45m · Page 1 of 2')
-    expect(textMatching(queueMessage(queueOf(15), 99), /Page 2 of 2/)).toBe('## Queue\n-# 15 songs · 45m · Page 2 of 2')
+    expect(textMatching(queueMessage(queueOf(15), 0), /Page 1 of 2/)).toBe(
+      '## Queue\n-# 15 songs · 45m · Page 1 of 2',
+    )
+    expect(textMatching(queueMessage(queueOf(15), 99), /Page 2 of 2/)).toBe(
+      '## Queue\n-# 15 songs · 45m · Page 2 of 2',
+    )
   })
 
   test('an empty queue explains how to start it', () => {
     const message = queueMessage(queueOf(0), 1)
 
     expect(textMatching(message, /^## Queue/m)).toContain('Nothing queued yet.')
-    expect(textMatching(message, /Ask me for a song/)).toBe('## Queue\nNothing queued yet.\n-# Ask me for a song to get started.')
+    expect(textMatching(message, /Ask me for a song/)).toBe(
+      '## Queue\nNothing queued yet.\n-# Ask me for a song to get started.',
+    )
     expect(buttonsOf(message)).toEqual([])
-    expect(containerOf(message).accent_color).toBe(0x57F287)
+    expect(containerOf(message).accent_color).toBe(0x57_f2_87)
   })
 
   test('a single page has no paging controls', () => {
@@ -81,35 +88,44 @@ describe('queueMessage', () => {
 
   test('the total duration is shown once and unknown songs are marked', () => {
     const known = queueMessage(queueOf(3), 1)
-    const mixed = queueMessage(view({
-      current: track(),
-      upcoming: [track({ id: 'track-2', title: 'Song 2', durationSeconds: 0 })],
-      size: 2,
-    }), 1)
+    const mixed = queueMessage(
+      view({
+        current: track(),
+        upcoming: [track({ id: 'track-2', title: 'Song 2', durationSeconds: 0 })],
+        size: 2,
+      }),
+      1,
+    )
 
     expect(textMatching(known, /3 songs · 9m/)).toBe('## Queue\n-# 3 songs · 9m')
     expect(textMatching(mixed, /2 songs · ~3m/)).toBe('## Queue\n-# 2 songs · ~3m')
   })
 
   test('titles are escaped so markdown cannot change the list', () => {
-    const message = queueMessage(view({
-      current: track({ title: '*Song* [1]' }),
-      size: 1,
-    }), 1)
+    const message = queueMessage(
+      view({
+        current: track({ title: '*Song* [1]' }),
+        size: 1,
+      }),
+      1,
+    )
 
-    expect(queueLines(message)[0]).toBe('▶ 1. \\*Song\\* \\[1\\] · 3:00')
+    expect(queueLines(message)[0]).toBe(`▶ 1. ${String.raw`\*Song\* \[1\]`} · 3:00`)
   })
 
   test('a paused queue uses the paused accent', () => {
-    expect(containerOf(queueMessage(view({ paused: true, size: 1 }), 1)).accent_color).toBe(0xFEE75C)
+    expect(containerOf(queueMessage(view({ paused: true, size: 1 }), 1)).accent_color).toBe(
+      0xfe_e7_5c,
+    )
   })
 })
 
 function card(input: QueueView): ViewMessage {
   const message = nowPlayingMessage(input, null)
 
-  if (!message)
+  if (!message) {
     throw new Error('missing now-playing card')
+  }
 
   return message
 }
@@ -119,10 +135,14 @@ describe('nowPlayingMessage', () => {
     const playing = card(queueOf(2))
     const paused = card(view({ paused: true, size: 2 }))
 
-    expect(textMatching(playing, /\*\*Playing\*\*/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:00\n-# 1 in queue')
-    expect(textMatching(paused, /\*\*Paused\*\*/)).toBe('## [Song 1](https://youtu.be/1)\n**Paused** · 3:00\n-# 1 in queue')
-    expect(containerOf(playing).accent_color).toBe(0x57F287)
-    expect(containerOf(paused).accent_color).toBe(0xFEE75C)
+    expect(textMatching(playing, /\*\*Playing\*\*/)).toBe(
+      '## [Song 1](https://youtu.be/1)\n**Playing** · 3:00\n-# 1 in queue',
+    )
+    expect(textMatching(paused, /\*\*Paused\*\*/)).toBe(
+      '## [Song 1](https://youtu.be/1)\n**Paused** · 3:00\n-# 1 in queue',
+    )
+    expect(containerOf(playing).accent_color).toBe(0x57_f2_87)
+    expect(containerOf(paused).accent_color).toBe(0xfe_e7_5c)
   })
 
   test('the toggle button names the action it triggers', () => {
@@ -136,11 +156,13 @@ describe('nowPlayingMessage', () => {
   })
 
   test('the buttons, radio state and queue count match the card', () => {
-    const upcoming = Array.from({ length: 3 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` }))
+    const upcoming = Array.from({ length: 3 }, (_, index) =>
+      track({ id: `track-${index + 2}`, title: `Song ${index + 2}` }),
+    )
     const message = card(view({ radio: true, size: 4, upcoming }))
     const buttons = buttonsOf(message)
 
-    expect(buttons.map(button => button.customId)).toEqual([
+    expect(buttons.map((button) => button.customId)).toEqual([
       'np:toggle',
       'np:skip',
       'np:shuffle',
@@ -151,7 +173,9 @@ describe('nowPlayingMessage', () => {
     expect(buttons[3]?.style).toBe(ButtonStyle.Success)
     expect(buttons[5]?.label).toBe('Leave')
     expect(buttons[5]?.style).toBe(ButtonStyle.Danger)
-    expect(textMatching(message, /3 in queue · radio on/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:00\n-# 3 in queue · radio on')
+    expect(textMatching(message, /3 in queue · radio on/)).toBe(
+      '## [Song 1](https://youtu.be/1)\n**Playing** · 3:00\n-# 3 in queue · radio on',
+    )
   })
 
   test('a song playing alone does not claim a queue', () => {
@@ -167,15 +191,23 @@ describe('nowPlayingMessage', () => {
   })
 
   test('a live song is labelled live', () => {
-    expect(textMatching(card(view({ current: track({ isLive: true }) })), /\*\*Playing\*\* · Live/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · Live')
+    expect(
+      textMatching(card(view({ current: track({ isLive: true }) })), /\*\*Playing\*\* · Live/),
+    ).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · Live')
   })
 
   test('a known duration is formatted in minutes and seconds', () => {
-    expect(textMatching(card(view({ current: track({ durationSeconds: 185 }) })), /\*\*Playing\*\* · 3:05/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:05')
+    expect(
+      textMatching(
+        card(view({ current: track({ durationSeconds: 185 }) })),
+        /\*\*Playing\*\* · 3:05/,
+      ),
+    ).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:05')
   })
 
   test('an unknown requester is left out instead of labelled unknown', () => {
-    const status = textMatching(card(view({ current: track({ requestedBy: null }) })), /\*\*Playing\*\*/) ?? ''
+    const status =
+      textMatching(card(view({ current: track({ requestedBy: null }) })), /\*\*Playing\*\*/) ?? ''
 
     expect(status).not.toContain('Requested by')
     expect(status).not.toContain('Unknown')
@@ -185,14 +217,21 @@ describe('nowPlayingMessage', () => {
     const inherited = card(view({ current: track({ requestedBy: 'tsu', fromRadio: true }) }))
     const anonymous = card(view({ current: track({ requestedBy: null, fromRadio: true }) }))
 
-    expect(textMatching(inherited, /Picked by radio/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:00 · Picked by radio')
-    expect(textMatching(anonymous, /Picked by radio/)).toBe('## [Song 1](https://youtu.be/1)\n**Playing** · 3:00 · Picked by radio')
+    expect(textMatching(inherited, /Picked by radio/)).toBe(
+      '## [Song 1](https://youtu.be/1)\n**Playing** · 3:00 · Picked by radio',
+    )
+    expect(textMatching(anonymous, /Picked by radio/)).toBe(
+      '## [Song 1](https://youtu.be/1)\n**Playing** · 3:00 · Picked by radio',
+    )
   })
 
   test('the next songs are previewed with their queue positions', () => {
     const current = track({ title: 'Song 1' })
-    const upcoming = Array.from({ length: 5 }, (_, index) => track({ id: `track-${index + 2}`, title: `Song ${index + 2}` }))
-    const preview = textMatching(card(view({ current, upcoming, size: 6 })), /\*\*Up next\*\*/) ?? ''
+    const upcoming = Array.from({ length: 5 }, (_, index) =>
+      track({ id: `track-${index + 2}`, title: `Song ${index + 2}` }),
+    )
+    const preview =
+      textMatching(card(view({ current, upcoming, size: 6 })), /\*\*Up next\*\*/) ?? ''
 
     expect(preview.split('\n')).toEqual([
       '**Up next**',
@@ -208,27 +247,50 @@ describe('nowPlayingMessage', () => {
     const withArt = card(view({ current: track({ thumbnail: art }) }))
     const withoutArt = card(view({ current: track({ thumbnail: null }) }))
     const unsafeArt = card(view({ current: track({ thumbnail: 'javascript:alert(1)' }) }))
-    const section = containerOf(withArt).components.find(component => component.type === ComponentType.Section)
+    const section = containerOf(withArt).components.find(
+      (component) => component.type === ComponentType.Section,
+    )
 
-    expect(section).toMatchObject({ type: ComponentType.Section, accessory: { media: { url: art } } })
-    expect(containerOf(withoutArt).components.some(component => component.type === ComponentType.Section)).toBe(false)
-    expect(containerOf(unsafeArt).components.some(component => component.type === ComponentType.Section)).toBe(false)
+    expect(section).toMatchObject({
+      type: ComponentType.Section,
+      accessory: { media: { url: art } },
+    })
+    expect(
+      containerOf(withoutArt).components.some(
+        (component) => component.type === ComponentType.Section,
+      ),
+    ).toBe(false)
+    expect(
+      containerOf(unsafeArt).components.some(
+        (component) => component.type === ComponentType.Section,
+      ),
+    ).toBe(false)
   })
 
   test('the title links to the song and escapes markdown in its text', () => {
     const message = card(view({ current: track({ title: '[live] *mix*', requestedBy: 'tsu' }) }))
 
-    expect(textMatching(message, /^## /)).toBe('## [\\[live\\] \\*mix\\*](https://youtu.be/1)\n**Playing** · 3:00 · Requested by tsu')
+    expect(textMatching(message, /^## /)).toBe(
+      '## [\\[live\\] \\*mix\\*](https://youtu.be/1)\n**Playing** · 3:00 · Requested by tsu',
+    )
   })
 
   test('a parenthesized URL keeps the markdown link intact', () => {
-    const message = card(view({ current: track({ title: 'Mix', url: 'https://example.com/a(b', requestedBy: 'tsu' }) }))
+    const message = card(
+      view({
+        current: track({ title: 'Mix', url: 'https://example.com/a(b', requestedBy: 'tsu' }),
+      }),
+    )
 
-    expect(textMatching(message, /^## /)).toBe('## [Mix](https://example.com/a%28b)\n**Playing** · 3:00 · Requested by tsu')
+    expect(textMatching(message, /^## /)).toBe(
+      '## [Mix](https://example.com/a%28b)\n**Playing** · 3:00 · Requested by tsu',
+    )
   })
 
   test('a non-http song URL is not turned into a link', () => {
-    const message = card(view({ current: track({ title: 'Mix', url: 'javascript:alert(1)', requestedBy: 'tsu' }) }))
+    const message = card(
+      view({ current: track({ title: 'Mix', url: 'javascript:alert(1)', requestedBy: 'tsu' }) }),
+    )
 
     expect(textMatching(message, /^## /)).toBe('## Mix\n**Playing** · 3:00 · Requested by tsu')
   })
@@ -251,14 +313,22 @@ describe('nowPlayingMessage', () => {
   })
 
   test('the elapsed time and a progress bar follow the status line', () => {
-    const message = nowPlayingMessage(view({ current: track({ title: 'Mix', durationSeconds: 200, requestedBy: 'tsu' }) }), 50_000)
+    const message = nowPlayingMessage(
+      view({ current: track({ title: 'Mix', durationSeconds: 200, requestedBy: 'tsu' }) }),
+      50_000,
+    )
     const header = message ? textMatching(message, /^## /) : undefined
 
-    expect(header).toBe('## [Mix](https://youtu.be/1)\n**Playing** · 3:20 · Requested by tsu\n▰▰▰▱▱▱▱▱▱▱▱▱ `0:50 / 3:20`')
+    expect(header).toBe(
+      '## [Mix](https://youtu.be/1)\n**Playing** · 3:20 · Requested by tsu\n▰▰▰▱▱▱▱▱▱▱▱▱ `0:50 / 3:20`',
+    )
   })
 
   test('the elapsed time is clamped to the song and hours are shown', () => {
-    const long = nowPlayingMessage(view({ current: track({ durationSeconds: 3_725 }) }), 3_725_000 + 9_000)
+    const long = nowPlayingMessage(
+      view({ current: track({ durationSeconds: 3725 }) }),
+      3_725_000 + 9000,
+    )
     const early = nowPlayingMessage(view({ current: track({ durationSeconds: 180 }) }), -5)
 
     expect(long ? textMatching(long, /1:02:05 \/ 1:02:05/) : undefined).toContain('▰▰▰▰▰▰▰▰▰▰▰▰')
@@ -270,17 +340,29 @@ describe('nowPlayingMessage', () => {
     const unknown = nowPlayingMessage(view({ current: track({ durationSeconds: 0 }) }), 10_000)
     const live2 = nowPlayingMessage(view({ current: track({ isLive: true }) }), 10_000)
 
-    for (const message of [live, unknown, live2])
+    for (const message of [live, unknown, live2]) {
       expect(message ? textMatching(message, / \/ /) : 'missing').toBeUndefined()
+    }
   })
 
   test('a timeline of five points jumps through the song and marks where it is', () => {
-    const message = nowPlayingMessage(view({ current: track({ id: 'abc', durationSeconds: 200 }) }), 50_000)
-    const timeline = (message ? buttonsOf(message) : []).filter(button => button.customId.startsWith('np:seek:'))
+    const message = nowPlayingMessage(
+      view({ current: track({ id: 'abc', durationSeconds: 200 }) }),
+      50_000,
+    )
+    const timeline = (message ? buttonsOf(message) : []).filter((button) =>
+      button.customId.startsWith('np:seek:'),
+    )
 
-    expect(timeline.map(button => button.label)).toEqual(['0:00', '0:40', '1:20', '2:00', '2:40'])
-    expect(timeline.map(button => button.customId)).toEqual(['np:seek:0:abc', 'np:seek:40:abc', 'np:seek:80:abc', 'np:seek:120:abc', 'np:seek:160:abc'])
-    expect(timeline.map(button => button.style)).toEqual([
+    expect(timeline.map((button) => button.label)).toEqual(['0:00', '0:40', '1:20', '2:00', '2:40'])
+    expect(timeline.map((button) => button.customId)).toEqual([
+      'np:seek:0:abc',
+      'np:seek:40:abc',
+      'np:seek:80:abc',
+      'np:seek:120:abc',
+      'np:seek:160:abc',
+    ])
+    expect(timeline.map((button) => button.style)).toEqual([
       ButtonStyle.Secondary,
       ButtonStyle.Primary,
       ButtonStyle.Secondary,
@@ -291,10 +373,14 @@ describe('nowPlayingMessage', () => {
 
   test('a paused song keeps its timeline but cannot jump', () => {
     const playing = nowPlayingMessage(view({ current: track({ durationSeconds: 200 }) }), 50_000)
-    const paused = nowPlayingMessage(view({ current: track({ durationSeconds: 200 }), paused: true }), 50_000)
-    const timeline = (message: typeof paused): boolean[] => (message ? buttonsOf(message) : [])
-      .filter(button => button.customId.startsWith('np:seek:'))
-      .map(button => button.disabled)
+    const paused = nowPlayingMessage(
+      view({ current: track({ durationSeconds: 200 }), paused: true }),
+      50_000,
+    )
+    const timeline = (message: typeof paused): Array<boolean> =>
+      (message ? buttonsOf(message) : [])
+        .filter((button) => button.customId.startsWith('np:seek:'))
+        .map((button) => button.disabled)
 
     expect(timeline(playing)).toEqual([false, false, false, false, false])
     expect(timeline(paused)).toEqual([true, true, true, true, true])
@@ -305,12 +391,20 @@ describe('nowPlayingMessage', () => {
       card(view({ current: track({ durationSeconds: 200 }) })),
       nowPlayingMessage(view({ current: track({ isLive: true }) }), 10_000),
       nowPlayingMessage(view({ current: track({ durationSeconds: 0 }) }), 10_000),
-      nowPlayingMessage(view({ current: track({ durationSeconds: 3 }) }), 1_000),
-      nowPlayingMessage(view({ current: track({ id: 'x'.repeat(90), durationSeconds: 200 }) }), 10_000),
+      nowPlayingMessage(view({ current: track({ durationSeconds: 3 }) }), 1000),
+      nowPlayingMessage(
+        view({ current: track({ id: 'x'.repeat(90), durationSeconds: 200 }) }),
+        10_000,
+      ),
     ]
 
-    for (const message of messages)
-      expect(message ? buttonsOf(message).filter(button => button.customId.startsWith('np:seek:')) : 'missing').toEqual([])
+    for (const message of messages) {
+      expect(
+        message
+          ? buttonsOf(message).filter((button) => button.customId.startsWith('np:seek:'))
+          : 'missing',
+      ).toEqual([])
+    }
   })
 })
 
@@ -327,17 +421,18 @@ describe('clearConfirmation', () => {
   test('asks first with an ephemeral leave and cancel', () => {
     const confirmation = clearConfirmation()
     const buttons = confirmation.components
-      .flatMap(row => row.toJSON().components)
+      .flatMap((row) => row.toJSON().components)
       .flatMap((component) => {
-        if (component.type !== ComponentType.Button || !('custom_id' in component))
+        if (component.type !== ComponentType.Button || !('custom_id' in component)) {
           return []
+        }
 
         return [{ customId: component.custom_id, label: component.label ?? '' }]
       })
 
     expect(confirmation.content).toBe('Clear the queue and leave the voice channel?')
     expect(confirmation.flags).toBe(MessageFlags.Ephemeral)
-    expect(buttons.map(button => button.customId)).toEqual(['nc:clear:yes', 'nc:clear:no'])
-    expect(buttons.map(button => button.label)).toEqual(['Leave', 'Cancel'])
+    expect(buttons.map((button) => button.customId)).toEqual(['nc:clear:yes', 'nc:clear:no'])
+    expect(buttons.map((button) => button.label)).toEqual(['Leave', 'Cancel'])
   })
 })

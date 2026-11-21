@@ -1,3 +1,4 @@
+import type { JsonRecord } from '../../core/json.ts'
 import type { QueueView } from '../../ports/music.ts'
 import type { CommandSpec } from '../spec.ts'
 import { describe, expect, test } from 'bun:test'
@@ -8,21 +9,27 @@ import { commands } from '../index.ts'
 const bus = commandBus({ specs: commands, logger: log })
 
 function spec(name: string): CommandSpec {
-  const found = commands.find(command => command.name === name)
+  const found = commands.find((command) => command.name === name)
 
-  if (!found)
+  if (!found) {
     throw new Error(`Missing command: ${name}`)
+  }
 
   return found
 }
 
-function parseRemove(text: string, queue: QueueView | null): Record<string, unknown> | null {
-  return spec('remove').parse?.(text, fakeContext({ services: { music: fakeMusic({ view: () => queue }) } })) ?? null
+function parseRemove(text: string, queue: QueueView | null): JsonRecord | null {
+  return (
+    spec('remove').parse?.(
+      text,
+      fakeContext({ services: { music: fakeMusic({ view: () => queue }) } }),
+    ) ?? null
+  )
 }
 
 describe('command registry', () => {
   test('every command has a unique name, description and schema', () => {
-    const names = commands.map(command => command.name)
+    const names = commands.map((command) => command.name)
 
     expect(new Set(names).size).toBe(names.length)
 
@@ -31,12 +38,13 @@ describe('command registry', () => {
       expect(typeof command.run).toBe('function')
     }
 
-    for (const tool of bus.tools)
+    for (const tool of bus.tools) {
       expect(tool.parameters.type).toBe('object')
+    }
   })
 
   test('the model only sees the tools meant for it', () => {
-    const names = bus.tools.map(tool => tool.name)
+    const names = bus.tools.map((tool) => tool.name)
 
     expect(names).toContain('add_songs')
     expect(names).toContain('set_persona')
@@ -48,7 +56,7 @@ describe('command registry', () => {
   })
 
   test('the router sees the commands, not the internal tools', () => {
-    const names = bus.routes.map(route => route.name)
+    const names = bus.routes.map((route) => route.name)
 
     expect(names).toContain('skip')
     expect(names).toContain('remove')

@@ -1,6 +1,5 @@
 import type { Clock } from '../../core/clock.ts'
 import type { Logger } from '../../core/logger.ts'
-import { errorMessage } from '../../core/errors.ts'
 
 const SAMPLE_MS = 40
 const STALL_MS = 40
@@ -36,39 +35,29 @@ interface Counters {
 interface Entry {
   readonly session: AudioHealthSession
   readonly counters: Counters
-  pingFailed: boolean
 }
 
 function freshest(current: number, value: number | undefined): number {
-  if (value === undefined || !Number.isFinite(value) || value < 0)
+  if (value === undefined || !Number.isFinite(value) || value < 0) {
     return current
+  }
 
   return Math.max(current, Math.round(value))
 }
 
-export function audioHealth(deps: { clock: Clock, logger: Logger }): AudioHealth {
+export function audioHealth(deps: { clock: Clock; logger: Logger }): AudioHealth {
   const { clock, logger } = deps
   const entries = new Map<string, Entry>()
   let timer: ReturnType<typeof setTimeout> | null = null
   let dueAt = 0
   let lastStallLogAt = Number.NEGATIVE_INFINITY
 
-  // the ping reads a connection the SDK may already have destroyed, so it can throw
   function samplePings(): void {
     for (const entry of entries.values()) {
-      try {
-        const ping = entry.session.ping()
+      const ping = entry.session.ping()
 
-        entry.counters.udpMax = freshest(entry.counters.udpMax, ping.udp)
-        entry.counters.wsMax = freshest(entry.counters.wsMax, ping.ws)
-      }
-      catch (error) {
-        if (entry.pingFailed)
-          continue
-
-        entry.pingFailed = true
-        logger.warn('music.ping_failed', { guildId: entry.session.guildId, error: errorMessage(error) })
-      }
+      entry.counters.udpMax = freshest(entry.counters.udpMax, ping.udp)
+      entry.counters.wsMax = freshest(entry.counters.wsMax, ping.ws)
     }
   }
 
@@ -87,8 +76,9 @@ export function audioHealth(deps: { clock: Clock, logger: Logger }): AudioHealth
     for (const { counters } of entries.values()) {
       counters.lagMax = Math.max(counters.lagMax, lagMs)
 
-      if (lagMs > STALL_MS)
+      if (lagMs > STALL_MS) {
         counters.stalls += 1
+      }
     }
 
     if (lagMs > STALL_LOG_MS && now - lastStallLogAt >= STALL_LOG_COOLDOWN_MS) {
@@ -98,13 +88,15 @@ export function audioHealth(deps: { clock: Clock, logger: Logger }): AudioHealth
 
     samplePings()
 
-    if (entries.size > 0)
+    if (entries.size > 0) {
       schedule()
+    }
   }
 
   function stop(): void {
-    if (timer !== null)
+    if (timer !== null) {
       clearTimeout(timer)
+    }
 
     timer = null
   }
@@ -114,19 +106,20 @@ export function audioHealth(deps: { clock: Clock, logger: Logger }): AudioHealth
       entries.set(session.guildId, {
         session,
         counters: { lagMax: 0, stalls: 0, udpMax: 0, wsMax: 0 },
-        pingFailed: false,
       })
 
       samplePings()
 
-      if (timer === null)
+      if (timer === null) {
         schedule()
+      }
     },
     end(guildId, reason) {
       const entry = entries.get(guildId)
 
-      if (entry === undefined)
+      if (entry === undefined) {
         return
+      }
 
       entries.delete(guildId)
       samplePings()
@@ -141,8 +134,9 @@ export function audioHealth(deps: { clock: Clock, logger: Logger }): AudioHealth
         wsPingMaxMs: entry.counters.wsMax,
       })
 
-      if (entries.size === 0)
+      if (entries.size === 0) {
         stop()
+      }
     },
     dispose() {
       entries.clear()

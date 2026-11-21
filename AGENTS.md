@@ -4,8 +4,8 @@ A Discord radio host in Bun + TypeScript. Read [VISION.md](VISION.md) before cha
 
 ## Commands
 
-- `bun install`: dependencies. Bun 1.4+ runs TypeScript directly; there is no build step.
-- `bun run check`: lint, `tsc --noEmit` and the unit tests. CI runs exactly this, and it must pass before every commit.
+- `bun install`: dependencies. Bun 1.4.5+ runs and type-checks TypeScript directly; there is no build step.
+- `bun check`: the one gate. Its script formats, applies safe lint fixes, reports what is left and type-checks. CI runs `bun check && git diff --exit-code` and `bun test`; both must pass before every commit.
 - `bun test <path>`: one area's tests.
 - `bun run dev`: run with `--watch`. `bun run start`: production.
 - `bun run test:e2e`: the live suite against a real guild. It reads `~/.config/dj/discord.env` (override with `E2E_ENV_FILE`, `E2E_GUILD`, `E2E_VOICE`, `E2E_TEXT`). Stop the bot service first, and ask before running it: it logs into a real account.
@@ -50,37 +50,44 @@ Name things with these words, in code, tests and logs:
 These are rules for every change. Where older code falls short, fix it when you touch it.
 
 **Readable like a book.**
+
 - A name says what the thing is or does in this product, not how it works or which library it uses.
 - A function reads top to bottom at one level of detail.
-- Write a comment only for a necessary workaround that this code cannot solve: a Discord, SDK or API quirk. Names and tests say everything else.
+- Names and tests say everything. The one comment is a workaround forced by an outside defect, as `WORKAROUND(<issue url>): <what it disables and when it can go>`.
 - No `utils`, `helpers`, `misc`, `v2` or `new`.
 
 **Least code that works.**
+
 - Reuse before adding. One owner for each rule, constant and sentence.
 - No option, parameter, export or interface that only one caller or only a test uses: code that only its own tests use is dead.
 - Delete freely. Version control remembers.
 
 **Performance is a feature of the show.**
+
 - Never block the event loop. Stream audio, never buffer it.
 - Do slow work behind the current song: the next download, the next line, the next facts.
 - Every external call has a timeout. Retries are bounded and never retry a cancelled request.
 - Every map is bounded (TTL map or a cap from `limits.ts`). Mutations of one server's queue run in order through the keyed queue.
 
 **Types.**
+
 - Explicit at ports and exported signatures; inferred inside.
 - No `any`, no `!`, no `as` outside a boundary that validated the value, no enums. External JSON is `unknown` until a guard says otherwise.
 
 **Errors.**
+
 - `UserError` is safe to show. `ProviderError` carries retryable, fatal or quota, and the HTTP status. Anything else is logged and answered with a generic message.
 - Each failure is caught and logged at one layer. Never swallow an error silently, and never log it and then rethrow it.
 - A broken speech, model or fact provider skips the line and keeps the music playing.
 
 **State and lifecycle.**
+
 - No module-level mutable state. The object that owns a timer, file, child process or cache exposes `dispose` or `flush`, and `app.ts` calls it on shutdown.
 
 ## Rules the tests enforce
 
 `src/tests/architecture.test.ts` fails on any of these:
+
 - a cycle;
 - a missing import;
 - an upward import (`app -> commands/discord/dj/on-air -> ports -> core`; providers never import features);
@@ -88,7 +95,7 @@ These are rules for every change. Where older code falls short, fix it when you 
 - an environment read outside `config.ts`;
 - a non-test source file over 300 lines.
 
-`bun run lint` fails on a `console` call anywhere but `e2e-test.ts`.
+`bun check` fails on a `console` call anywhere but `e2e-test.ts`, and on a comment that is not a `WORKAROUND`.
 
 ## Behavior that must not regress
 
@@ -102,5 +109,5 @@ These are rules for every change. Where older code falls short, fix it when you 
 
 - Pure rules (station, angle, script, prompts, queue, text, policy) are tested without mocks.
 - Providers use fake HTTP, a fake extractor binary and fake audio players; no network.
-- Handlers use fake messages, channels and interactions. Shared builders live in `src/tests/fixtures.ts`.
+- Handlers use fake messages, channels and interactions. Shared builders live in `src/tests/fixtures.ts`. A fake of a discord.js or engine class is partial and cast to the class, so the two type-assertion lint rules are off under `tests/`; they stay on everywhere else.
 - A test asserts what a listener would notice. Write it first and watch it fail for the reason it names.

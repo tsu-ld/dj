@@ -16,11 +16,11 @@ describe('withTimeout', () => {
 describe('keyedQueue', () => {
   test('serializes work for one key and runs different keys in parallel', async () => {
     const queue = keyedQueue()
-    const order: string[] = []
+    const order: Array<string> = []
 
     const first = queue.run('a', async () => {
       order.push('a1-start')
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await Bun.sleep(10)
       order.push('a1-end')
     })
     const second = queue.run('a', async () => {

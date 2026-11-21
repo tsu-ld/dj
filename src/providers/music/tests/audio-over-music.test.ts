@@ -1,5 +1,10 @@
 import type { VoiceBasedChannel } from 'discord.js'
-import type { AudioPlayerLike, VoiceAccess, VoiceConnectionLike, VoiceSession } from '../audio-types.ts'
+import type {
+  AudioPlayerLike,
+  VoiceAccess,
+  VoiceConnectionLike,
+  VoiceSession,
+} from '../audio-types.ts'
 import { EventEmitter } from 'node:events'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -12,17 +17,19 @@ afterEach(removeTempDirs)
 
 interface FakePlayer extends AudioPlayerLike {
   readonly pauses: number
-  emit: (event: string, ...args: unknown[]) => boolean
+  emit: (event: string, ...args: Array<unknown>) => boolean
 }
 
 interface FakeConnection extends VoiceConnectionLike {
-  readonly subscriptions: readonly unknown[]
-  readonly current: unknown
-  emit: (event: string, ...args: unknown[]) => boolean
+  readonly subscriptions: ReadonlyArray<AudioPlayerLike>
+  readonly current: AudioPlayerLike | null
+  emit: (event: string, ...args: Array<unknown>) => boolean
   setStatus: (status: string) => void
 }
 
-function fakePlayer(options: { onPlay?: (player: FakePlayer) => void, onStop?: (player: FakePlayer) => void } = {}): FakePlayer {
+function fakePlayer(
+  options: { onPlay?: (player: FakePlayer) => void; onStop?: (player: FakePlayer) => void } = {},
+): FakePlayer {
   const emitter = new EventEmitter()
   const state = { status: 'autopaused' }
   let pauses = 0
@@ -67,11 +74,16 @@ function fakePlayer(options: { onPlay?: (player: FakePlayer) => void, onStop?: (
   return player
 }
 
-function fakeConnection(): { connection: FakeConnection, audioPlayer: FakePlayer } {
+interface FakeSession {
+  readonly connection: FakeConnection
+  readonly audioPlayer: FakePlayer
+}
+
+function fakeConnection(): FakeSession {
   const emitter = new EventEmitter()
   const state = { status: 'ready' }
-  const subscriptions: unknown[] = []
-  let current: unknown = null
+  const subscriptions: Array<AudioPlayerLike> = []
+  let current: AudioPlayerLike | null = null
 
   const connection: FakeConnection = {
     get state() {
@@ -113,23 +125,32 @@ function fakeConnection(): { connection: FakeConnection, audioPlayer: FakePlayer
   return { connection, audioPlayer: fakePlayer() }
 }
 
+function beforeTheLinePlays(): void {}
+
 function accessOf(
   voice: VoiceSession | null,
-  queue: { songs: readonly unknown[], paused: boolean } | null = { songs: [{ name: 'Tema' }], paused: false },
+  queue: { songs: ReadonlyArray<unknown>; paused: boolean } | null = {
+    songs: [{ name: 'Tema' }],
+    paused: false,
+  },
   join?: VoiceAccess['join'],
 ): VoiceAccess {
   return {
     voice: () => voice,
     queue: () => queue,
-    join: join ?? (async () => {
-      throw new Error('join was not expected')
-    }),
+    join:
+      join ??
+      (async () => {
+        throw new Error('join was not expected')
+      }),
   }
 }
 
 type AudioDeps = Parameters<typeof audioOverMusic>[0]
 
-function audioWith(deps: Pick<AudioDeps, 'access'> & Partial<Pick<AudioDeps, 'welcomeFile' | 'createPlayer'>>): ReturnType<typeof audioOverMusic> {
+function audioWith(
+  deps: Pick<AudioDeps, 'access'> & Partial<Pick<AudioDeps, 'welcomeFile' | 'createPlayer'>>,
+): ReturnType<typeof audioOverMusic> {
   return audioOverMusic({
     logger: log,
     welcomeFile: join(tmpdir(), 'dj-no-welcome-in-this-test.mp3'),
@@ -154,7 +175,7 @@ async function tempAudio(): Promise<string> {
 test('the line takes the connection and hands it back to the music', async () => {
   const file = await tempAudio()
   const session = fakeConnection()
-  const speech = fakePlayer({ onPlay: player => queueMicrotask(() => player.emit('idle')) })
+  const speech = fakePlayer({ onPlay: (player) => queueMicrotask(() => player.emit('idle')) })
   const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
     createPlayer: () => speech,
@@ -166,8 +187,7 @@ test('the line takes the connection and hands it back to the music', async () =>
     expect(spoken).toBe(true)
     expect(session.connection.subscriptions).toEqual([speech, session.audioPlayer])
     expect(session.connection.current).toBe(session.audioPlayer)
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -178,8 +198,7 @@ test('without a voice connection nothing is spoken', async () => {
 
   try {
     expect(await audio.playClip('g2', file)).toBe(false)
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -188,14 +207,16 @@ test('an empty queue never gets a line', async () => {
   const file = await tempAudio()
   const session = fakeConnection()
   const audio = audioWith({
-    access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, { songs: [], paused: false }),
+    access: accessOf(
+      { connection: session.connection, audioPlayer: session.audioPlayer },
+      { songs: [], paused: false },
+    ),
   })
 
   try {
     expect(await audio.playClip('g3', file)).toBe(false)
     expect(session.connection.subscriptions).toEqual([])
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -208,10 +229,11 @@ test('a missing clip is skipped without taking the process down', async () => {
   })
 
   try {
-    expect(await audio.playClip('g9', join(tmpdir(), 'dj-missing-clip-does-not-exist.mp3'))).toBe(false)
+    expect(await audio.playClip('g9', join(tmpdir(), 'dj-missing-clip-does-not-exist.mp3'))).toBe(
+      false,
+    )
     expect(session.connection.current).toBe(session.audioPlayer)
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -220,14 +242,16 @@ test('a paused queue is left alone', async () => {
   const file = await tempAudio()
   const session = fakeConnection()
   const audio = audioWith({
-    access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }, { songs: [{ name: 'Tema' }], paused: true }),
+    access: accessOf(
+      { connection: session.connection, audioPlayer: session.audioPlayer },
+      { songs: [{ name: 'Tema' }], paused: true },
+    ),
   })
 
   try {
     expect(await audio.playClip('g5', file)).toBe(false)
     expect(session.connection.subscriptions).toEqual([])
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -235,7 +259,7 @@ test('a paused queue is left alone', async () => {
 test('a connection that dies mid-line is not given back to the music', async () => {
   const file = await tempAudio()
   const session = fakeConnection()
-  const speech = fakePlayer({ onStop: player => player.emit('idle') })
+  const speech = fakePlayer({ onStop: (player) => player.emit('idle') })
   const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
     createPlayer: () => speech,
@@ -249,8 +273,7 @@ test('a connection that dies mid-line is not given back to the music', async () 
 
     expect(await spoken).toBe(false)
     expect(session.connection.subscriptions).toEqual([speech])
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -259,7 +282,7 @@ test('a pause pressed during the line is applied when the music is back', async 
   const file = await tempAudio()
   const session = fakeConnection()
   const queue = { songs: [{ name: 'Tema' }], paused: false }
-  let release = (): void => {}
+  let release = beforeTheLinePlays
   const speech = fakePlayer({
     onPlay: (player) => {
       release = () => player.emit('idle')
@@ -282,8 +305,7 @@ test('a pause pressed during the line is applied when the music is back', async 
     session.audioPlayer.emit('playing')
 
     expect(session.audioPlayer.pauses).toBe(1)
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -292,7 +314,7 @@ test('resuming during the line keeps the pause from coming back', async () => {
   const file = await tempAudio()
   const session = fakeConnection()
   const queue = { songs: [{ name: 'Tema' }], paused: false }
-  let release = (): void => {}
+  let release = beforeTheLinePlays
   const speech = fakePlayer({
     onPlay: (player) => {
       release = () => player.emit('idle')
@@ -314,8 +336,7 @@ test('resuming during the line keeps the pause from coming back', async () => {
     session.audioPlayer.emit('playing')
 
     expect(session.audioPlayer.pauses).toBe(0)
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -323,7 +344,7 @@ test('resuming during the line keeps the pause from coming back', async () => {
 test('a second line does not cut the one already on air', async () => {
   const file = await tempAudio()
   const session = fakeConnection()
-  let release = (): void => {}
+  let release = beforeTheLinePlays
   const speech = fakePlayer({
     onPlay: (player) => {
       release = () => player.emit('idle')
@@ -343,8 +364,7 @@ test('a second line does not cut the one already on air', async () => {
     release()
 
     expect(await first).toBe(true)
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -352,7 +372,7 @@ test('a second line does not cut the one already on air', async () => {
 test('a failed clip settles on the player error instead of waiting for idle', async () => {
   const file = await tempAudio()
   const session = fakeConnection()
-  const speech = fakePlayer({ onPlay: player => player.emit('error', new Error('boom')) })
+  const speech = fakePlayer({ onPlay: (player) => player.emit('error', new Error('boom')) })
   const audio = audioWith({
     access: accessOf({ connection: session.connection, audioPlayer: session.audioPlayer }),
     createPlayer: () => speech,
@@ -361,8 +381,7 @@ test('a failed clip settles on the player error instead of waiting for idle', as
   try {
     expect(await audio.playClip('g9', file)).toBe(false)
     expect(session.connection.subscriptions).toEqual([speech, session.audioPlayer])
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -378,7 +397,7 @@ test('dispose settles a clip that never reaches idle', async () => {
 
   const clip = audio.playClip('g10', file)
 
-  await new Promise(resolve => setTimeout(resolve, 10))
+  await Bun.sleep(10)
   await audio.dispose()
 
   expect(await clip).toBe(false)
@@ -387,7 +406,7 @@ test('dispose settles a clip that never reaches idle', async () => {
 test('the welcome intro plays once per guild and hands the connection back', async () => {
   const file = await tempAudio()
   const session = fakeConnection()
-  const intro = fakePlayer({ onPlay: player => queueMicrotask(() => player.emit('idle')) })
+  const intro = fakePlayer({ onPlay: (player) => queueMicrotask(() => player.emit('idle')) })
   let joins = 0
   const audio = audioWith({
     access: accessOf(null, undefined, async () => {
@@ -405,8 +424,7 @@ test('the welcome intro plays once per guild and hands the connection back', asy
 
     expect(joins).toBe(1)
     expect(session.connection.subscriptions).toEqual([intro, session.audioPlayer])
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -427,8 +445,7 @@ test('without a welcome file the bot joins nothing', async () => {
     await audio.playWelcome(fakeChannel())
 
     expect(joins).toBe(0)
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -438,7 +455,10 @@ test('a destroyed connection during the intro is not given to the music', async 
   const session = fakeConnection()
   const intro = fakePlayer()
   const audio = audioWith({
-    access: accessOf(null, undefined, async () => ({ connection: session.connection, audioPlayer: session.audioPlayer })),
+    access: accessOf(null, undefined, async () => ({
+      connection: session.connection,
+      audioPlayer: session.audioPlayer,
+    })),
     welcomeFile: file,
     createPlayer: () => intro,
   })
@@ -451,8 +471,7 @@ test('a destroyed connection during the intro is not given to the music', async 
     await welcome
 
     expect(session.connection.subscriptions).toEqual([intro])
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })
@@ -465,13 +484,15 @@ test('a failed join does not use up the greeting', async () => {
     access: accessOf(null, undefined, async () => {
       joins++
 
-      if (joins === 1)
+      if (joins === 1) {
         throw new Error('join failed')
+      }
 
       return { connection: session.connection, audioPlayer: session.audioPlayer }
     }),
     welcomeFile: file,
-    createPlayer: () => fakePlayer({ onPlay: player => queueMicrotask(() => player.emit('idle')) }),
+    createPlayer: () =>
+      fakePlayer({ onPlay: (player) => queueMicrotask(() => player.emit('idle')) }),
   })
 
   try {
@@ -479,8 +500,7 @@ test('a failed join does not use up the greeting', async () => {
     await audio.playWelcome(fakeChannel())
 
     expect(joins).toBe(2)
-  }
-  finally {
+  } finally {
     await audio.dispose()
   }
 })

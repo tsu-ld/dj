@@ -3,7 +3,11 @@ import type { ListenerProfile } from '../../ports/listeners.ts'
 export const MAX_SONGS = 50
 const MAX_ARTISTS = 20
 export const MAX_MEMBERS = 500
-export const WRITE_DELAY_MS = 2_000
+export const WRITE_DELAY_MS = 2000
+
+export interface StatTable<T> {
+  [key: string]: T
+}
 
 export interface SongStat {
   readonly title: string
@@ -24,40 +28,48 @@ export function timestampOf(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
 }
 
-export function keepTop<T extends { readonly count: number, readonly lastRequested: number }>(
-  entries: Record<string, T>,
+export function keepTop<T extends { readonly count: number; readonly lastRequested: number }>(
+  entries: StatTable<T>,
   max: number,
   protectedKey: string,
-): Record<string, T> {
+): StatTable<T> {
   const keys = Object.keys(entries)
 
-  if (keys.length <= max)
+  if (keys.length <= max) {
     return entries
+  }
 
-  const evictable = keys.filter(key => key !== protectedKey)
-  const evicted = new Set(evictable
-    .sort((left, right) => {
-      const byCount = (entries[left]?.count ?? 0) - (entries[right]?.count ?? 0)
+  const evictable = keys.filter((key) => key !== protectedKey)
+  const evicted = new Set(
+    evictable
+      .sort((left, right) => {
+        const byCount = (entries[left]?.count ?? 0) - (entries[right]?.count ?? 0)
 
-      return byCount !== 0
-        ? byCount
-        : (entries[left]?.lastRequested ?? 0) - (entries[right]?.lastRequested ?? 0)
-    })
-    .slice(0, keys.length - max))
+        return byCount !== 0
+          ? byCount
+          : (entries[left]?.lastRequested ?? 0) - (entries[right]?.lastRequested ?? 0)
+      })
+      .slice(0, keys.length - max),
+  )
 
-  const bounded: Record<string, T> = {}
+  const bounded: StatTable<T> = {}
 
   for (const key of keys) {
     const entry = entries[key]
 
-    if (!evicted.has(key) && entry)
+    if (!evicted.has(key) && entry) {
       bounded[key] = entry
+    }
   }
 
   return bounded
 }
 
-export function bumpArtist(artists: Record<string, ArtistStat>, name: string, at: number): Record<string, ArtistStat> {
+export function bumpArtist(
+  artists: StatTable<ArtistStat>,
+  name: string,
+  at: number,
+): StatTable<ArtistStat> {
   const previous = artists[name]
   const next = { ...artists, [name]: { count: (previous?.count ?? 0) + 1, lastRequested: at } }
 
@@ -68,16 +80,24 @@ export function topSong(songs: Record<string, SongStat>): ListenerProfile['topSo
   let best: SongStat | null = null
 
   for (const song of Object.values(songs)) {
-    if (!best || song.count > best.count || (song.count === best.count && song.lastRequested > best.lastRequested))
+    if (
+      !best ||
+      song.count > best.count ||
+      (song.count === best.count && song.lastRequested > best.lastRequested)
+    ) {
       best = song
+    }
   }
 
   return best && best.count >= 2 ? { title: best.title, count: best.count } : null
 }
 
-export function topArtists(artists: Record<string, ArtistStat>): readonly string[] {
+export function topArtists(artists: Record<string, ArtistStat>): ReadonlyArray<string> {
   return Object.entries(artists)
-    .sort((left, right) => right[1].count - left[1].count || right[1].lastRequested - left[1].lastRequested)
+    .sort(
+      (left, right) =>
+        right[1].count - left[1].count || right[1].lastRequested - left[1].lastRequested,
+    )
     .slice(0, 3)
     .map(([name]) => name)
 }

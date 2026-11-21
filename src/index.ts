@@ -9,16 +9,16 @@ async function main(): Promise<void> {
   let stopping = false
 
   async function stop(reason: string, exitCode = 0): Promise<void> {
-    if (stopping)
+    if (stopping) {
       return
+    }
 
     stopping = true
     app.logger.info('process.stopping', { reason })
 
     try {
       await app.stop()
-    }
-    finally {
+    } finally {
       process.exit(exitCode)
     }
   }
@@ -36,16 +36,22 @@ async function main(): Promise<void> {
 
   try {
     await app.start()
-  }
-  catch (error) {
+  } catch (error) {
     app.logger.error('app.start_failed', error)
     await stop('startup', 1)
   }
 }
 
-main().catch((error) => {
-  const detail = error instanceof ConfigError ? error.message : error instanceof Error ? error.stack ?? error.message : String(error)
+try {
+  await main()
+} catch (error: unknown) {
+  const detail =
+    error instanceof ConfigError
+      ? error.message
+      : error instanceof Error
+        ? (error.stack ?? error.message)
+        : String(error)
 
   process.stderr.write(`${detail}\n`)
   process.exitCode = 1
-})
+}

@@ -6,10 +6,10 @@ import { MAX_QUEUE_SIZE, MAX_SONGS_PER_REQUEST, queueRoom } from '../limits.ts'
 import { MESSAGES } from '../messages.ts'
 
 const NO_SONGS = 'no songs were given'
-const TYPING_REFRESH_MS = 8_000
+const DISCORD_TYPING_EXPIRES_MS = 10_000
+const TYPING_REFRESH_MS = DISCORD_TYPING_EXPIRES_MS - 2000
 const TYPING_MAX_MS = 60_000
 
-// Discord drops a typing indicator after ten seconds.
 function keepTyping(channel: GuildTextBasedChannel, logger: Logger): () => void {
   let refresh: ReturnType<typeof setInterval> | null = null
   let deadline: ReturnType<typeof setTimeout> | null = null
@@ -41,7 +41,8 @@ function keepTyping(channel: GuildTextBasedChannel, logger: Logger): () => void 
 
 export const addSongs: VoiceSpec = {
   name: 'add_songs',
-  description: 'Add songs to the queue. Every entry is searched on YouTube, so write each one as "Artist - Title". When the request is a mood, a genre or an era rather than a named song, choose the songs yourself.',
+  description:
+    'Add songs to the queue. Every entry is searched on YouTube, so write each one as "Artist - Title". When the request is a mood, a genre or an era rather than a named song, choose the songs yourself.',
   parameters: {
     type: 'object',
     properties: {
@@ -58,13 +59,15 @@ export const addSongs: VoiceSpec = {
   async run(args, context) {
     const songs = readSongs(args.songs)
 
-    if (!songs.length)
+    if (!songs.length) {
       throw new UserError(NO_SONGS)
+    }
 
     const room = queueRoom(context.services.music.view(context.guildId)?.size ?? 0)
 
-    if (room === 0)
+    if (room === 0) {
       throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
+    }
 
     const wanted = songs.slice(0, Math.min(MAX_SONGS_PER_REQUEST, room))
     const result = await context.services.music.play({
@@ -94,11 +97,13 @@ export const query: VoiceSpec = {
   async run(args, context) {
     const text = args.query
 
-    if (typeof text !== 'string')
+    if (typeof text !== 'string') {
       throw new Error('query needs the search text')
+    }
 
-    if (queueRoom(context.services.music.view(context.guildId)?.size ?? 0) === 0)
+    if (queueRoom(context.services.music.view(context.guildId)?.size ?? 0) === 0) {
       throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
+    }
 
     const stopTyping = keepTyping(context.textChannel, context.services.logger)
 
@@ -112,8 +117,7 @@ export const query: VoiceSpec = {
       })
 
       return { added: result.added, dropped: result.dropped }
-    }
-    finally {
+    } finally {
       stopTyping()
     }
   },
@@ -123,20 +127,23 @@ function cappedPlaylist(data: CommandData): string | null {
   const added = data.added
   const dropped = data.dropped
 
-  if (typeof added !== 'number' || typeof dropped !== 'number' || dropped <= 0)
+  if (typeof added !== 'number' || typeof dropped !== 'number' || dropped <= 0) {
     return null
+  }
 
   return MESSAGES.playlistCapped(added - dropped, added)
 }
 
-function readSongs(value: unknown): string[] {
-  if (!Array.isArray(value))
+function readSongs(value: unknown): Array<string> {
+  if (!Array.isArray(value)) {
     return []
+  }
 
-  const items: unknown[] = value
+  const items: Array<unknown> = value
 
-  return items
-    .filter((song): song is string => typeof song === 'string')
-    .map(song => song.trim())
-    .filter(Boolean)
+  return items.flatMap((song) => {
+    const trimmed = typeof song === 'string' ? song.trim() : ''
+
+    return trimmed ? [trimmed] : []
+  })
 }

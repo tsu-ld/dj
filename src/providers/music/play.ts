@@ -21,25 +21,29 @@ export function musicPlay(deps: {
   const { player, catalog, audio, mutations, logger } = deps
 
   function mapPlayFailure(error: unknown, request: PlayRequest): UserError {
-    if (error instanceof UserError)
+    if (error instanceof UserError) {
       return error
+    }
 
     const code = errorCodeOf(error)
 
-    if (code === 'NO_RESULT' || code === 'CANNOT_RESOLVE_SONG')
+    if (code === 'NO_RESULT' || code === 'CANNOT_RESOLVE_SONG') {
       return new UserError(MESSAGES.noResult)
+    }
 
-    if (code === 'LIVE_UNSUPPORTED')
+    if (code === 'LIVE_UNSUPPORTED') {
       return new UserError(MESSAGES.liveUnsupported)
+    }
 
-    if (error instanceof PolicyError && error.code === 'UNSUPPORTED_URL')
+    if (error instanceof PolicyError && error.code === 'UNSUPPORTED_URL') {
       return new UserError(MESSAGES.unsupportedUrl)
+    }
 
     const guildId = request.voiceChannel.guild.id
 
     logger.error('music.play_failed', error, { guildId })
 
-    // the bot has already joined voice, and the SDK does not leave when play() fails
+    // WORKAROUND(https://github.com/skick1234/DisTube/blob/5.2.3/src/DisTube.ts#L220): play() joins voice before it resolves the song, and on failure removes the queue without leaving; the bot disconnects itself.
     if (request.kind === 'text' && !player.getQueue(guildId)) {
       void request.voiceChannel.guild.members.me?.voice?.disconnect().catch((error: unknown) => {
         logger.warn('music.disconnect_failed', { guildId, error: errorMessage(error) })
@@ -55,14 +59,21 @@ export function musicPlay(deps: {
     return mutations.run(guildId, async () => {
       const problem = voiceChannelProblem(request.voiceChannel)
 
-      if (problem !== null)
+      if (problem !== null) {
         throw new UserError(problem)
+      }
 
-      if (request.kind === 'text' && isUrlLike(request.value) && !isSupportedMusicUrl(request.value))
+      if (
+        request.kind === 'text' &&
+        isUrlLike(request.value) &&
+        !isSupportedMusicUrl(request.value)
+      ) {
         throw new UserError(MESSAGES.unsupportedUrl)
+      }
 
-      if (queueRoom(player.getQueue(guildId)?.songs.length ?? 0) === 0)
+      if (queueRoom(player.getQueue(guildId)?.songs.length ?? 0) === 0) {
         throw new UserError(MESSAGES.queueFull(MAX_QUEUE_SIZE))
+      }
 
       await audio.playWelcome(request.voiceChannel)
 
@@ -74,19 +85,27 @@ export function musicPlay(deps: {
             textChannel: request.textChannel,
             member: request.member,
           })
-        }
-        else {
-          const wanted = request.value.slice(0, queueRoom(player.getQueue(guildId)?.songs.length ?? 0))
+        } else {
+          const wanted = request.value.slice(
+            0,
+            queueRoom(player.getQueue(guildId)?.songs.length ?? 0),
+          )
 
-          const resolved = (await Promise.all(wanted.map(async query => catalog.searchSong(query, { member: request.member })
-            .catch((error: unknown) => {
-              logger.error('music.search_failed', error, { query })
+          const resolved = (
+            await Promise.all(
+              wanted.map(async (query) =>
+                catalog.searchSong(query, { member: request.member }).catch((error: unknown) => {
+                  logger.error('music.search_failed', error, { query })
 
-              return null
-            })))).filter((song): song is Song => song !== null)
+                  return null
+                }),
+              ),
+            )
+          ).filter((song): song is Song => song !== null)
 
-          if (resolved.length === 0)
+          if (resolved.length === 0) {
             throw new UserError(MESSAGES.noResult)
+          }
 
           const playlist = await player.createCustomPlaylist(resolved, { member: request.member })
 
@@ -95,8 +114,7 @@ export function musicPlay(deps: {
             member: request.member,
           })
         }
-      }
-      catch (error) {
+      } catch (error) {
         throw mapPlayFailure(error, request)
       }
 

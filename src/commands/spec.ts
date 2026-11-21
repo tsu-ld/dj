@@ -1,4 +1,5 @@
 import type { GuildMember, GuildTextBasedChannel, Message, VoiceBasedChannel } from 'discord.js'
+import type { JsonRecord } from '../core/json.ts'
 import type { Logger } from '../core/logger.ts'
 import type { ToolSpec } from '../ports/conversation.ts'
 import type { DecisionOption } from '../ports/decision.ts'
@@ -28,7 +29,7 @@ export interface CommandContext {
   readonly ui: CommandUi
 }
 
-export type CommandData = Record<string, unknown>
+export type CommandData = JsonRecord
 
 export interface QueueContext extends CommandContext {
   readonly queue: QueueView
@@ -41,13 +42,13 @@ export interface VoiceContext extends CommandContext {
 interface SpecBase<Context extends CommandContext> {
   readonly name: string
   readonly description: string
-  readonly parameters?: Record<string, unknown>
+  readonly parameters?: JsonRecord
   readonly modelTool?: boolean
   readonly fastRoute?: boolean
   readonly ack?: boolean
-  readonly parse?: (text: string, context: CommandContext) => Record<string, unknown> | null
+  readonly parse?: (text: string, context: CommandContext) => JsonRecord | null
   readonly authorize?: (context: CommandContext) => void
-  readonly run: (args: Record<string, unknown>, context: Context) => Promise<CommandData>
+  readonly run: (args: JsonRecord, context: Context) => Promise<CommandData>
   readonly confirm?: (data: CommandData, context: CommandContext) => string | null
 }
 
@@ -68,15 +69,15 @@ export interface VoiceSpec extends SpecBase<VoiceContext> {
 
 export type CommandSpec = PlainSpec | QueueSpec | VoiceSpec
 
-export type CommandOutcome
-  = | { readonly kind: 'ok', readonly data: CommandData }
-    | { readonly kind: 'refused', readonly message: string }
-    | { readonly kind: 'failed', readonly error: unknown, readonly message?: string }
+export type CommandOutcome =
+  | { readonly kind: 'ok'; readonly data: CommandData }
+  | { readonly kind: 'refused'; readonly message: string }
+  | { readonly kind: 'failed'; readonly error: unknown; readonly message?: string }
 
 export interface CommandBus {
-  readonly specs: readonly CommandSpec[]
-  readonly tools: readonly ToolSpec[]
-  readonly routes: readonly DecisionOption[]
-  run: (name: string, args: Record<string, unknown>, context: CommandContext) => Promise<CommandOutcome>
-  runTool: (name: string, args: Record<string, unknown>, context: CommandContext) => Promise<CommandOutcome>
+  readonly specs: ReadonlyArray<CommandSpec>
+  readonly tools: ReadonlyArray<ToolSpec>
+  readonly routes: ReadonlyArray<DecisionOption>
+  run: (name: string, args: JsonRecord, context: CommandContext) => Promise<CommandOutcome>
+  runTool: (name: string, args: JsonRecord, context: CommandContext) => Promise<CommandOutcome>
 }

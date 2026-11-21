@@ -8,19 +8,22 @@ import { MESSAGES } from '../messages.ts'
 const PERSONA_INTENT = /^(?:(?:s[ée]|act[uú]a|habl[aá]|speak|talk)(?=$|[\s,.:;!?])|persona\s*:)/i
 const LEADING_MENTION = /^\s*<@!?\d+>\s*[,:;]?\s*/
 
-function mentionedChannels(message: Message | null): Channel[] {
+function mentionedChannels(message: Message | null): Array<Channel> {
   return message ? [...message.mentions.channels.values()] : []
 }
 
 function asksForPersona(message: Message | null): boolean {
-  const content = String(message?.content ?? '').replace(LEADING_MENTION, '').trim()
+  const content = String(message?.content ?? '')
+    .replace(LEADING_MENTION, '')
+    .trim()
 
   return PERSONA_INTENT.test(content)
 }
 
 function requirePermission(context: CommandContext, permission: bigint, message: string): void {
-  if (!context.member.permissions.has(permission))
+  if (!context.member.permissions.has(permission)) {
     throw new UserError(message)
+  }
 }
 
 function configuredChannel(data: CommandData): string | null {
@@ -31,11 +34,16 @@ function configuredChannel(data: CommandData): string | null {
 
 export const setChannel: CommandSpec = {
   name: 'set_channel',
-  description: 'Set the text channel where the bot listens. Use it only when the user\'s own message mentions exactly one channel for the bot.',
+  description:
+    "Set the text channel where the bot listens. Use it only when the user's own message mentions exactly one channel for the bot.",
   fastRoute: false,
   ack: false,
   authorize(context) {
-    requirePermission(context, PermissionFlagsBits.ManageChannels, MESSAGES.channelConfigurePermission)
+    requirePermission(
+      context,
+      PermissionFlagsBits.ManageChannels,
+      MESSAGES.channelConfigurePermission,
+    )
   },
   confirm: configuredChannel,
   async run(_args, context) {
@@ -44,17 +52,24 @@ export const setChannel: CommandSpec = {
     const target = channels[0]
     const guild = message?.guild
 
-    if (!message || channels.length !== 1 || !target || !guild)
-      throw new UserError(channels.length === 1 ? MESSAGES.textChannelInvalid : MESSAGES.channelExplicit)
+    if (!message || channels.length !== 1 || !target || !guild) {
+      throw new UserError(
+        channels.length === 1 ? MESSAGES.textChannelInvalid : MESSAGES.channelExplicit,
+      )
+    }
 
     const channel = await guild.channels.fetch(target.id).catch((error: unknown) => {
-      context.services.logger.warn('command.channel_fetch_failed', { channelId: target.id, error: errorMessage(error) })
+      context.services.logger.warn('command.channel_fetch_failed', {
+        channelId: target.id,
+        error: errorMessage(error),
+      })
 
       return null
     })
 
-    if (!channel || !channel.isTextBased())
+    if (!channel || !channel.isTextBased()) {
       throw new UserError(MESSAGES.textChannelInvalid)
+    }
 
     const me = guild.members.me
     const permissions = me ? channel.permissionsFor(me) : null
@@ -63,11 +78,15 @@ export const setChannel: CommandSpec = {
       ? [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessagesInThreads]
       : [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
 
-    if ((thread && (thread.archived || thread.locked)) || !permissions?.has(required))
+    if ((thread && (thread.archived || thread.locked)) || !permissions?.has(required)) {
       throw new UserError(MESSAGES.textChannelPermissions)
+    }
 
     await context.services.settings.update(context.guildId, { textChannelId: channel.id })
-    context.services.logger.info('discord.channel_configured', { channelId: channel.id, channelName: channel.name })
+    context.services.logger.info('discord.channel_configured', {
+      channelId: channel.id,
+      channelName: channel.name,
+    })
 
     return { channelId: channel.id, channelName: channel.name }
   },
@@ -75,7 +94,8 @@ export const setChannel: CommandSpec = {
 
 export const setPersona: CommandSpec = {
   name: 'set_persona',
-  description: 'Change the bot\'s permanent personality or way of speaking. Use it only when someone explicitly asks it to talk differently from now on.',
+  description:
+    "Change the bot's permanent personality or way of speaking. Use it only when someone explicitly asks it to talk differently from now on.",
   parameters: {
     type: 'object',
     properties: {
@@ -88,16 +108,19 @@ export const setPersona: CommandSpec = {
     requirePermission(context, PermissionFlagsBits.ManageGuild, MESSAGES.personaPermission)
   },
   async run(args, context) {
-    if (!asksForPersona(context.message))
+    if (!asksForPersona(context.message)) {
       throw new UserError(MESSAGES.personaExplicit)
+    }
 
     const persona = typeof args.persona === 'string' ? args.persona.trim() : ''
 
-    if (!persona)
+    if (!persona) {
       throw new UserError(MESSAGES.personaUsage)
+    }
 
-    if (persona.length > MAX_PERSONA_LENGTH)
+    if (persona.length > MAX_PERSONA_LENGTH) {
       throw new UserError(MESSAGES.personaTooLong(MAX_PERSONA_LENGTH))
+    }
 
     await context.services.settings.update(context.guildId, { persona })
 

@@ -1,11 +1,20 @@
 import type { VoiceBasedChannel } from 'discord.js'
+import type { JsonRecord } from '../../core/json.ts'
 import { describe, expect, test } from 'bun:test'
 import { MESSAGES } from '../../messages.ts'
-import { fakeContext, fakeMember, fakeMusic, fakeUi, fakeVoice, silentLog as log, testView as view } from '../../tests/fixtures.ts'
+import {
+  fakeContext,
+  fakeMember,
+  fakeMusic,
+  fakeUi,
+  fakeVoice,
+  silentLog as log,
+  testView as view,
+} from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 import { commands } from '../index.ts'
 
-const CONTROLS: readonly (readonly [string, Record<string, unknown>])[] = [
+const CONTROLS: ReadonlyArray<readonly [string, JsonRecord]> = [
   ['pause', {}],
   ['resume', {}],
   ['toggle', {}],
@@ -21,7 +30,11 @@ function contextFor(memberChannel: VoiceBasedChannel | null, botChannel: VoiceBa
   const music = fakeMusic({ view: () => view({ size: 3 }) })
   const member = fakeMember({ voiceChannel: memberChannel, botVoiceChannel: botChannel })
 
-  return { context: fakeContext({ member, voiceChannel: memberChannel, services: { music }, ui }), music, ui }
+  return {
+    context: fakeContext({ member, voiceChannel: memberChannel, services: { music }, ui }),
+    music,
+    ui,
+  }
 }
 
 describe('voice authorization', () => {

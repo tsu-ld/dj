@@ -65,7 +65,9 @@ describe('settingsStore', () => {
       g1: { textChannelId: null, persona: 'un dj' },
     })
 
-    const backups = (await readdir(join(path, '..'))).filter(name => name.startsWith('guilds.json.corrupt-'))
+    const backups = (await readdir(join(path, '..'))).filter((name) =>
+      name.startsWith('guilds.json.corrupt-'),
+    )
 
     expect(backups).toHaveLength(1)
     expect(await readFile(join(path, '..', backups[0] ?? ''), 'utf8')).toBe('{not json')
@@ -80,7 +82,9 @@ describe('settingsStore', () => {
       const store = await settingsStore({ path, logger: log })
 
       expect(store.get('a')).toEqual({ textChannelId: null, persona: null })
-      expect((await readdir(join(path, '..'))).some(name => name.startsWith('guilds.json.corrupt-'))).toBe(true)
+      expect(
+        (await readdir(join(path, '..'))).some((name) => name.startsWith('guilds.json.corrupt-')),
+      ).toBe(true)
     }
   })
 

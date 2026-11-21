@@ -14,8 +14,8 @@ interface OnAirInput {
   readonly track: Track
   readonly long: boolean
   readonly last: PlayedEntry | null
-  readonly earlier: readonly PlayedEntry[]
-  readonly upcoming: readonly Track[]
+  readonly earlier: ReadonlyArray<PlayedEntry>
+  readonly upcoming: ReadonlyArray<Track>
   readonly radio: boolean
   readonly facts: SongFacts | null
   readonly listener: ListenerProfile | null
@@ -44,9 +44,12 @@ const RADIO_RULES = [
 ].join('\n')
 
 const ANGLE_INSTRUCTIONS: Record<Angle, string> = {
-  welcome: 'Say a short hello to the listener and introduce the first song. No facts and no numbers.',
-  listener: 'Use exactly one item from the About block: their most requested song, their go-to artist, their request number, or that this is their first request. Then hand off to the song.',
-  anniversary: 'The song or its album has an anniversary: say the exact age from the Anniversary line, then hand off to the song.',
+  welcome:
+    'Say a short hello to the listener and introduce the first song. No facts and no numbers.',
+  listener:
+    'Use exactly one item from the About block: their most requested song, their go-to artist, their request number, or that this is their first request. Then hand off to the song.',
+  anniversary:
+    'The song or its album has an anniversary: say the exact age from the Anniversary line, then hand off to the song.',
   story: 'Tell one fact from the Song story line in your own words, then hand off to the song.',
   news: 'Share one recent headline about the artist from the News lines, say it is news and how recent it is, then hand off to the song.',
   fact: 'Give one fact from the verified-facts block: the album, the year or the genre. Then hand off to the song.',
@@ -57,21 +60,20 @@ const EMOJI = /[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier
 const AUDIO_TAG = /\[[^\]]*\]/g
 const WORD = /[\p{L}\p{N}]/u
 
-// The model overshoots the character count by about a fifth; ask for less than
-// the hard cap so the cut rarely eats the payoff.
-const TARGET_SLACK = 20
+const MODEL_OVERSHOOT_CHARS = 20
 
 export function lineLimit(long: boolean): number {
   return long ? RADIO_LONG_CHARS : RADIO_SHORT_CHARS
 }
 
 function lineTarget(long: boolean): number {
-  return lineLimit(long) - TARGET_SLACK
+  return lineLimit(long) - MODEL_OVERSHOOT_CHARS
 }
 
-export function lineRequest(input: { long: boolean, angle: Angle }): string {
-  if (input.angle === 'welcome')
+export function lineRequest(input: { long: boolean; angle: Angle }): string {
+  if (input.angle === 'welcome') {
     return 'Open the show: a short hello and the first song.'
+  }
 
   return input.long
     ? `Open the next stretch with the ${input.angle} angle: one thing worth hearing, then a hand-off to what follows.`
@@ -93,7 +95,10 @@ export function buildOnAirPrompt(input: OnAirInput): string {
     `Angle for this line: ${input.angle}. ${ANGLE_INSTRUCTIONS[input.angle]}`,
     dataBlock('on-air', [...runLines(input), ...aboutLines(input)]),
     ...(facts.length > 0
-      ? ['These verified facts are the ONLY facts about the song or artist you may state:', dataBlock('verified-facts', facts)]
+      ? [
+          'These verified facts are the ONLY facts about the song or artist you may state:',
+          dataBlock('verified-facts', facts),
+        ]
       : []),
   ].join('\n\n')
 }
@@ -112,9 +117,13 @@ function hasName(name: string | null): name is string {
   return name !== null && name.trim() !== ''
 }
 
-function origin(song: { readonly requestedBy: string | null, readonly fromRadio: boolean }): string | null {
-  if (song.fromRadio)
+function origin(song: {
+  readonly requestedBy: string | null
+  readonly fromRadio: boolean
+}): string | null {
+  if (song.fromRadio) {
     return 'your own pick'
+  }
 
   return hasName(song.requestedBy) ? `requested by ${song.requestedBy}` : null
 }
@@ -128,90 +137,108 @@ function entry(song: Song): string {
   return from === null ? name : `${name}, ${from}`
 }
 
-function runLines(input: OnAirInput): string[] {
+function runLines(input: OnAirInput): Array<string> {
   const { track } = input
   const lines = [`Playing now: ${songName(titleOrUrl(track), track.artist)}`]
 
-  if (track.fromRadio)
+  if (track.fromRadio) {
     lines.push('Who asked: nobody, it is your own pick')
-  else if (hasName(track.requestedBy))
+  } else if (hasName(track.requestedBy)) {
     lines.push(`Who asked: requested by ${track.requestedBy}`)
+  }
 
   if (input.last !== null) {
     const { skippedBy } = input.last
 
-    lines.push(`Last song: ${entry(input.last)}, ${hasName(skippedBy) ? `skipped by ${skippedBy}` : 'played through'}`)
+    lines.push(
+      `Last song: ${entry(input.last)}, ${hasName(skippedBy) ? `skipped by ${skippedBy}` : 'played through'}`,
+    )
   }
 
-  if (input.earlier.length > 0)
+  if (input.earlier.length > 0) {
     lines.push(`Earlier, newest first: ${input.earlier.map(entry).join(' | ')}`)
+  }
 
   const next = input.upcoming
     .slice(0, MAX_NEXT)
-    .map(song => entry({ ...song, title: titleOrUrl(song) }))
+    .map((song) => entry({ ...song, title: titleOrUrl(song) }))
 
-  if (next.length > 0)
+  if (next.length > 0) {
     lines.push(`Next up, in order: ${next.join(' | ')}`)
-  else if (!input.radio)
+  } else if (!input.radio) {
     lines.push('Next up: nothing, the queue ends with this song')
+  }
 
-  if (input.radio && input.upcoming.length < MAX_NEXT)
+  if (input.radio && input.upcoming.length < MAX_NEXT) {
     lines.push('When the queue runs out you keep picking the songs yourself')
+  }
 
   return lines
 }
 
-function aboutLines(input: OnAirInput): string[] {
+function aboutLines(input: OnAirInput): Array<string> {
   const { listener } = input
 
-  if (listener === null || input.track.fromRadio)
+  if (listener === null || input.track.fromRadio) {
     return []
+  }
 
   const lines = [
     `About ${listener.name}, who asked for this song:`,
     `This is request number ${listener.requests + 1} from ${listener.name}`,
   ]
 
-  if (listener.topSong !== null)
-    lines.push(`Most requested song so far: ${listener.topSong.title} (${listener.topSong.count} times)`)
+  if (listener.topSong !== null) {
+    lines.push(
+      `Most requested song so far: ${listener.topSong.title} (${listener.topSong.count} times)`,
+    )
+  }
 
-  if (listener.topArtists.length > 0)
+  if (listener.topArtists.length > 0) {
     lines.push(`Top artists: ${listener.topArtists.join(', ')}`)
+  }
 
   return lines
 }
 
-function verifiedFacts(facts: SongFacts | null, now: number): string[] {
-  if (facts === null)
+function verifiedFacts(facts: SongFacts | null, now: number): Array<string> {
+  if (facts === null) {
     return []
+  }
 
   const lines = [`Song: ${songName(facts.title, facts.artist)}`]
 
-  if (facts.album !== null)
+  if (facts.album !== null) {
     lines.push(`Album: ${facts.album}`)
+  }
 
-  if (facts.releaseDate !== null)
+  if (facts.releaseDate !== null) {
     lines.push(`Released: ${facts.releaseDate}`)
-  else if (facts.year !== null)
+  } else if (facts.year !== null) {
     lines.push(`Year: ${facts.year}`)
+  }
 
-  if (facts.genre !== null)
+  if (facts.genre !== null) {
     lines.push(`Genre: ${facts.genre}`)
+  }
 
   const anniversary = anniversaryOf(facts, now)
 
   if (anniversary !== null) {
     const { years, days } = anniversary
-    const when = days === 0 ? ', today' : days > 0 ? `, ${days} days from today` : `, ${-days} days ago`
+    const when =
+      days === 0 ? ', today' : days > 0 ? `, ${days} days from today` : `, ${-days} days ago`
 
     lines.push(`Anniversary: ${years} years since release${when}`)
   }
 
-  if (facts.artistSummary !== null)
+  if (facts.artistSummary !== null) {
     lines.push(`About the artist: ${facts.artistSummary}`)
+  }
 
-  if (facts.songSummary !== null)
+  if (facts.songSummary !== null) {
     lines.push(`Song story: ${facts.songSummary}`)
+  }
 
   for (const item of freshNews(facts, now).slice(0, MAX_NEWS)) {
     const days = Math.max(0, Math.floor((now - item.publishedAt) / DAY_MS))
@@ -224,33 +251,32 @@ function verifiedFacts(facts: SongFacts | null, now: number): string[] {
   return lines.length > 1 ? lines : []
 }
 
-// Speech reads punctuation and symbols out loud, and the model does not always
-// keep to the length cap. Audio tags in square brackets direct the delivery.
 export function sanitizeLine(raw: unknown, maxChars: number): string | null {
   const text = String(raw ?? '')
-    .replace(/https?:\/\/\S+/g, '')
-    .replace(/[*_`#>~|]/g, '')
-    .replace(EMOJI, '')
-    .replace(/["“”«»]/g, '')
-    .replace(/\s+([!?.,;:])/g, '$1')
-    .replace(/\s+/g, ' ')
+    .replaceAll(/https?:\/\/\S+/g, '')
+    .replaceAll(/[*_`#>~|]/g, '')
+    .replaceAll(EMOJI, '')
+    .replaceAll(/["“”«»]/g, '')
+    .replaceAll(/\s+([!?.,;:])/g, '$1')
+    .replaceAll(/\s+/g, ' ')
     .trim()
 
-  if (text.length <= maxChars)
-    return spoken(text)
+  if (text.length <= maxChars) {
+    return withWordsBesidesAudioTags(text)
+  }
 
   const cut = cutAt(text, maxChars)
   const lastStop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '))
 
-  if (lastStop > maxChars / 2)
-    return spoken(cut.slice(0, lastStop + 1))
+  if (lastStop > maxChars / 2) {
+    return withWordsBesidesAudioTags(cut.slice(0, lastStop + 1))
+  }
 
   const lastSpace = cut.lastIndexOf(' ')
 
-  return spoken(cut.slice(0, lastSpace > 0 ? lastSpace : maxChars).trim())
+  return withWordsBesidesAudioTags(cut.slice(0, lastSpace > 0 ? lastSpace : maxChars).trim())
 }
 
-// Speech rejects a line with nothing to say once the tags are removed.
-function spoken(text: string): string | null {
-  return WORD.test(text.replace(AUDIO_TAG, '')) ? text : null
+function withWordsBesidesAudioTags(text: string): string | null {
+  return WORD.test(text.replaceAll(AUDIO_TAG, '')) ? text : null
 }

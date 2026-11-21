@@ -21,8 +21,9 @@ const ENV_FILE = process.env.E2E_ENV_FILE ?? join(homedir(), '.config/dj/discord
 for (const line of readFileSync(ENV_FILE, 'utf8').split('\n')) {
   const [key, ...rest] = line.trim().split('=')
 
-  if (key !== undefined && key !== '' && rest.length > 0 && !(key in process.env))
+  if (key !== undefined && key !== '' && rest.length > 0 && !(key in process.env)) {
     process.env[key] = rest.join('=').trim()
+  }
 }
 
 function missing(name: string): never {
@@ -50,7 +51,8 @@ const model = config.language.enabled
   ? conversationModel({ config: config.language, logger: log, clock: systemClock })
   : null
 const bus = commandBus({ specs: commands, logger: log })
-const agent = model === null ? null : djAgent({ model, bus, settings, logger: log, clock: systemClock })
+const agent =
+  model === null ? null : djAgent({ model, bus, settings, logger: log, clock: systemClock })
 
 let failed = 0
 
@@ -61,10 +63,6 @@ function pass(name: string): void {
 function fail(name: string, message: string): void {
   failed++
   console.log('  FAIL:', name, '-', message)
-}
-
-async function wait(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 await client.login()
@@ -97,21 +95,29 @@ function currentSong(): string {
 }
 
 async function play(input: string): Promise<void> {
-  await music.play({ kind: 'text', value: input, member: me, voiceChannel: voice, textChannel: text })
+  await music.play({
+    kind: 'text',
+    value: input,
+    member: me,
+    voiceChannel: voice,
+    textChannel: text,
+  })
 }
 
 async function playAndProbe(label: string, input: string, ms = 18_000): Promise<void> {
   await play(input)
   const before = audioMs()
 
-  await wait(ms)
+  await Bun.sleep(ms)
 
   const duration = audioMs() - before
   const playing = music.status(GUILD)?.state === 'playing'
 
-  duration > 8_000 && playing
-    ? pass(label)
-    : fail(label, `audio=${duration}ms status=${playing} song=${currentSong()}`)
+  if (duration > 8000 && playing) {
+    pass(label)
+  } else {
+    fail(label, `audio=${duration}ms status=${playing} song=${currentSong()}`)
+  }
 }
 
 async function stopError(): Promise<string | null> {
@@ -119,17 +125,19 @@ async function stopError(): Promise<string | null> {
     await music.stop(GUILD, { resetStation: true })
 
     return null
-  }
-  catch (error) {
+  } catch (error) {
     return errorMessage(error)
   }
 }
 
 async function cleanup(): Promise<void> {
-  if (music.view(GUILD) !== null)
-    await music.stop(GUILD).catch((error: unknown) => console.log('  cleanup: stop failed -', errorMessage(error)))
+  if (music.view(GUILD) !== null) {
+    await music
+      .stop(GUILD)
+      .catch((error: unknown) => console.log('  cleanup: stop failed -', errorMessage(error)))
+  }
 
-  await wait(2_000)
+  await Bun.sleep(2000)
 }
 
 function fakeContext() {
@@ -151,15 +159,20 @@ function fakeContext() {
 
 console.log('== 1. First play and welcome audio ==')
 
-if (me.voice.channelId !== null)
+if (me.voice.channelId !== null) {
   await me.voice.disconnect()
+}
 
-await wait(2_000)
+await Bun.sleep(2000)
 
-if (existsSync(new URL('./assets/welcome.mp3', import.meta.url)))
-  await playAndProbe('intro does not swallow the first song', 'hipercandombe maquina de hacer pajaros')
-else
+if (existsSync(new URL('./assets/welcome.mp3', import.meta.url))) {
+  await playAndProbe(
+    'intro does not swallow the first song',
+    'hipercandombe maquina de hacer pajaros',
+  )
+} else {
   console.log('  SKIP: intro does not swallow the first song (assets/welcome.mp3 missing)')
+}
 
 await cleanup()
 
@@ -168,48 +181,59 @@ await playAndProbe('youtube url plays audio', 'https://www.youtube.com/watch?v=d
 await cleanup()
 
 console.log('== 3. Spotify link ==')
-await playAndProbe('spotify link plays audio', 'https://open.spotify.com/track/4PTG3Z6ehGkBFwjybzWkR8')
+await playAndProbe(
+  'spotify link plays audio',
+  'https://open.spotify.com/track/4PTG3Z6ehGkBFwjybzWkR8',
+)
 await cleanup()
 
 console.log('== 4. Pause / resume ==')
 await play('hipercandombe maquina de hacer pajaros')
-await wait(10_000)
+await Bun.sleep(10_000)
 
 await music.pause(GUILD)
 const pauseStart = audioMs()
 
-await wait(4_000)
+await Bun.sleep(4000)
 
 const pauseEnd = audioMs()
 const paused = music.status(GUILD)?.state === 'paused'
 
-paused && Math.abs(pauseEnd - pauseStart) < 200
-  ? pass('pause stops playback')
-  : fail('pause stops playback', `paused=${paused} delta=${pauseEnd - pauseStart}ms`)
+if (paused && Math.abs(pauseEnd - pauseStart) < 200) {
+  pass('pause stops playback')
+} else {
+  fail('pause stops playback', `paused=${paused} delta=${pauseEnd - pauseStart}ms`)
+}
 
 await music.resume(GUILD)
-await wait(4_000)
+await Bun.sleep(4000)
 
 const resumeStart = audioMs()
 
-await wait(4_000)
+await Bun.sleep(4000)
 
 const resumeEnd = audioMs()
 
-resumeEnd - resumeStart > 2_000
-  ? pass('resume continues playback')
-  : fail('resume continues playback', `delta=${resumeEnd - resumeStart}ms`)
+if (resumeEnd - resumeStart > 2000) {
+  pass('resume continues playback')
+} else {
+  fail('resume continues playback', `delta=${resumeEnd - resumeStart}ms`)
+}
 await cleanup()
 
 console.log('== 5. Queue accumulates ==')
 await play('never gonna give you up rick astley')
-await wait(8_000)
+await Bun.sleep(8000)
 await play('hipercandombe maquina de hacer pajaros')
-await wait(8_000)
+await Bun.sleep(8000)
 
 const size = music.view(GUILD)?.size ?? 0
 
-size >= 2 ? pass(`queue holds ${size} songs`) : fail('queue holds 2 songs', `got ${size}`)
+if (size >= 2) {
+  pass(`queue holds ${size} songs`)
+} else {
+  fail('queue holds 2 songs', `got ${size}`)
+}
 
 console.log('== 6. Skip changes song ==')
 const before = currentSong()
@@ -224,50 +248,66 @@ const skipped = await music.skip(GUILD, { id: 'e2e', name: 'e2e' }).then(
 )
 
 if (skipped) {
-  await wait(6_000)
+  await Bun.sleep(6000)
 
   const after = currentSong()
 
-  before !== after ? pass(`skip moved from "${before}" to "${after}"`) : fail('skip changes song', `stuck on "${after}"`)
+  if (before !== after) {
+    pass(`skip moved from "${before}" to "${after}"`)
+  } else {
+    fail('skip changes song', `stuck on "${after}"`)
+  }
 }
 await cleanup()
 
 console.log('== 7. Clear empties the queue and leaves voice ==')
 await play('hipercandombe maquina de hacer pajaros')
-await wait(10_000)
+await Bun.sleep(10_000)
 const clearError = await stopError()
-await wait(4_000)
+await Bun.sleep(4000)
 
-clearError === null && music.view(GUILD) === null
-  ? pass('clear empties the queue')
-  : fail('clear empties the queue', clearError ?? 'queue still present')
+if (clearError === null && music.view(GUILD) === null) {
+  pass('clear empties the queue')
+} else {
+  fail('clear empties the queue', clearError ?? 'queue still present')
+}
 
 const stillIn = (await guild.members.fetch(client.user?.id ?? '')).voice.channelId
 
-clearError === null && stillIn === null
-  ? pass('bot leaves voice cleanly')
-  : fail('bot leaves voice cleanly', clearError ?? `still in channel ${stillIn}`)
+if (clearError === null && stillIn === null) {
+  pass('bot leaves voice cleanly')
+} else {
+  fail('bot leaves voice cleanly', clearError ?? `still in channel ${stillIn}`)
+}
 
 console.log('== 8. DJ request answers, queues and plays ==')
 
 if (!agent) {
   console.log('  SKIP: dj answers in character (language model not configured)')
-}
-else {
+} else {
   try {
     const context = fakeContext()
     const djReply = await agent.ask({ request: 'poneme algo de rock nacional', context })
 
-    djReply !== null && djReply.length > 5
-      ? pass(`dj answered: "${djReply}"`)
-      : fail('dj answers in character', `reply=${JSON.stringify(djReply)}`)
+    if (djReply !== null && djReply.length > 5) {
+      pass(`dj answered: "${djReply}"`)
+    } else {
+      fail('dj answers in character', `reply=${JSON.stringify(djReply)}`)
+    }
 
     const djQueue = music.view(GUILD)
 
-    djQueue && djQueue.size >= 1 ? pass(`dj queued ${djQueue.size} songs`) : fail('dj queues songs', 'no queue')
-    music.status(GUILD)?.state === 'playing' ? pass('dj plays the queue') : fail('dj plays the queue', 'not playing')
-  }
-  catch (error) {
+    if (djQueue && djQueue.size >= 1) {
+      pass(`dj queued ${djQueue.size} songs`)
+    } else {
+      fail('dj queues songs', 'no queue')
+    }
+    if (music.status(GUILD)?.state === 'playing') {
+      pass('dj plays the queue')
+    } else {
+      fail('dj plays the queue', 'not playing')
+    }
+  } catch (error) {
     fail('dj request', errorMessage(error))
   }
 }

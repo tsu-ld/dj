@@ -4,13 +4,12 @@ type FetchHandler = (input: string | URL | Request, init?: RequestInit) => Promi
 
 export interface FetchCalls {
   count: () => number
-  at: (index: number) => { url: string, init: RequestInit | undefined }
+  at: (index: number) => { url: string; init: RequestInit | undefined }
   matching: (path: string) => number
 }
 
-const restores: (() => void)[] = []
+const restores: Array<() => void> = []
 
-// Bun's fetch carries a static helper, so the stub has to carry it too.
 export function fetchStub(handler: FetchHandler): typeof fetch {
   return Object.assign(
     async (input: Parameters<typeof fetch>[0], init?: RequestInit) => handler(input, init),
@@ -28,18 +27,20 @@ export function stubFetch(handler: FetchHandler): FetchCalls {
     at(index) {
       const entry = spy.mock.calls[index]
 
-      if (!entry)
+      if (!entry) {
         throw new Error(`No fetch call at index ${index}`)
+      }
 
       return { url: String(entry[0]), init: entry[1] }
     },
-    matching: path => spy.mock.calls.filter(([input]) => String(input).includes(path)).length,
+    matching: (path) => spy.mock.calls.filter(([input]) => String(input).includes(path)).length,
   }
 }
 
 export function restoreFetch(): void {
-  while (restores.length > 0)
+  while (restores.length > 0) {
     restores.pop()?.()
+  }
 }
 
 export function json(body: unknown): Response {

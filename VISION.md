@@ -12,12 +12,12 @@ Music bots make people learn their syntax (`/play`, `/skip`, `/queue`), fill the
 
 These are ordered: when two pull in different directions, the higher one wins. Each one has a reasonable opposite that we chose against.
 
-1. **The music comes first.** The host never talks over a song. A spoken line waits in the gap, or it is dropped. A broken voice, model or fact source skips the line, never the song. *(Opposite we reject: a richer show that sometimes stutters.)*
-2. **Talk like people talk.** No commands to learn. "skip this one", "play something chill" and a link all work in the listening channel. *(Opposite: precise, discoverable slash commands.)*
-3. **Say less, mean it.** One song in three plays with no line at all. Every line has one idea. While the bot is in voice it reacts with ✅ instead of writing. *(Opposite: a chatty host that always fills the silence.)*
-4. **Only true things on air.** Facts come from checked sources, never from the model's memory. If it cannot be checked, the host talks about the run instead: who asked, what just played, what comes next. *(Opposite: colorful trivia that is sometimes made up.)*
-5. **The host is the radio.** Its picks are its own. It knows the room: who asked for what, their favorite songs, who skipped the last one. That is context for what to say, not something to announce. *(Opposite: neutral narration that credits "the algorithm".)*
-6. **Small, readable, sturdy.** One process, plain objects, bounded memory, every limit written down. A newcomer reads the code like a book. *(Opposite: a plugin platform that can do anything.)*
+1. **The music comes first.** The host never talks over a song. A spoken line waits in the gap, or it is dropped. A broken voice, model or fact source skips the line, never the song. _(Opposite we reject: a richer show that sometimes stutters.)_
+2. **Talk like people talk.** No commands to learn. "skip this one", "play something chill" and a link all work in the listening channel. _(Opposite: precise, discoverable slash commands.)_
+3. **Say less, mean it.** One song in three plays with no line at all. Every line has one idea. While the bot is in voice it reacts with ✅ instead of writing. _(Opposite: a chatty host that always fills the silence.)_
+4. **Only true things on air.** Facts come from checked sources, never from the model's memory. If it cannot be checked, the host talks about the run instead: who asked, what just played, what comes next. _(Opposite: colorful trivia that is sometimes made up.)_
+5. **The host is the radio.** Its picks are its own. It knows the room: who asked for what, their favorite songs, who skipped the last one. That is context for what to say, not something to announce. _(Opposite: neutral narration that credits "the algorithm".)_
+6. **Small, readable, sturdy.** One process, plain objects, bounded memory, every limit written down. A newcomer reads the code like a book. _(Opposite: a plugin platform that can do anything.)_
 
 ## Non-goals
 

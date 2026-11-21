@@ -15,21 +15,28 @@ async function exists(path: string): Promise<boolean> {
     await stat(path)
 
     return true
-  }
-  catch {
+  } catch {
     return false
   }
 }
 
-function cacheIn(dir: string, logger: Logger = log, extraction: Extractor = extractionStub()): AudioCache {
+function cacheIn(
+  dir: string,
+  logger: Logger = log,
+  extraction: Extractor = extractionStub(),
+): AudioCache {
   return audioCache({ dir, maxBytes: 1024 * 1024, maxAgeMs: 86_400_000, extraction, logger })
 }
 
-async function withFiles(files: readonly string[], check: (dir: string, cache: AudioCache) => Promise<void>): Promise<void> {
+async function withFiles(
+  files: ReadonlyArray<string>,
+  check: (dir: string, cache: AudioCache) => Promise<void>,
+): Promise<void> {
   const dir = await tempDir()
 
-  for (const file of files)
+  for (const file of files) {
     await writeFile(join(dir, file), 'audio')
+  }
 
   await check(dir, cacheIn(dir))
 }
@@ -63,16 +70,22 @@ test('a file id is sanitized before it reaches a path', async () => {
   })
 
   const dir = await tempDir()
-  const templates: string[] = []
+  const templates: Array<string> = []
 
-  const cache = cacheIn(dir, log, extractionStub({
-    download: async (_url, template) => {
-      templates.push(template)
-      await writeFile(template.replace('%(ext)s', 'm4a'), 'audio')
-    },
-  }))
+  const cache = cacheIn(
+    dir,
+    log,
+    extractionStub({
+      download: async (_url, template) => {
+        templates.push(template)
+        await writeFile(template.replace('%(ext)s', 'm4a'), 'audio')
+      },
+    }),
+  )
 
-  expect(await cache.download('https://www.youtube.com/watch?v=x', '../../etc/passwd')).toBe(join(dir, '______etc_passwd.m4a'))
+  expect(await cache.download('https://www.youtube.com/watch?v=x', '../../etc/passwd')).toBe(
+    join(dir, '______etc_passwd.m4a'),
+  )
   expect(templates).toEqual([join(dir, '______etc_passwd.%(ext)s')])
 })
 
@@ -132,7 +145,7 @@ test('two simultaneous downloads of one song share the work', async () => {
     extraction: extractionStub({
       download: async (_url, template) => {
         calls++
-        await new Promise(resolve => setTimeout(resolve, 10))
+        await Bun.sleep(10)
         await writeFile(template.replace('%(ext)s', 'm4a'), 'audio')
       },
     }),
@@ -190,21 +203,14 @@ test('cache cleanup drops old files and trims by size, never counting partials',
 
 test('the next song is prefetched once per server, and only when the extractor can play it', async () => {
   const dir = await tempDir()
-  const downloads: string[] = []
-  let release = (): void => {}
-  let started = (): void => {}
-  const nextStart = async (): Promise<void> => new Promise((resolve) => {
-    started = resolve
-  })
-
-  const pending = new Promise<void>((resolve) => {
-    release = resolve
-  })
+  const downloads: Array<string> = []
+  const pending = Promise.withResolvers<void>()
+  let started = Promise.withResolvers<void>()
   const extraction = extractionStub({
     async download(_url, template) {
       downloads.push(template.slice(dir.length + 1).split('.')[0] ?? '')
-      started()
-      await pending
+      started.resolve()
+      await pending.promise
       await writeFile(template.replace('%(ext)s', 'm4a'), 'audio')
     },
   })
@@ -217,29 +223,30 @@ test('the next song is prefetched once per server, and only when the extractor c
     logger: log,
   })
 
-  const first = nextStart()
-
   tool.prefetch({ url: 'https://www.youtube.com/watch?v=a', id: 'a' }, 'g1')
   tool.prefetch({ url: 'https://www.youtube.com/watch?v=b', id: 'b' }, 'g1')
   tool.prefetch({ url: 'https://open.spotify.com/track/x', id: 'x' }, 'g2')
   tool.prefetch({ url: 'https://www.youtube.com/watch?v=c', id: 'c', isLive: true }, 'g2')
-  await first
+  await started.promise
 
   expect(downloads).toEqual(['a'])
 
-  release()
+  pending.resolve()
   await tool.download('https://www.youtube.com/watch?v=a', 'a')
-  await new Promise(resolve => setImmediate(resolve))
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve)
+  })
 
-  const second = nextStart()
-
+  started = Promise.withResolvers<void>()
   tool.prefetch({ url: 'https://www.youtube.com/watch?v=d', id: 'd' }, 'g1')
-  await second
+  await started.promise
 
   expect(downloads).toEqual(['a', 'd'])
 
   await tool.download('https://www.youtube.com/watch?v=d', 'd')
-  await new Promise(resolve => setImmediate(resolve))
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve)
+  })
 
   tool.dispose()
 })

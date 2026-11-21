@@ -6,16 +6,19 @@ import { jsonMapFile } from '../json-file.ts'
 const DEFAULT_SETTINGS: GuildSettings = { textChannelId: null, persona: null }
 
 function normalizeSettings(value: unknown): GuildSettings | null {
-  if (!isRecord(value))
+  if (!isRecord(value)) {
     return null
+  }
 
   const { textChannelId, persona } = value
 
-  if (textChannelId !== undefined && textChannelId !== null && typeof textChannelId !== 'string')
+  if (textChannelId !== undefined && textChannelId !== null && typeof textChannelId !== 'string') {
     return null
+  }
 
-  if (persona !== undefined && persona !== null && typeof persona !== 'string')
+  if (persona !== undefined && persona !== null && typeof persona !== 'string') {
     return null
+  }
 
   return {
     textChannelId: typeof textChannelId === 'string' ? textChannelId : null,
@@ -23,8 +26,16 @@ function normalizeSettings(value: unknown): GuildSettings | null {
   }
 }
 
-export async function settingsStore(options: { path: string, logger: Logger }): Promise<SettingsPort> {
-  const store = jsonMapFile({ path: options.path, name: 'settings', logger: options.logger, entry: normalizeSettings })
+export async function settingsStore(options: {
+  path: string
+  logger: Logger
+}): Promise<SettingsPort> {
+  const store = jsonMapFile({
+    path: options.path,
+    name: 'settings',
+    logger: options.logger,
+    entry: normalizeSettings,
+  })
   let file = await store.read()
 
   return {

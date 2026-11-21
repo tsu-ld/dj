@@ -12,12 +12,11 @@ afterEach(removeTempDirs)
 async function readEventually(path: string): Promise<string> {
   const startedAt = Date.now()
 
-  while (Date.now() - startedAt < 3_000) {
+  while (Date.now() - startedAt < 3000) {
     try {
       return await readFile(path, 'utf8')
-    }
-    catch {
-      await new Promise(resolve => setTimeout(resolve, 20))
+    } catch {
+      await Bun.sleep(20)
     }
   }
 
@@ -29,17 +28,20 @@ function isAlive(pid: number): boolean {
     process.kill(pid, 0)
 
     return true
-  }
-  catch {
+  } catch {
     return false
   }
 }
 
 test('the extractor JSON is read from stdout', async () => {
   const dir = await tempDir()
-  const command = await shellScript(dir, 'json.sh', `cat <<'JSON'
+  const command = await shellScript(
+    dir,
+    'json.sh',
+    `cat <<'JSON'
 {"id":"abc123","title":"Tema"}
-JSON`)
+JSON`,
+  )
   const tool = extractor({ command, logger: log })
   const info = await tool.json('https://www.youtube.com/watch?v=abc123', [])
 
@@ -53,7 +55,9 @@ test('a failed extractor run reports its stderr', async () => {
   const command = await shellScript(dir, 'fail.sh', 'echo boom >&2\nexit 3')
   const tool = extractor({ command, logger: log })
 
-  expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).toBe('boom')
+  expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).toBe(
+    'boom',
+  )
 
   await tool.dispose()
 })
@@ -63,7 +67,9 @@ test('an invalid JSON payload is rejected', async () => {
   const command = await shellScript(dir, 'bad.sh', 'echo not-json')
   const tool = extractor({ command, logger: log })
 
-  expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).toMatch(/invalid JSON/)
+  expect(
+    await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', [])),
+  ).toMatch(/invalid JSON/)
 
   await tool.dispose()
 })
@@ -80,23 +86,30 @@ test('a hung extractor process is killed at the timeout', async () => {
   await runner.dispose()
 })
 
+async function untilReaped(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 20 && isAlive(pid); attempt++) {
+    await Bun.sleep(50)
+  }
+}
+
 test('a killed extractor takes its grandchild down instead of hanging', async () => {
   const dir = await tempDir()
   const pidFile = join(dir, 'grandchild')
   const command = await shellScript(dir, 'tree.sh', `sleep 30 & echo $! > '${pidFile}'\nwait`)
   const runner = extractorProcess({ command, logger: log })
   const started = Date.now()
-  const running = runner.run([], 200).then(() => 'resolved', error => errorMessage(error))
+  const running = runner.run([], 200).then(
+    () => 'resolved',
+    (error: unknown) => errorMessage(error),
+  )
   const grandchild = Number.parseInt((await readEventually(pidFile)).trim(), 10)
 
   expect(isAlive(grandchild)).toBe(true)
   expect(await running).toMatch(/timed out/)
 
-  expect(Date.now() - started).toBeLessThan(4_000)
+  expect(Date.now() - started).toBeLessThan(4000)
 
-  // the kernel delivers the signal and reaps the process asynchronously
-  for (let attempt = 0; attempt < 20 && isAlive(grandchild); attempt++)
-    await Bun.sleep(50)
+  await untilReaped(grandchild)
 
   expect(isAlive(grandchild)).toBe(false)
 
@@ -108,7 +121,10 @@ test('dispose kills a running extractor child', async () => {
   const pidFile = join(dir, 'pid')
   const command = await shellScript(dir, 'child.sh', `echo $$ > '${pidFile}'\nexec sleep 30`)
   const tool = extractor({ command, logger: log })
-  const settled = tool.json('https://www.youtube.com/watch?v=abc123', []).then(() => 'resolved', error => errorMessage(error))
+  const settled = tool.json('https://www.youtube.com/watch?v=abc123', []).then(
+    () => 'resolved',
+    (error: unknown) => errorMessage(error),
+  )
   const pid = Number.parseInt((await readEventually(pidFile)).trim(), 10)
 
   expect(isAlive(pid)).toBe(true)
@@ -126,19 +142,25 @@ test('the extractor refuses work after dispose', async () => {
 
   await tool.dispose()
 
-  expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).toMatch(/disposed/)
+  expect(
+    await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', [])),
+  ).toMatch(/disposed/)
 })
 
 test('a download writes through the extractor output template', async () => {
   const dir = await tempDir()
   const argsFile = join(dir, 'args.txt')
-  const command = await shellScript(dir, 'download.sh', `printf '%s\\n' "$@" > '${argsFile}'
+  const command = await shellScript(
+    dir,
+    'download.sh',
+    `printf '%s\\n' "$@" > '${argsFile}'
 out=""
 while [ $# -gt 0 ]; do
   if [ "$1" = "-o" ]; then out="$2"; shift 2; else shift; fi
 done
 out=$(printf '%s' "$out" | sed 's/%(ext)s/m4a/')
-printf 'audio' > "$out"`)
+printf 'audio' > "$out"`,
+  )
   const tool = extractor({ command, logger: log })
   const output = join(dir, 'song.%(ext)s')
 
@@ -161,7 +183,11 @@ test('a download failure carries the extractor stderr', async () => {
   const command = await shellScript(dir, 'download-fail.sh', 'echo nope >&2\nexit 9')
   const tool = extractor({ command, logger: log })
 
-  expect(await rejection(async () => tool.download('https://www.youtube.com/watch?v=abc123', join(dir, 'x.%(ext)s')))).toContain('nope')
+  expect(
+    await rejection(async () =>
+      tool.download('https://www.youtube.com/watch?v=abc123', join(dir, 'x.%(ext)s')),
+    ),
+  ).toContain('nope')
 
   await tool.dispose()
 })
@@ -169,7 +195,9 @@ test('a download failure carries the extractor stderr', async () => {
 test('a spawn failure is reported instead of hanging', async () => {
   const tool = extractor({ command: '/definitely/not/an/extractor', logger: log })
 
-  expect(await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', []))).toMatch(/ENOENT.*\/definitely\/not\/an\/extractor/)
+  expect(
+    await rejection(async () => tool.json('https://www.youtube.com/watch?v=abc123', [])),
+  ).toMatch(/ENOENT.*\/definitely\/not\/an\/extractor/)
 
   await tool.dispose()
 })

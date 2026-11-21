@@ -44,14 +44,18 @@ export function messageSlot(deps: {
   const writes = keyedQueue()
   let disposed = false
 
+  function writeInOrder(guildId: string, failure: string, write: () => Promise<void>): void {
+    void writes.run(guildId, write).catch((error: unknown) => deps.logger.error(failure, error))
+  }
+
   async function deleteCard(message: Message, label: string): Promise<void> {
-    if (!message.deletable)
+    if (!message.deletable) {
       return
+    }
 
     try {
       await message.delete()
-    }
-    catch (error) {
+    } catch (error) {
       deps.logger.error('discord.card_delete_failed', error, { label })
     }
   }
@@ -61,8 +65,9 @@ export function messageSlot(deps: {
 
     nowPlaying.delete(guildId)
 
-    if (card)
+    if (card) {
       await deleteCard(card.message, 'now playing message')
+    }
   }
 
   async function deleteQueueCard(guildId: string): Promise<void> {
@@ -70,24 +75,31 @@ export function messageSlot(deps: {
 
     queueCards.delete(guildId)
 
-    if (message)
+    if (message) {
       await deleteCard(message, 'queue message')
+    }
   }
 
   async function writeNowPlaying(guildId: string): Promise<void> {
     const state = latest.get(guildId)
 
-    if (!state)
+    if (!state) {
       return
+    }
 
     const status = deps.playback(guildId)
-    const payload = nowPlayingMessage(state.view, status === null ? null : status.playbackDurationMs)
+    const payload = nowPlayingMessage(
+      state.view,
+      status === null ? null : status.playbackDurationMs,
+    )
 
-    if (!payload)
+    if (!payload) {
       return
+    }
 
-    if (isPastEditWindow(nowPlaying.get(guildId)?.message, Date.now()))
+    if (isPastEditWindow(nowPlaying.get(guildId)?.message, Date.now())) {
       await deleteNowPlaying(guildId)
+    }
 
     const card = nowPlaying.get(guildId)
 
@@ -96,12 +108,12 @@ export function messageSlot(deps: {
         await card.message.edit(payload)
 
         return
-      }
-      catch (error) {
+      } catch (error) {
         deps.logger.error('discord.now_playing_edit_failed', error)
 
-        if (nowPlaying.get(guildId) === card)
+        if (nowPlaying.get(guildId) === card) {
           nowPlaying.delete(guildId)
+        }
       }
     }
 
@@ -114,19 +126,21 @@ export function messageSlot(deps: {
     const card = nowPlaying.get(guildId)
     const state = latest.get(guildId)
     const status = deps.playback(guildId)
-    const payload = state && status ? nowPlayingMessage(state.view, status.playbackDurationMs) : null
+    const payload =
+      state && status ? nowPlayingMessage(state.view, status.playbackDurationMs) : null
 
-    if (!card || !payload)
+    if (!card || !payload) {
       return
+    }
 
     try {
       await card.message.edit(payload)
-    }
-    catch (error) {
+    } catch (error) {
       deps.logger.warn('discord.progress_edit_failed', { error: errorMessage(error) })
 
-      if (isDeletedMessage(error) && nowPlaying.get(guildId) === card)
+      if (isDeletedMessage(error) && nowPlaying.get(guildId) === card) {
         nowPlaying.delete(guildId)
+      }
     }
   }
 
@@ -140,76 +154,86 @@ export function messageSlot(deps: {
   }
 
   function scheduleRepost(guildId: string): void {
-    if (disposed)
+    if (disposed) {
       return
+    }
 
     clearRepostTimer(guildId)
-    repostTimers.set(guildId, setTimeout(() => {
-      repostTimers.delete(guildId)
+    repostTimers.set(
+      guildId,
+      setTimeout(() => {
+        repostTimers.delete(guildId)
 
-      void writes.run(guildId, async () => {
-        if (!nowPlaying.has(guildId))
-          return
+        writeInOrder(guildId, 'discord.now_playing_repost_failed', async () => {
+          if (!nowPlaying.has(guildId)) {
+            return
+          }
 
-        await deleteNowPlaying(guildId)
-        await writeNowPlaying(guildId)
-      }).catch(error => deps.logger.error('discord.now_playing_repost_failed', error))
-    }, NOW_PLAYING_REPOST_MS))
+          await deleteNowPlaying(guildId)
+          await writeNowPlaying(guildId)
+        })
+      }, NOW_PLAYING_REPOST_MS),
+    )
   }
 
   async function redrawQueueCard(guildId: string): Promise<void> {
     const message = queueCards.get(guildId)
     const state = latest.get(guildId)
 
-    if (!message || !state)
+    if (!message || !state) {
       return
+    }
 
     try {
       await message.edit(queueMessage(state.view, 1))
-    }
-    catch (error) {
+    } catch (error) {
       deps.logger.error('discord.queue_card_edit_failed', error)
 
-      if (queueCards.get(guildId) === message)
+      if (queueCards.get(guildId) === message) {
         queueCards.delete(guildId)
+      }
     }
   }
 
   const progress = progressTimers({
-    playing: guildId => deps.playback(guildId)?.state === 'playing',
+    playing: (guildId) => deps.playback(guildId)?.state === 'playing',
     repaint: (guildId) => {
-      void writes.run(guildId, async () => repaintNowPlaying(guildId))
-        .catch(error => deps.logger.error('discord.progress_failed', error))
+      writeInOrder(guildId, 'discord.progress_failed', async () => repaintNowPlaying(guildId))
     },
   })
 
   function update(payload: SlotPayload): void {
     const { guildId, view, textChannel } = payload
 
-    if (!textChannel)
+    if (!textChannel) {
       return
+    }
 
     latest.set(guildId, { view, textChannel })
     progress.sync(guildId, view)
 
-    void writes.run(guildId, async () => {
+    writeInOrder(guildId, 'discord.now_playing_failed', async () => {
       await redrawQueueCard(guildId)
       await writeNowPlaying(guildId)
-    }).catch(error => deps.logger.error('discord.now_playing_failed', error))
+    })
   }
 
   function queueChanged({ guildId, view }: SlotPayload): void {
     const state = latest.get(guildId)
 
-    if (!state || !queueCards.has(guildId))
+    if (!state || !queueCards.has(guildId)) {
       return
+    }
 
     latest.set(guildId, { view, textChannel: state.textChannel })
-    void writes.run(guildId, async () => redrawQueueCard(guildId))
-      .catch(error => deps.logger.error('discord.queue_card_failed', error))
+    writeInOrder(guildId, 'discord.queue_card_failed', async () => redrawQueueCard(guildId))
   }
 
-  async function postQueueCard(guildId: string, view: QueueView, textChannel: GuildTextBasedChannel): Promise<void> {
+  async function postQueueCard(
+    guildId: string,
+    view: QueueView,
+    textChannel: GuildTextBasedChannel,
+  ): Promise<void> {
     latest.set(guildId, { view, textChannel })
 
     await writes.run(guildId, async () => {
@@ -224,8 +248,11 @@ export function messageSlot(deps: {
   }
 
   function playlistQueued({ guildId, view, textChannel }: SlotPayload): void {
-    if (textChannel)
-      void postQueueCard(guildId, view, textChannel).catch(error => deps.logger.error('discord.queue_card_failed', error))
+    if (textChannel) {
+      void postQueueCard(guildId, view, textChannel).catch((error: unknown) =>
+        deps.logger.error('discord.queue_card_failed', error),
+      )
+    }
   }
 
   async function showQueue(view: QueueView, textChannel: GuildTextBasedChannel): Promise<void> {
@@ -236,8 +263,9 @@ export function messageSlot(deps: {
     const { guildId, view, textChannel } = payload
     const card = nowPlaying.get(guildId)
 
-    if (!textChannel || !card || card.channelId !== textChannel.id)
+    if (!textChannel || !card || card.channelId !== textChannel.id) {
       return
+    }
 
     latest.set(guildId, { view, textChannel })
     scheduleRepost(guildId)
@@ -248,17 +276,18 @@ export function messageSlot(deps: {
     progress.stop(guildId)
     latest.delete(guildId)
 
-    void writes.run(guildId, async () => {
+    writeInOrder(guildId, 'discord.clear_cards_failed', async () => {
       await deleteNowPlaying(guildId)
       await deleteQueueCard(guildId)
-    }).catch(error => deps.logger.error('discord.clear_cards_failed', error))
+    })
   }
 
   function dispose(): void {
     disposed = true
 
-    for (const timer of repostTimers.values())
+    for (const timer of repostTimers.values()) {
       clearTimeout(timer)
+    }
 
     progress.dispose()
     repostTimers.clear()

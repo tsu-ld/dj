@@ -1,6 +1,7 @@
 import type { GuildMember, GuildTextBasedChannel, Message, VoiceBasedChannel } from 'discord.js'
 import type { CommandContext, CommandServices, CommandUi } from '../commands/spec.ts'
 import type { Clock } from '../core/clock.ts'
+import type { JsonRecord } from '../core/json.ts'
 import type { Logger } from '../core/logger.ts'
 import type { CompletionReply, CompletionRequest, ConversationPort } from '../ports/conversation.ts'
 import type { MusicPort, PlayRequest, PlayResult, QueueView, Track } from '../ports/music.ts'
@@ -27,10 +28,18 @@ export function testClock(start = 1_000_000): TestClock {
   }
 }
 
-export const silentLog: Logger = logger({ level: 'error', clock: systemClock, out: { write: () => {} } })
+export const silentLog: Logger = logger({
+  level: 'error',
+  clock: systemClock,
+  out: { write: () => {} },
+})
 
-export function testTrack(first: string | Partial<Track> = {}, overrides: Partial<Track> = {}): Track {
-  const input = typeof first === 'string' ? { title: first, ...overrides } : { ...first, ...overrides }
+export function testTrack(
+  first: string | Partial<Track> = {},
+  overrides: Partial<Track> = {},
+): Track {
+  const input =
+    typeof first === 'string' ? { title: first, ...overrides } : { ...first, ...overrides }
   const title = input.title ?? 'Song 1'
 
   return {
@@ -62,7 +71,7 @@ export function testView(overrides: Partial<QueueView> = {}): QueueView {
   }
 }
 
-const tempDirs: string[] = []
+const tempDirs: Array<string> = []
 
 export async function tempDir(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'dj-test-'))
@@ -73,23 +82,26 @@ export async function tempDir(): Promise<string> {
 }
 
 export async function removeTempDirs(): Promise<void> {
-  await Promise.all(tempDirs.splice(0).map(async directory => rm(directory, { recursive: true, force: true })))
+  await Promise.all(
+    tempDirs.splice(0).map(async (directory) => rm(directory, { recursive: true, force: true })),
+  )
 }
 
 export async function settle(): Promise<void> {
-  for (let turn = 0; turn < 40; turn++)
+  for (let turn = 0; turn < 40; turn++) {
     await Promise.resolve()
+  }
 }
 
 export interface CapturedLog {
   logger: Logger
-  events: string[]
-  entries: (event: string) => unknown[]
+  events: Array<string>
+  entries: (event: string) => Array<unknown>
 }
 
 export function captureLog(): CapturedLog {
-  const records: Record<string, unknown>[] = []
-  const events: string[] = []
+  const records: Array<JsonRecord> = []
+  const events: Array<string> = []
 
   return {
     logger: logger({
@@ -107,17 +119,20 @@ export function captureLog(): CapturedLog {
       },
     }),
     events,
-    entries: event => records.filter(record => record.event === event),
+    entries: (event) => records.filter((record) => record.event === event),
   }
 }
 
 export function queueOf(count: number): QueueView {
-  if (count === 0)
+  if (count === 0) {
     return testView({ current: null, upcoming: [], size: 0 })
+  }
 
   return testView({
     current: testTrack({ title: 'Song 1' }),
-    upcoming: Array.from({ length: count - 1 }, (_, index) => testTrack({ id: `track-${index + 2}`, title: `Song ${index + 2}` })),
+    upcoming: Array.from({ length: count - 1 }, (_, index) =>
+      testTrack({ id: `track-${index + 2}`, title: `Song ${index + 2}` }),
+    ),
     size: count,
   })
 }
@@ -126,7 +141,13 @@ export function fakeVoice(id = 'voice-1'): VoiceBasedChannel {
   return { id } as unknown as VoiceBasedChannel
 }
 
-export function fakeMember(options: { allowed?: boolean, voiceChannel?: VoiceBasedChannel | null, botVoiceChannel?: VoiceBasedChannel | null } = {}): GuildMember {
+export function fakeMember(
+  options: {
+    allowed?: boolean
+    voiceChannel?: VoiceBasedChannel | null
+    botVoiceChannel?: VoiceBasedChannel | null
+  } = {},
+): GuildMember {
   return {
     permissions: { has: () => options.allowed ?? true },
     voice: { channel: options.voiceChannel ?? null },
@@ -140,19 +161,22 @@ export function fakeMember(options: { allowed?: boolean, voiceChannel?: VoiceBas
 
 interface TextChannelRecorder {
   readonly channel: GuildTextBasedChannel
-  readonly sent: string[]
+  readonly sent: Array<string>
   readonly typing: { count: number }
 }
 
-export function fakeTextChannel(options: { id?: string, failSend?: boolean, failTyping?: boolean } = {}): TextChannelRecorder {
-  const sent: string[] = []
+export function fakeTextChannel(
+  options: { id?: string; failSend?: boolean; failTyping?: boolean } = {},
+): TextChannelRecorder {
+  const sent: Array<string> = []
   const typing = { count: 0 }
   const channel = {
     id: options.id ?? 'chan-1',
     isTextBased: () => true,
     async send(content: string) {
-      if (options.failSend)
+      if (options.failSend) {
         throw new Error('send failed')
+      }
 
       sent.push(content)
 
@@ -161,8 +185,9 @@ export function fakeTextChannel(options: { id?: string, failSend?: boolean, fail
     async sendTyping() {
       typing.count++
 
-      if (options.failTyping)
+      if (options.failTyping) {
         throw new Error('typing failed')
+      }
     },
   } as unknown as GuildTextBasedChannel
 
@@ -170,11 +195,11 @@ export function fakeTextChannel(options: { id?: string, failSend?: boolean, fail
 }
 
 export interface MusicRecorder extends MusicPort {
-  readonly calls: string[]
+  readonly calls: Array<string>
 }
 
 export function fakeMusic(overrides: Partial<MusicPort> = {}): MusicRecorder {
-  const calls: string[] = []
+  const calls: Array<string> = []
 
   const music: MusicPort = {
     async play() {
@@ -233,7 +258,11 @@ export function fakeMusic(overrides: Partial<MusicPort> = {}): MusicRecorder {
   return { ...music, calls, ...overrides }
 }
 
-export function collector(requests: PlayRequest[], result: Partial<PlayResult> = {}, overrides: Partial<MusicPort> = {}): MusicRecorder {
+export function collector(
+  requests: Array<PlayRequest>,
+  result: Partial<PlayResult> = {},
+  overrides: Partial<MusicPort> = {},
+): MusicRecorder {
   return fakeMusic({
     ...overrides,
     async play(request) {
@@ -245,12 +274,12 @@ export function collector(requests: PlayRequest[], result: Partial<PlayResult> =
 }
 
 interface SettingsRecorder extends SettingsPort {
-  readonly updates: [string, Partial<GuildSettings>][]
+  readonly updates: Array<[string, Partial<GuildSettings>]>
   readonly current: () => GuildSettings
 }
 
 export function fakeSettings(initial: Partial<GuildSettings> = {}): SettingsRecorder {
-  const updates: [string, Partial<GuildSettings>][] = []
+  const updates: Array<[string, Partial<GuildSettings>]> = []
   let value: GuildSettings = { textChannelId: null, persona: null, ...initial }
 
   return {
@@ -266,16 +295,16 @@ export function fakeSettings(initial: Partial<GuildSettings> = {}): SettingsReco
 }
 
 interface UiRecorder extends CommandUi {
-  readonly replies: string[]
-  readonly errors: string[]
+  readonly replies: Array<string>
+  readonly errors: Array<string>
   readonly acks: () => number
-  readonly queues: QueueView[]
+  readonly queues: Array<QueueView>
 }
 
 export function fakeUi(): UiRecorder {
-  const replies: string[] = []
-  const errors: string[] = []
-  const queues: QueueView[] = []
+  const replies: Array<string> = []
+  const errors: Array<string> = []
+  const queues: Array<QueueView> = []
   let acks = 0
 
   return {
@@ -315,19 +344,27 @@ export function fakeContext(options: ContextOptions = {}): CommandContext {
     voiceChannel: options.voiceChannel === undefined ? fakeVoice() : options.voiceChannel,
     textChannel: options.textChannel ?? fakeTextChannel().channel,
     message: options.message ?? null,
-    services: { music: fakeMusic(), settings: fakeSettings(), logger: silentLog, ...options.services },
+    services: {
+      music: fakeMusic(),
+      settings: fakeSettings(),
+      logger: silentLog,
+      ...options.services,
+    },
     ui: options.ui ?? fakeUi(),
   }
 }
 
-type ModelStep = CompletionReply | Promise<CompletionReply> | ((request: CompletionRequest) => CompletionReply | Promise<CompletionReply>)
+type ModelStep =
+  | CompletionReply
+  | Promise<CompletionReply>
+  | ((request: CompletionRequest) => CompletionReply | Promise<CompletionReply>)
 
 interface ScriptedModel extends ConversationPort {
-  readonly requests: CompletionRequest[]
+  readonly requests: Array<CompletionRequest>
 }
 
-export function scriptedModel(steps: readonly ModelStep[]): ScriptedModel {
-  const requests: CompletionRequest[] = []
+export function scriptedModel(steps: ReadonlyArray<ModelStep>): ScriptedModel {
+  const requests: Array<CompletionRequest> = []
   let index = 0
 
   return {
@@ -339,8 +376,9 @@ export function scriptedModel(steps: readonly ModelStep[]): ScriptedModel {
 
       index++
 
-      if (!step)
+      if (!step) {
         return { text: null, toolCalls: [] }
+      }
 
       return typeof step === 'function' ? step(request) : step
     },

@@ -3,7 +3,13 @@ import type { CommandSpec } from '../spec.ts'
 import { describe, expect, test } from 'bun:test'
 import { UserError } from '../../core/errors.ts'
 import { MESSAGES } from '../../messages.ts'
-import { fakeContext, fakeMusic, fakeUi, silentLog as log, testView as view } from '../../tests/fixtures.ts'
+import {
+  fakeContext,
+  fakeMusic,
+  fakeUi,
+  silentLog as log,
+  testView as view,
+} from '../../tests/fixtures.ts'
 import { commandBus } from '../bus.ts'
 
 type Draft<Spec> = Spec extends CommandSpec ? Omit<Spec, 'description'> : never
@@ -18,9 +24,15 @@ interface WarningRecord {
   readonly error?: unknown
 }
 
-function recordingLogger(): { logger: Logger, errors: string[], warnings: WarningRecord[] } {
-  const errors: string[] = []
-  const warnings: WarningRecord[] = []
+interface RecordingLogger {
+  readonly logger: Logger
+  readonly errors: Array<string>
+  readonly warnings: Array<WarningRecord>
+}
+
+function recordingLogger(): RecordingLogger {
+  const errors: Array<string> = []
+  const warnings: Array<WarningRecord> = []
   const logger: Logger = {
     debug: () => {},
     info: () => {},
@@ -41,11 +53,16 @@ describe('commandBus', () => {
     const ui = fakeUi()
     let ran = 0
     const bus = commandBus({
-      specs: [command({ name: 'thing', async run() {
-        ran++
+      specs: [
+        command({
+          name: 'thing',
+          async run() {
+            ran++
 
-        return { done: true }
-      } })],
+            return { done: true }
+          },
+        }),
+      ],
       logger: log,
     })
 
@@ -60,7 +77,15 @@ describe('commandBus', () => {
   test('a confirmation wins over the ack', async () => {
     const ui = fakeUi()
     const bus = commandBus({
-      specs: [command({ name: 'thing', async run() { return { saved: true } }, confirm: () => 'Saved.' })],
+      specs: [
+        command({
+          name: 'thing',
+          async run() {
+            return { saved: true }
+          },
+          confirm: () => 'Saved.',
+        }),
+      ],
       logger: log,
     })
 
@@ -73,7 +98,15 @@ describe('commandBus', () => {
   test('ack false never reacts, and a null confirmation falls back to the ack', async () => {
     const quiet = fakeUi()
     const silent = commandBus({
-      specs: [command({ name: 'thing', ack: false, async run() { return {} } })],
+      specs: [
+        command({
+          name: 'thing',
+          ack: false,
+          async run() {
+            return {}
+          },
+        }),
+      ],
       logger: log,
     })
 
@@ -82,7 +115,15 @@ describe('commandBus', () => {
 
     const loud = fakeUi()
     const fallback = commandBus({
-      specs: [command({ name: 'thing', async run() { return {} }, confirm: () => null })],
+      specs: [
+        command({
+          name: 'thing',
+          async run() {
+            return {}
+          },
+          confirm: () => null,
+        }),
+      ],
       logger: log,
     })
 
@@ -99,7 +140,14 @@ describe('commandBus', () => {
     }
 
     const bus = commandBus({
-      specs: [command({ name: 'thing', async run() { return { done: true } } })],
+      specs: [
+        command({
+          name: 'thing',
+          async run() {
+            return { done: true }
+          },
+        }),
+      ],
       logger: recording.logger,
     })
 
@@ -107,11 +155,13 @@ describe('commandBus', () => {
 
     expect(outcome).toEqual({ kind: 'ok', data: { done: true } })
     expect(ui.errors).toEqual([])
-    expect(recording.warnings).toEqual([{
-      event: 'command.feedback_failed',
-      name: 'thing',
-      error: 'missing reactions permission',
-    }])
+    expect(recording.warnings).toEqual([
+      {
+        event: 'command.feedback_failed',
+        name: 'thing',
+        error: 'missing reactions permission',
+      },
+    ])
   })
 
   test('a failed confirmation does not turn a finished command into an error', async () => {
@@ -123,7 +173,15 @@ describe('commandBus', () => {
     }
 
     const bus = commandBus({
-      specs: [command({ name: 'thing', async run() { return { done: true } }, confirm: () => 'Saved.' })],
+      specs: [
+        command({
+          name: 'thing',
+          async run() {
+            return { done: true }
+          },
+          confirm: () => 'Saved.',
+        }),
+      ],
       logger: recording.logger,
     })
 
@@ -131,28 +189,32 @@ describe('commandBus', () => {
 
     expect(outcome).toEqual({ kind: 'ok', data: { done: true } })
     expect(ui.errors).toEqual([])
-    expect(recording.warnings).toEqual([{
-      event: 'command.feedback_failed',
-      name: 'thing',
-      error: 'channel deleted',
-    }])
+    expect(recording.warnings).toEqual([
+      {
+        event: 'command.feedback_failed',
+        name: 'thing',
+        error: 'channel deleted',
+      },
+    ])
   })
 
   test('authorization refuses with the user error and never runs the command', async () => {
     const ui = fakeUi()
     let ran = false
     const bus = commandBus({
-      specs: [command({
-        name: 'thing',
-        authorize() {
-          throw new UserError('You may not.')
-        },
-        async run() {
-          ran = true
+      specs: [
+        command({
+          name: 'thing',
+          authorize() {
+            throw new UserError('You may not.')
+          },
+          async run() {
+            ran = true
 
-          return {}
-        },
-      })],
+            return {}
+          },
+        }),
+      ],
       logger: log,
     })
 
@@ -166,12 +228,14 @@ describe('commandBus', () => {
   test('a user error from the command is refused with its message', async () => {
     const ui = fakeUi()
     const bus = commandBus({
-      specs: [command({
-        name: 'thing',
-        async run() {
-          throw new UserError(MESSAGES.removeOutOfRange)
-        },
-      })],
+      specs: [
+        command({
+          name: 'thing',
+          async run() {
+            throw new UserError(MESSAGES.removeOutOfRange)
+          },
+        }),
+      ],
       logger: log,
     })
 
@@ -186,12 +250,14 @@ describe('commandBus', () => {
     const recording = recordingLogger()
     const failure = new Error('provider exploded')
     const bus = commandBus({
-      specs: [command({
-        name: 'thing',
-        async run() {
-          throw failure
-        },
-      })],
+      specs: [
+        command({
+          name: 'thing',
+          async run() {
+            throw failure
+          },
+        }),
+      ],
       logger: recording.logger,
     })
 
@@ -209,18 +275,20 @@ describe('commandBus', () => {
     let authorized = false
     let ran = false
     const bus = commandBus({
-      specs: [command({
-        name: 'thing',
-        requiresQueue: true,
-        authorize() {
-          authorized = true
-        },
-        async run() {
-          ran = true
+      specs: [
+        command({
+          name: 'thing',
+          requiresQueue: true,
+          authorize() {
+            authorized = true
+          },
+          async run() {
+            ran = true
 
-          return {}
-        },
-      })],
+            return {}
+          },
+        }),
+      ],
       logger: log,
     })
 
@@ -238,15 +306,17 @@ describe('commandBus', () => {
     const ui = fakeUi()
     let ran = false
     const bus = commandBus({
-      specs: [command({
-        name: 'thing',
-        requiresVoice: true,
-        async run() {
-          ran = true
+      specs: [
+        command({
+          name: 'thing',
+          requiresVoice: true,
+          async run() {
+            ran = true
 
-          return {}
-        },
-      })],
+            return {}
+          },
+        }),
+      ],
       logger: log,
     })
 
@@ -260,17 +330,19 @@ describe('commandBus', () => {
   test('a queue command receives the live queue', async () => {
     const fresh = view({ size: 4 })
     const context = fakeContext({ services: { music: fakeMusic({ view: () => fresh }) } })
-    const received: unknown[] = []
+    const received: Array<unknown> = []
     const bus = commandBus({
-      specs: [command({
-        name: 'thing',
-        requiresQueue: true,
-        async run(_args, scoped) {
-          received.push(scoped.queue)
+      specs: [
+        command({
+          name: 'thing',
+          requiresQueue: true,
+          async run(_args, scoped) {
+            received.push(scoped.queue)
 
-          return {}
-        },
-      })],
+            return {}
+          },
+        }),
+      ],
       logger: log,
     })
 
@@ -282,44 +354,73 @@ describe('commandBus', () => {
   test('tools and routes are derived from the spec flags', () => {
     const bus = commandBus({
       specs: [
-        command({ name: 'both', async run() { return {} } }),
-        command({ name: 'neither', modelTool: false, fastRoute: false, async run() { return {} } }),
-        command({ name: 'tool', fastRoute: false, async run() { return {} } }),
+        command({
+          name: 'both',
+          async run() {
+            return {}
+          },
+        }),
+        command({
+          name: 'neither',
+          modelTool: false,
+          fastRoute: false,
+          async run() {
+            return {}
+          },
+        }),
+        command({
+          name: 'tool',
+          fastRoute: false,
+          async run() {
+            return {}
+          },
+        }),
       ],
       logger: log,
     })
 
-    expect(bus.tools.map(tool => tool.name)).toEqual(['both', 'tool'])
-    expect(bus.routes.map(route => route.name)).toEqual(['both'])
+    expect(bus.tools.map((tool) => tool.name)).toEqual(['both', 'tool'])
+    expect(bus.routes.map((route) => route.name)).toEqual(['both'])
     expect(bus.specs).toHaveLength(3)
   })
 
   test('a tool without parameters tells the model it takes no arguments', () => {
     const bus = commandBus({
-      specs: [command({ name: 'bare', async run() { return {} } })],
+      specs: [
+        command({
+          name: 'bare',
+          async run() {
+            return {}
+          },
+        }),
+      ],
       logger: log,
     })
 
-    expect(bus.tools).toEqual([{
-      name: 'bare',
-      description: 'bare',
-      parameters: { type: 'object', properties: {}, additionalProperties: false },
-    }])
+    expect(bus.tools).toEqual([
+      {
+        name: 'bare',
+        description: 'bare',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+      },
+    ])
   })
 
   test('the model cannot execute a command that is not a tool', async () => {
     const ui = fakeUi()
     let ran = 0
     const bus = commandBus({
-      specs: [command({
-        name: 'internal',
-        modelTool: false,
-        async run() {
-          ran++
+      specs: [
+        command({
+          name: 'internal',
+          modelTool: false,
+          async run() {
+            ran++
 
-          return {}
-        },
-      })],
+            return {}
+          },
+        }),
+      ],
       logger: log,
     })
 
@@ -333,14 +434,16 @@ describe('commandBus', () => {
   test('the model can execute a command that is a tool', async () => {
     let ran = 0
     const bus = commandBus({
-      specs: [command({
-        name: 'public',
-        async run() {
-          ran++
+      specs: [
+        command({
+          name: 'public',
+          async run() {
+            ran++
 
-          return { done: true }
-        },
-      })],
+            return { done: true }
+          },
+        }),
+      ],
       logger: log,
     })
 
@@ -354,17 +457,19 @@ describe('commandBus', () => {
     const ui = fakeUi()
     let ran = 0
     const bus = commandBus({
-      specs: [command({
-        name: 'guarded',
-        authorize() {
-          throw new UserError('nope')
-        },
-        async run() {
-          ran++
+      specs: [
+        command({
+          name: 'guarded',
+          authorize() {
+            throw new UserError('nope')
+          },
+          async run() {
+            ran++
 
-          return {}
-        },
-      })],
+            return {}
+          },
+        }),
+      ],
       logger: log,
     })
 

@@ -4,7 +4,7 @@ import { HISTORY_MAX_MESSAGES } from '../../limits.ts'
 import { testClock } from '../../tests/fixtures.ts'
 import { conversationHistory } from '../history.ts'
 
-function exchange(number: number): ChatMessage[] {
+function exchange(number: number): Array<ChatMessage> {
   return [
     { role: 'user', content: `pedido ${number}` },
     {
@@ -17,21 +17,27 @@ function exchange(number: number): ChatMessage[] {
   ]
 }
 
-function hasOrphanToolResult(messages: readonly ChatMessage[]): boolean {
+function hasOrphanToolResult(messages: ReadonlyArray<ChatMessage>): boolean {
   const announcedCallIds = new Set<string>()
 
   for (const message of messages) {
-    for (const toolCall of message.toolCalls ?? [])
+    for (const toolCall of message.toolCalls ?? []) {
       announcedCallIds.add(toolCall.id)
+    }
 
-    if (message.role === 'tool' && message.toolCallId !== undefined && !announcedCallIds.has(message.toolCallId))
+    if (
+      message.role === 'tool' &&
+      message.toolCallId !== undefined &&
+      !announcedCallIds.has(message.toolCallId)
+    ) {
       return true
+    }
   }
 
   return false
 }
 
-function rememberedAfter(messages: readonly ChatMessage[]): readonly ChatMessage[] {
+function rememberedAfter(messages: ReadonlyArray<ChatMessage>): ReadonlyArray<ChatMessage> {
   const history = conversationHistory({ clock: testClock() })
 
   history.remember('channel-trim', 'user-a', messages)
@@ -47,7 +53,7 @@ describe('a remembered conversation is trimmed to whole exchanges', () => {
   })
 
   test('trimming never leaves a tool result without its call', () => {
-    const messages: ChatMessage[] = [
+    const messages: Array<ChatMessage> = [
       ...exchange(1),
       ...exchange(2),
       ...exchange(3),
@@ -61,7 +67,13 @@ describe('a remembered conversation is trimmed to whole exchanges', () => {
   })
 
   test('a trimmed conversation starts at a request', () => {
-    const messages = [...exchange(1), ...exchange(2), ...exchange(3), ...exchange(4), ...exchange(5)]
+    const messages = [
+      ...exchange(1),
+      ...exchange(2),
+      ...exchange(3),
+      ...exchange(4),
+      ...exchange(5),
+    ]
     const trimmed = rememberedAfter(messages)
 
     expect(trimmed[0]?.role).toBe('user')
@@ -69,14 +81,20 @@ describe('a remembered conversation is trimmed to whole exchanges', () => {
   })
 
   test('the most recent exchange always survives', () => {
-    const messages = [...exchange(1), ...exchange(2), ...exchange(3), ...exchange(4), ...exchange(5)]
+    const messages = [
+      ...exchange(1),
+      ...exchange(2),
+      ...exchange(3),
+      ...exchange(4),
+      ...exchange(5),
+    ]
     const trimmed = rememberedAfter(messages)
 
     expect(trimmed.at(-1)).toEqual({ role: 'assistant', content: 'listo 5' })
   })
 
   test('leftovers with no request at all are dropped', () => {
-    const messages: ChatMessage[] = [
+    const messages: Array<ChatMessage> = [
       { role: 'tool', toolCallId: 'call-1', content: '{}' },
       { role: 'assistant', content: 'listo' },
     ]
@@ -101,7 +119,10 @@ describe('conversationHistory', () => {
     history.remember('channel-same', 'user-a', exchange(1))
     history.remember('channel-same', 'user-a', [...exchange(1), ...exchange(2)])
 
-    expect(history.recall('channel-same', 'user-a').at(-1)).toEqual({ role: 'assistant', content: 'listo 2' })
+    expect(history.recall('channel-same', 'user-a').at(-1)).toEqual({
+      role: 'assistant',
+      content: 'listo 2',
+    })
   })
 
   test('without an author the conversation falls back to the channel', () => {
@@ -135,8 +156,9 @@ describe('conversationHistory', () => {
   test('the number of conversations is capped', () => {
     const history = conversationHistory({ clock: testClock() })
 
-    for (let channel = 0; channel <= 1_000; channel++)
+    for (let channel = 0; channel <= 1000; channel++) {
       history.remember(`channel-${channel}`, 'user-a', exchange(channel))
+    }
 
     expect(history.recall('channel-0', 'user-a')).toEqual([])
     expect(history.recall('channel-1', 'user-a')).toEqual(exchange(1))
